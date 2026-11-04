@@ -1,0 +1,35 @@
+{
+  "name": "create-neocord",
+  "version": "0.1.0",
+  "description": "Scaffold a type-safe neocord Discord bot.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["neocord", "discord", "create", "scaffold", "template", "bot"],
+  "files": ["dist", "template"],
+  "bin": {
+    "create-neocord": "./dist/bin.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "bun check",
+    "test": "bun test",
+    "check:package": "publint"
+  },
+  "dependencies": {
+    "@clack/prompts": "catalog:",
+    "commander": "catalog:"
+  },
+  "devDependencies": {
+    "@neocord/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "publint": "catalog:"
+  }
+}

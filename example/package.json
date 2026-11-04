@@ -1,0 +1,36 @@
+{
+  "name": "@neocord/example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "neocord dev",
+    "build": "neocord build",
+    "start": "neocord start",
+    "deploy": "neocord deploy",
+    "test": "neocord test",
+    "typegen": "neocord typegen",
+    "typecheck": "neocord typegen && bun check",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@neocord/react": "workspace:*",
+    "@t3-oss/env-core": "catalog:",
+    "discord.js": "catalog:",
+    "neocord": "workspace:*",
+    "react": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@neocord/cli": "workspace:*",
+    "@neocord/eslint-plugin": "workspace:*",
+    "@neocord/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "@typescript/native": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

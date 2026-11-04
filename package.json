@@ -2,13 +2,59 @@
   "name": "@neocord/monorepo",
   "type": "module",
   "private": true,
+  "packageManager": "bun@1.4.4",
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*",
+      "example"
+    ],
+    "catalog": {
+      "@arethetypeswrong/cli": "^0.18.5",
+      "@changesets/cli": "^3.0.3",
+      "@clack/prompts": "^1.8.1",
+      "@t3-oss/env-core": "^0.13.11",
+      "@types/bun": "latest",
+      "@types/node": "^26.6.6",
+      "@types/react": "^19.3.0",
+      "@types/react-reconciler": "^0.34.1",
+      "@typescript-eslint/parser": "^8.72.1",
+      "@typescript/native": "npm:typescript@^7.0.2",
+      "chokidar": "^6.0.0",
+      "commander": "^15.0.0",
+      "discord.js": "^14.28.1",
+      "dotenv": "^18.0.9",
+      "esbuild": "^0.28.2",
+      "eslint": "^10.14.0",
+      "publint": "^0.3.25",
+      "react": "^19.3.1",
+      "react-reconciler": "^0.34.0",
+      "turbo": "^2.11.10",
+      "typescript": "npm:@typescript/typescript6@^6.0.2",
+      "zod": "^4.6.7"
+    }
+  },
   "scripts": {
-    "typecheck": "bun check"
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "check:packages": "turbo run check:package",
+    "format": "bun fmt",
+    "changeset": "changeset",
+    "version-packages": "changeset version && bun install",
+    "release": "turbo run build test typecheck check:package && bun run scripts/publish.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@changesets/cli": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
   },
-  "peerDependencies": {
-    "typescript": "^7"
+  "engines": {
+    "bun": ">=1.4.0",
+    "node": ">=22.12.0"
   }
 }

@@ -1,0 +1,51 @@
+{
+  "name": "@neocord/cli",
+  "version": "0.1.0",
+  "description": "The neocord command: develop, build, launch, deploy and test Discord bots.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["neocord", "discord", "cli", "bot"],
+  "files": ["dist"],
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "neocord": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "bun check",
+    "test": "bun test",
+    "check:package": "publint && attw --pack . --profile esm-only"
+  },
+  "dependencies": {
+    "@neocord/routing": "workspace:^",
+    "chokidar": "catalog:",
+    "commander": "catalog:",
+    "dotenv": "catalog:",
+    "esbuild": "catalog:"
+  },
+  "peerDependencies": {
+    "neocord": "workspace:^"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "catalog:",
+    "@neocord/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "neocord": "workspace:*",
+    "publint": "catalog:"
+  }
+}

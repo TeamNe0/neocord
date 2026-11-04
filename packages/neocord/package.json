@@ -1,0 +1,57 @@
+{
+  "name": "neocord",
+  "version": "0.1.0",
+  "description": "A full-stack, file-routed framework for Discord bots built on discord.js and React.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["neocord", "discord", "discord.js", "framework", "bot", "react", "sharding"],
+  "sideEffects": false,
+  "files": ["dist"],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "bun check",
+    "test": "bun test",
+    "check:package": "publint && attw --pack . --profile esm-only"
+  },
+  "dependencies": {
+    "@neocord/react": "workspace:^",
+    "@neocord/routing": "workspace:^"
+  },
+  "peerDependencies": {
+    "discord.js": "^14.28.0",
+    "react": "^19.3.0"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "catalog:",
+    "@neocord/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@typescript/native": "catalog:",
+    "discord.js": "catalog:",
+    "publint": "catalog:",
+    "react": "catalog:"
+  }
+}

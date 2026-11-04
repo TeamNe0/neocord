@@ -25,7 +25,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # caches
 .eslintcache
 .cache
+.turbo
 *.tsbuildinfo
+
+# neocord generated output
+.neocord
 
 # IntelliJ based IDEs
 .idea
