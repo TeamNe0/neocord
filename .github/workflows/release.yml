@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - uses: changesets/action@v2
+        with:
+          publish-script: bun run release
+          version-script: bun run version-packages
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+          create-github-releases: true
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
