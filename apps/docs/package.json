@@ -9,7 +9,7 @@
     "build": "bun run generate && vite build && vite build --ssr src/entry-server.tsx --outDir .ssr && bun scripts/prerender.ts",
     "preview": "vite preview",
     "typecheck": "bun check",
-    "test": "bun run build && bun scripts/check-coverage.ts"
+    "test": "bun scripts/check-coverage.ts"
   },
   "dependencies": {
     "@fontsource-variable/atkinson-hyperlegible-mono": "^5.3.0",

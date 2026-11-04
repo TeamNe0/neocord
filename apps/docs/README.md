@@ -10,7 +10,7 @@ Run these from `apps/docs`.
 | --- | --- |
 | `bun check` | Type checks the site and its scripts. |
 | `bun run build` | Writes the deployable site to `dist/`. |
-| `bun run test` | Builds, then fails if docs have drifted from the packages or the output is incomplete. |
+| `bun run test` | Fails if docs have drifted from the packages or the built output is incomplete. Run `bun run build` first, or run it through Turbo from the repo root, which builds first. |
 | `bun run dev` | Starts the Vite dev server. |
 
 ## How the build works
