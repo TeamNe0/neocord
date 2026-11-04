@@ -105,7 +105,3 @@ export function scanProject(project: Project): readonly ProjectFile[] {
   scans.set(key, { expires: now + SCAN_TTL_MS, files });
   return files;
 }
-
-export function clearScanCache(): void {
-  scans.clear();
-}

@@ -2,8 +2,6 @@ import { identifierName, keyName, memberName, unwrap, type AstNode } from "./ast
 import type { RuleKit } from "./rule.ts";
 import { calleeName, findVariable } from "./scope.ts";
 
-export const ROUTE_ID_HELPERS = new Set(["defineButton", "defineModal", "defineSelect"]);
-
 export const DEFINITION_ARGUMENT_INDEX: Readonly<Record<string, number>> = {
   defineCommand: 0,
   defineGroup: 0,

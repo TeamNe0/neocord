@@ -19,7 +19,6 @@ export interface RuleReport {
 }
 
 export interface RuleKit {
-  readonly sourceCode: SourceCode;
   readonly file: LintedFile;
   report(report: RuleReport): void;
   scope(node: AstNode): Scope.Scope;
@@ -57,7 +56,6 @@ export function createRule(definition: RuleDefinitionInput): Rule.RuleModule {
       let file: LintedFile | undefined;
       const { sourceCode } = context;
       const kit: RuleKit = {
-        sourceCode,
         get file() {
           file ??= describeFile(context.cwd, context.filename, context.settings);
           return file;
