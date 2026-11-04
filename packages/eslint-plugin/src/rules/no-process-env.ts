@@ -2,7 +2,7 @@ import { identifierName, keyName, memberName, staticString, unwrap, type AstNode
 import { createRule, type RuleKit } from "../utils/rule.ts";
 import { importBinding, importedName, isGlobalReference, isNamespaceLike } from "../utils/scope.ts";
 
-const CONFIG_FILE = /^neocord\.config\.[^.]+$/;
+const ROOT_CONFIG_FILE = /^[^/]+\.config\.[^./]+$/;
 const PROCESS_MODULES = new Set(["node:process", "process"]);
 
 function isProcess(kit: RuleKit, node: AstNode): boolean {
@@ -20,14 +20,14 @@ function isProcess(kit: RuleKit, node: AstNode): boolean {
 export default createRule({
   name: "no-process-env",
   type: "suggestion",
-  description: "Disallow process.env outside src/env.ts and neocord.config.*, so variables stay validated in one place.",
+  description: "Disallow process.env outside src/env.ts and root config files, so variables stay validated in one place.",
   messages: {
     processEnv: "Do not read process.env here. Declare the variable in src/env.ts and import env from there.",
   },
   create(kit) {
     function isAllowed(): boolean {
-      const { classification, name } = kit.file;
-      return classification.type === "env" || CONFIG_FILE.test(name);
+      const { classification, path } = kit.file;
+      return classification.type === "env" || ROOT_CONFIG_FILE.test(path);
     }
 
     return {

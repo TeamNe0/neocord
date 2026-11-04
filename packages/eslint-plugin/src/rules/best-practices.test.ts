@@ -106,11 +106,24 @@ tester.run("no-client-instantiation", noClientInstantiation, {
   ],
 });
 
+tester.run("no-process-env nested config files", noProcessEnv, {
+  valid: [],
+  invalid: [
+    {
+      filename: "src/lib/drizzle.config.ts",
+      code: "const url = process.env.DATABASE_URL;",
+      errors: [{ messageId: "processEnv" }],
+    },
+  ],
+});
+
 tester.run("no-process-env", noProcessEnv, {
   valid: [
     { filename: "src/env.ts", code: "export const env = process.env;" },
     { filename: "neocord.config.ts", code: "const t = process.env.TOKEN;" },
     { filename: "neocord.config.mjs", code: "const t = process.env.TOKEN;" },
+    { filename: "drizzle.config.ts", code: "const url = process.env.DATABASE_URL;" },
+    { filename: "prisma.config.ts", code: "const url = process.env.DATABASE_URL;" },
     { filename: "app/env.ts", settings: { neocord: { sourceDir: "app" } }, code: "process.env.TOKEN;" },
     { filename: SOURCE, code: "const process = { env: {} }; process.env.TOKEN;" },
     { filename: SOURCE, code: "function f(process) { return process.env; }" },
