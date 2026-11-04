@@ -1,0 +1,231 @@
+`create-neocord` writes a working bot for you, with a `/ping` command, an `/about` command with a button, environment validation and a production `Dockerfile`. This page goes from nothing to seeing `/ping` answer in your own server.
+
+## Requirements
+
+- [Bun](https://bun.com/docs/installation), or Node. `neocord`, `@neocord/react` and `create-neocord` declare Node 22.12 or later, and `@neocord/cli` declares Node 22.22 or later, so use Node 22.22 or later if you run the CLI on Node.
+- A Discord account, and a server where you can add bots. You can create an empty server for this.
+
+## Create the project
+
+Run the scaffolder and answer the prompts:
+
+```pm
+create neocord
+```
+
+You can give the directory up front. `.` means the current directory, and `@scope/name` creates the folder `name` and keeps the scope in `package.json`:
+
+```pm
+create neocord my-bot
+```
+
+### The prompts
+
+The prompts appear in this order. A flag or an argument skips its prompt.
+
+| Prompt | Choices | Default | Flag that skips it |
+| --- | --- | --- | --- |
+| Where should the project be created? | Any path | `my-neocord-bot` | `[dir]` |
+| `<dir>` is not empty. Continue and overwrite files that have the same name? | Yes, no. Only shown for a non-empty directory. | No | `--force` |
+| Which database toolkit do you want? | None, Drizzle, Prisma | None | `--db` |
+| Which database will you use? | SQLite, PostgreSQL, MySQL. Only shown when you chose a toolkit. | SQLite | `--dialect` |
+| Add ESLint with the neocord rules? | Yes, no | Yes | `--eslint`, `--no-eslint` |
+| Which package manager do you want to use? | bun, npm, pnpm, yarn | Detected from how the command was launched, otherwise bun | `--pm` |
+| Initialize a git repository? | Yes, no | Yes | `--git`, `--no-git` |
+| Install dependencies with `<manager>`? | Yes, no | Yes | `--install`, `--no-install` |
+
+A directory that holds only a `.git` folder counts as empty. If you pass `--dialect` without `--db`, the toolkit prompt offers only Drizzle and Prisma. Cancelling a prompt exits with "Cancelled. Nothing was created."
+
+### Every flag
+
+| Flag | Values | Default with `--yes` |
+| --- | --- | --- |
+| `[dir]` | A path, or `.` for the current directory. `@scope/name` creates `name` and keeps the scope in `package.json`. | `my-neocord-bot` |
+| `--db <orm>` | `none`, `drizzle`, `prisma` | `none` |
+| `--dialect <dialect>` | `sqlite`, `postgres`, `mysql` | `sqlite` when a toolkit is chosen |
+| `--eslint`, `--no-eslint` | Add or skip ESLint with the neocord rules. | Added |
+| `--git`, `--no-git` | Initialize a repository and make the first commit, or skip it. | Initialized |
+| `--install`, `--no-install` | Install dependencies, or skip it. | Installed |
+| `--pm <manager>` | `bun`, `npm`, `pnpm`, `yarn` | Detected from how the command was launched, otherwise `bun` |
+| `-y`, `--yes` | Accept defaults and never prompt. | |
+| `--force` | Allow a non-empty directory. Files with the same name are overwritten and other files are kept. | Off |
+| `-h`, `--help` | Show help. | |
+| `-v`, `--version` | Print the version. | |
+
+With npm, flags go after `--`, which the npm tab below shows:
+
+```pm
+create neocord my-bot --db prisma --dialect postgres
+```
+
+### Running without prompts
+
+Without a TTY, or with `--yes`, `create-neocord` never prompts. It exits with code 1 and a message when:
+
+- A value is invalid, such as a project name with uppercase letters.
+- The directory is not empty and `--force` is missing.
+- `--dialect` is combined with `--db none`, or `--dialect` is given with no `--db`.
+- Installing dependencies fails. The project files stay in place, so you can retry the install yourself.
+
+```pm
+create neocord my-bot --yes --db drizzle --dialect sqlite --no-git
+```
+
+If this directory is already inside a git repository, git init is skipped. If git cannot make the first commit, for example because no identity is set, the files are staged and you see a warning.
+
+## What gets generated
+
+With the default answers, you get this:
+
+```text
+my-bot/
+  .dockerignore
+  .env.example
+  .gitignore
+  Dockerfile
+  README.md
+  eslint.config.js
+  neocord.config.ts
+  package.json
+  tsconfig.json
+  src/
+    env.ts
+    error.tsx
+    features/
+      general/
+        _components/
+          Stat.tsx
+        buttons/
+          refresh/
+            button.tsx
+        commands/
+          about/
+            command.tsx
+          ping/
+            command.test.tsx
+            command.tsx
+        events/
+          clientReady.ts
+```
+
+| File | What it does |
+| --- | --- |
+| `neocord.config.ts` | Sets the `Guilds` intent, the token and the development guild. See [Project structure](/docs/project-structure). |
+| `src/env.ts` | Validates `DISCORD_TOKEN`, `DEV_GUILD_ID` and `NODE_ENV` with T3 Env and zod. See [Environment variables](/docs/type-safety/environment). |
+| `src/error.tsx` | The view shown when a handler throws. See [Error boundaries](/docs/handlers/error-boundaries). |
+| `commands/ping/command.tsx` | `/ping`, with an optional `message` option. |
+| `commands/ping/command.test.tsx` | A test that runs `/ping` through the real dispatch pipeline. See [Testing](/docs/testing). |
+| `commands/about/command.tsx` | `/about`, which shows a container with a button. |
+| `buttons/refresh/button.tsx` | Handles the Refresh button and updates the message. |
+| `events/clientReady.ts` | Logs a line when the bot is ready. |
+| `_components/Stat.tsx` | A shared component. Folders starting with `_` never become routes. |
+| `Dockerfile`, `.dockerignore` | A production image based on Bun. See [Docker](/docs/deployment/docker). |
+
+### Scripts
+
+| Script | Runs | What it does |
+| --- | --- | --- |
+| `dev` | `neocord dev` | Runs the bot, restarts on change, and syncs commands to `DEV_GUILD_ID`. |
+| `build` | `neocord build` | Writes the production bundle to `.neocord/build`. |
+| `start` | `neocord start` | Runs the production bundle. |
+| `deploy` | `neocord deploy` | Registers commands globally. |
+| `test` | `neocord test` | Validates every route, then runs the tests. |
+| `typecheck` | `neocord typegen && tsc --noEmit` | Generates route types and type checks. |
+| `lint` | `neocord lint` | Runs ESLint. Only present with ESLint. |
+
+### What the options change
+
+- `--db` adds `src/db`, a `src/context.ts` that exposes the client as `ctx.app.db`, `DATABASE_URL` in `src/env.ts` and `.env.example`, a `/remember` command, and the `db:push`, `db:generate`, `db:migrate` and `db:studio` scripts. See [Drizzle](/docs/database/drizzle) and [Prisma](/docs/database/prisma).
+- `--eslint` adds `eslint.config.js`, the `lint` script, and native TypeScript 7 next to TypeScript 6. Without it, `typescript` is TypeScript 7 alone. [Manual setup](/docs/manual-setup#typescript-7-and-typescript-6) explains why.
+- Choosing bun as the package manager adds `@types/bun` and sets `"types": ["node", "bun"]` in `tsconfig.json`.
+
+## Create the Discord application
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and select **New Application**. Give it a name.
+2. On **General Information**, copy the **Application ID**. You only need it to build the invite link below. neocord reads the application from the token when it deploys commands, so it never goes in your config.
+3. Open **Bot** and select **Reset Token**. Copy the token straight away, because Discord only shows it once. Treat it like a password.
+
+Leave **Privileged Gateway Intents** off for now. The generated config only asks for `Guilds`, which is not privileged.
+
+## Invite the bot
+
+Open this URL with your Application ID filled in, and choose your server:
+
+```text
+https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands
+```
+
+The same link can be built in the portal under **OAuth2**, then **URL Generator**. Select the `bot` and `applications.commands` scopes. Add bot permissions there if your commands need them.
+
+## Set the environment
+
+Copy `.env.example` to `.env`:
+
+```text title=".env"
+DISCORD_TOKEN=your-bot-token
+DEV_GUILD_ID=your-server-id
+```
+
+To get your server id, turn on **Developer Mode** in Discord under **User Settings**, then **Advanced**. Right-click your server and select **Copy Server ID**.
+
+`DEV_GUILD_ID` matters during development. `neocord dev` syncs commands to that one server, so they appear immediately. Without it, the CLI prints "No dev.guildId set, so commands are not synced in development." and your commands will not show up.
+
+<Callout kind="warn">
+
+The generated `.gitignore` ignores `.env*` except `.env.example`. Never commit a token. The ESLint rule [`no-hardcoded-token`](/docs/eslint/no-hardcoded-token) catches tokens written into source files.
+
+</Callout>
+
+## First run
+
+If you skipped the install, install first:
+
+```pm
+install
+```
+
+Then start the bot:
+
+```pm
+run dev
+```
+
+`neocord dev` generates code and types into `.neocord`, bundles the bot, syncs the commands to your server, and starts it. You should see lines like these. The first one only appears when the commands have changed:
+
+```text
+✓ Synced 2 commands to guild 123456789012345678.
+✓ Bot started.
+2026-11-04T12:00:00.000Z INFO  [clientReady] Logged in as my-bot#1234
+2026-11-04T12:00:00.000Z INFO  Logged in as my-bot#1234.
+```
+
+The `[clientReady]` line comes from `events/clientReady.ts`, and the other comes from neocord. If the bot exits with an error instead, see [Troubleshooting](/docs/troubleshooting).
+
+## See /ping
+
+In your server, type `/ping` and send it:
+
+<DiscordPreview command="/ping" label="The ping reply in Discord">
+  <DiscordText>Pong! Gateway latency is 42 ms.</DiscordText>
+</DiscordPreview>
+
+Then try `/about` and select **Refresh**. The button updates the same message:
+
+<DiscordPreview command="/about" label="The about command in Discord">
+  <DiscordContainer accent="blurple">
+    <DiscordHeading>About my-bot</DiscordHeading>
+    <DiscordText><strong>Servers:</strong> 1</DiscordText>
+    <DiscordText><strong>Latency:</strong> 42 ms</DiscordText>
+    <DiscordRow>
+      <DiscordButton>Refresh</DiscordButton>
+    </DiscordRow>
+  </DiscordContainer>
+</DiscordPreview>
+
+Change the text in `src/features/general/commands/ping/command.tsx` and save. The dev session rebuilds and restarts the bot.
+
+## Next steps
+
+- Add a command with [Slash commands](/docs/routing/commands) and take input with [Options](/docs/routing/options).
+- Read how [Replying](/docs/handlers/replying) works.
+- Before going live, read the [Production checklist](/docs/deployment/checklist). `neocord dev` only registers commands in your development server, so production needs [`neocord deploy`](/docs/deployment/deploying-commands).

@@ -1,0 +1,173 @@
+Buttons, selects and modals can carry data in their custom id. A folder named `[param]` makes that part of the route dynamic, and neocord builds and parses the id for you with full types.
+
+## Params
+
+```text
+src/features/moderation/buttons/confirm-ban/[userId]/button.tsx
+```
+
+The route id is `moderation/confirm-ban/[userId]`:
+
+```tsx title="src/features/moderation/buttons/confirm-ban/[userId]/button.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineButton } from "neocord";
+
+export default defineButton("moderation/confirm-ban/[userId]", {
+  execute(ctx) {
+    return <TextDisplay>Confirmed {ctx.params.userId}</TextDisplay>;
+  },
+});
+```
+
+`ctx.params.userId` is a `string`. The type comes from the literal in `defineButton`, with no code generation.
+
+## Catch-all params
+
+`[...rest]` catches every remaining segment and gives you an array. It must be the last segment:
+
+```tsx title="src/features/wizard/buttons/step/[...path]/button.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineButton } from "neocord";
+
+export default defineButton("wizard/step/[...path]", {
+  execute(ctx) {
+    return <TextDisplay>Path: {ctx.params.path.join(" then ")}</TextDisplay>;
+  },
+});
+```
+
+`ctx.params.path` is a `string[]`. A route ending in `[...rest]` needs at least one value.
+
+## Sending a dynamic route
+
+The `route` prop takes the route id, with its brackets, and `params` fills them in:
+
+```tsx
+<Button route="moderation/confirm-ban/[userId]" params={{ userId: user.id }} label="Ban" />
+<Button route="wizard/step/[...path]" params={{ path: ["one", "two"] }} label="Next" />
+```
+
+| Route segment | `params` value | Handler receives |
+| --- | --- | --- |
+| `[userId]` | `string`, `number` or `bigint` | `string` |
+| `[...path]` | Non-empty array of `string`, `number` or `bigint` | `string[]` |
+
+Params always come back as strings, so convert numbers in the handler.
+
+`showModal` works the same way:
+
+```tsx
+await ctx.showModal("moderation/ban-reason/[userId]", { userId: user.id });
+```
+
+## The typed route prop
+
+The `neocord` CLI generates `.neocord/types.d.ts` from your files. It registers every button, select and modal route with `@neocord/react`:
+
+```ts title=".neocord/types.d.ts"
+declare module "@neocord/react" {
+  interface RegisteredRoutes {
+    buttons: "moderation/confirm-ban/[userId]" | "general/refresh";
+    selects: "moderation/pick-role";
+    modals: "moderation/ban-reason/[userId]";
+  }
+}
+export {};
+```
+
+So this is what the compiler checks:
+
+| Code | Result |
+| --- | --- |
+| `<Button route="general/refresh" label="Go" />` | Compiles. |
+| `<Button route="general/refrsh" label="Go" />` | Error, no such route. |
+| `<Button route="moderation/confirm-ban/[userId]" label="Go" />` | Error, `params` is required. |
+| `<Button route="general/refresh" params={{ id: 1 }} label="Go" />` | Error, this route has no params. |
+
+`Button` only accepts button routes, the selects only accept select routes, and `Modal` and `showModal` only accept modal routes. Without the generated types, `route` is a `string` and `params` is an optional record.
+
+The types update when `neocord dev`, `neocord build`, `neocord test` or `neocord typegen` runs. See [How type safety works](/docs/type-safety).
+
+## How custom ids are built
+
+`buildCustomId` fills in the route and encodes each value with `encodeURIComponent`:
+
+```ts
+import { buildCustomId } from "@neocord/react";
+
+buildCustomId("moderation/confirm-ban/[userId]", { userId: "123" });
+```
+
+This returns `moderation/confirm-ban/123`. A value with a slash in it stays one segment, because the slash is encoded.
+
+It throws a `CustomIdError` when:
+
+- A param has no value, or the value is empty.
+- A catch-all param is not a non-empty array.
+- The result is longer than 100 characters, which is Discord's limit.
+
+<Callout kind="warn">
+
+Everything in a custom id counts towards the 100 characters, after encoding. Keep route names short, and store large data elsewhere with an id in the route. `validateManifest` reports a route whose static part alone is over the limit, but a long param value only fails when the component renders.
+
+</Callout>
+
+Custom ids starting with `~` are reserved for [live sessions](/docs/ui/live-sessions). A route starting with `~` is an error, and so is a `customId` prop starting with `~`.
+
+## How custom ids are matched
+
+Each kind has its own router, so a button and a modal can have the same id. When an interaction arrives, segments are compared left to right, in this order:
+
+1. A static segment.
+2. A `[param]`.
+3. A `[...rest]`.
+
+So with these two buttons, `moderation/confirm/all` matches the first:
+
+```text
+src/features/moderation/buttons/confirm/all/button.tsx
+src/features/moderation/buttons/confirm/[userId]/button.tsx
+```
+
+Values are decoded before they reach `ctx.params`. If nothing matches, or a value cannot be decoded, the user gets the ephemeral notice "This interaction is no longer available."
+
+### Conflicts
+
+These are errors, reported by the CLI when it scans your project:
+
+| Conflict | Example |
+| --- | --- |
+| Two routes with the same id and kind | Two files for `moderation/confirm` |
+| Different param names in the same place | `confirm/[id]` and `confirm/[userId]` |
+| A catch-all that is not last | `[...rest]/next` |
+| Two catch-alls in the same place | `page/[...a]` and `page/[...b]` |
+
+## Route groups
+
+Folders in parentheses do not count as segments:
+
+```text
+src/features/moderation/buttons/(flow)/next/button.tsx
+```
+
+The route id is `moderation/next`.
+
+## A raw customId
+
+For an id you build yourself, use `customId`. It is not checked against your routes, so it must match a route at runtime, or be handled some other way:
+
+```tsx
+<Button customId={`moderation/confirm-ban/${user.id}`} label="Ban" />
+```
+
+Prefer `route`, which the ESLint rule [`prefer-route-prop`](/docs/eslint/prefer-route-prop) recommends for literal ids.
+
+## Inferring params yourself
+
+```ts
+import type { RouteParams } from "@neocord/react";
+
+type Params = RouteParams<"mod/[id]/[...rest]">;
+```
+
+`Params` is `{ id: string; rest: string[] }`.

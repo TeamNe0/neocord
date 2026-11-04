@@ -1,0 +1,143 @@
+A file in `events` listens to a discord.js client event. The file or folder name is the event's name, and the default export is `defineEvent`.
+
+```ts title="src/features/general/events/guildMemberAdd.ts"
+import { defineEvent } from "neocord";
+
+export default defineEvent("guildMemberAdd", {
+  execute(ctx, member) {
+    ctx.logger.info(`${member.user.tag} joined ${member.guild.name}`);
+  },
+});
+```
+
+The arguments after `ctx` are the ones discord.js passes for that event, fully typed.
+
+## Files
+
+Use either form:
+
+```text
+src/features/general/events/guildMemberAdd.ts
+src/features/general/events/messageCreate/log.ts
+src/features/general/events/messageCreate/spam.ts
+```
+
+The folder form lets one event have several listeners, in one feature or across features. Each one runs separately. Nesting deeper than one folder is an error.
+
+Segment file names have no special meaning here, because every file in `events` is a route. `events/error.ts` listens to the `error` event.
+
+## defineEvent
+
+```ts
+defineEvent(event, definition)
+```
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `execute` | `(ctx, ...args) => unknown` | Yes | The listener. May be async. |
+| `once` | `boolean` | No | Uses `client.once` instead of `client.on`. |
+
+The first argument must be a string literal equal to the name from the path. The runtime rejects a mismatch, and the ESLint rules [`route-matches-path`](/docs/eslint/route-matches-path) and [`valid-event-name`](/docs/eslint/valid-event-name) catch it earlier, along with names that are not real client events.
+
+The bot's ready event in discord.js 14 is `clientReady`:
+
+```ts title="src/features/general/events/clientReady.ts"
+import { defineEvent } from "neocord";
+
+export default defineEvent("clientReady", {
+  once: true,
+  execute(ctx, client) {
+    ctx.logger.info(`Logged in as ${client.user.tag}`);
+  },
+});
+```
+
+## The event context
+
+Event contexts have only what does not depend on an interaction:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `client` | `Client<true>` | The discord.js client. |
+| `app` | `AppContext` | Your [app context](/docs/handlers/app-context). |
+| `logger` | `Logger` | A logger scoped to this route. |
+| `feature` | `string` | The feature's name. |
+| `route` | `string` | The event's name. |
+| `shards` | `ShardHelpers` | See [Sharding](/docs/sharding). |
+
+`execute` returns no UI. Middleware, layouts, `error.tsx` and `loading.tsx` do not apply to events. To send a message, use discord.js directly. `@neocord/react` still renders the payload, and `send` needs the flags replaced, because it does not accept the ephemeral flag:
+
+```tsx title="src/features/general/events/guildCreate.tsx"
+import { render, TextDisplay } from "@neocord/react";
+import { MessageFlags } from "discord.js";
+import { defineEvent } from "neocord";
+
+export default defineEvent("guildCreate", {
+  async execute(ctx, guild) {
+    const channel = guild.systemChannel;
+    if (channel === null) return;
+    const { flags: _flags, ...payload } = render(<TextDisplay>Thanks for adding {ctx.client.user.username}.</TextDisplay>);
+    await channel.send({ ...payload, flags: MessageFlags.IsComponentsV2 });
+  },
+});
+```
+
+## Errors
+
+If `execute` throws or rejects, the error is logged with the event and file, and the process keeps running.
+
+## Intents
+
+Discord only sends an event if you ask for its intent. Add it to `intents` in `neocord.config.ts`, or to `defineFeature` in the feature that needs it:
+
+```ts title="src/features/general/feature.ts"
+import { defineFeature } from "neocord";
+
+export default defineFeature({
+  intents: ["GuildMembers"],
+});
+```
+
+`validateManifest` warns when an event's intent is not enabled, and also warns about reading message content without `MessageContent`.
+
+| Events | Needs one of |
+| --- | --- |
+| `guildCreate`, `guildDelete`, `guildUpdate`, `guildAvailable`, `guildUnavailable` | `Guilds` |
+| `roleCreate`, `roleDelete`, `roleUpdate` | `Guilds` |
+| `channelCreate`, `channelDelete`, `channelUpdate` | `Guilds` |
+| `channelPinsUpdate` | `Guilds`, `DirectMessages` |
+| `threadCreate`, `threadDelete`, `threadUpdate`, `threadListSync` | `Guilds` |
+| `stageInstanceCreate`, `stageInstanceDelete`, `stageInstanceUpdate` | `Guilds` |
+| `guildMemberAdd`, `guildMemberRemove`, `guildMemberUpdate`, `guildMembersChunk`, `threadMembersUpdate` | `GuildMembers` |
+| `guildBanAdd`, `guildBanRemove`, `guildAuditLogEntryCreate` | `GuildModeration` |
+| `emojiCreate`, `emojiDelete`, `emojiUpdate`, `stickerCreate`, `stickerDelete`, `stickerUpdate` | `GuildExpressions` |
+| `guildIntegrationsUpdate` | `GuildIntegrations` |
+| `webhooksUpdate` | `GuildWebhooks` |
+| `inviteCreate`, `inviteDelete` | `GuildInvites` |
+| `voiceStateUpdate` | `GuildVoiceStates` |
+| `presenceUpdate` | `GuildPresences` |
+| `messageCreate`, `messageUpdate`, `messageDelete` | `GuildMessages`, `DirectMessages` |
+| `messageDeleteBulk` | `GuildMessages` |
+| `messageReactionAdd`, `messageReactionRemove`, `messageReactionRemoveAll`, `messageReactionRemoveEmoji` | `GuildMessageReactions`, `DirectMessageReactions` |
+| `typingStart` | `GuildMessageTyping`, `DirectMessageTyping` |
+| `guildScheduledEventCreate`, `guildScheduledEventDelete`, `guildScheduledEventUpdate`, `guildScheduledEventUserAdd`, `guildScheduledEventUserRemove` | `GuildScheduledEvents` |
+| `autoModerationRuleCreate`, `autoModerationRuleDelete`, `autoModerationRuleUpdate` | `AutoModerationConfiguration` |
+| `autoModerationActionExecution` | `AutoModerationExecution` |
+| `messagePollVoteAdd`, `messagePollVoteRemove` | `GuildMessagePolls`, `DirectMessagePolls` |
+
+`GuildMembers`, `GuildPresences` and `MessageContent` are privileged. Enable them in the Discord Developer Portal under **Bot**, then **Privileged Gateway Intents**, or Discord closes the connection with code 4014. See [Troubleshooting](/docs/troubleshooting).
+
+## Sharding
+
+Each shard has its own client, so a listener runs once per shard that receives the event. See [Sharding](/docs/sharding).
+
+## Testing
+
+```ts
+import { mockMember, runEvent } from "neocord/testing";
+import event from "./guildMemberAdd";
+
+const { error } = await runEvent(event, [mockMember()]);
+```
+
+`runEvent` resolves to `{ error }`, because event errors never throw. See [Testing](/docs/testing).

@@ -1,0 +1,168 @@
+Options are declared in the `options` object of `defineCommand`. Each key is the option's name, each value comes from an `option.*` helper, and `ctx.options` is typed from them with no code generation.
+
+```tsx title="src/features/fun/commands/roll/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineCommand, option } from "neocord";
+
+export default defineCommand({
+  description: "Roll a die",
+  options: {
+    sides: option.integer({
+      description: "How many sides",
+      required: true,
+      choices: [
+        { name: "Six", value: 6 },
+        { name: "Twenty", value: 20 },
+      ],
+    }),
+    label: option.string({ description: "What the roll is for", maxLength: 50 }),
+  },
+  execute(ctx) {
+    const result = Math.floor(Math.random() * ctx.options.sides) + 1;
+    return <TextDisplay>{ctx.options.label ?? "Roll"}: {result}</TextDisplay>;
+  },
+});
+```
+
+`ctx.options.sides` is `6 | 20`, and `ctx.options.label` is `string | undefined`.
+
+## Every option type
+
+| Helper | Value with `required: true` | Extra fields |
+| --- | --- | --- |
+| `option.string` | `string` | `minLength`, `maxLength`, `choices`, `autocomplete` |
+| `option.integer` | `number` | `minValue`, `maxValue`, `choices`, `autocomplete` |
+| `option.number` | `number` | `minValue`, `maxValue`, `choices`, `autocomplete` |
+| `option.boolean` | `boolean` | |
+| `option.user` | `User` | |
+| `option.member` | `GuildMember` | |
+| `option.channel` | A channel type | `channelTypes` |
+| `option.role` | `Role` | |
+| `option.mentionable` | `User \| GuildMember \| Role` | |
+| `option.attachment` | `Attachment` | |
+
+Without `required: true`, the value also includes `undefined`.
+
+## Fields on every helper
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `description` | `string` | Required. 1-100 characters. |
+| `required` | `boolean` | Removes `undefined` from the type. |
+| `nameLocalizations` | `LocalizationMap` | Localised names. |
+| `descriptionLocalizations` | `LocalizationMap` | Localised descriptions. |
+
+Required options are sorted first when commands are serialised, because Discord requires that order. You can declare them in any order.
+
+Option names must be lowercase, 1-32 characters, using letters, numbers, `-`, `_` or `'`.
+
+## Choices
+
+Strings, integers and numbers accept `choices`. The values become a literal union, without `as const`:
+
+```tsx
+const size = option.string({
+  description: "Size",
+  choices: [
+    { name: "Small", value: "s" },
+    { name: "Large", value: "l", nameLocalizations: { fr: "Grand" } },
+  ],
+});
+```
+
+`ctx.options.size` is `"s" | "l" | undefined`. An option needs 1-25 choices, and each choice name is 1-100 characters.
+
+`choices` and `autocomplete` are mutually exclusive. The types forbid using both, and `validateManifest` reports it as an error.
+
+## Autocomplete
+
+For strings, integers and numbers, `autocomplete` is a function that returns choices as the user types:
+
+```tsx title="src/features/fun/commands/search/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineCommand, option } from "neocord";
+
+const FRUIT = ["apple", "banana", "cherry"];
+
+export default defineCommand({
+  description: "Search for a fruit",
+  options: {
+    fruit: option.string({
+      description: "The fruit",
+      required: true,
+      autocomplete(ctx) {
+        return FRUIT.filter((name) => name.startsWith(ctx.focused)).map((name) => ({ name, value: name }));
+      },
+    }),
+  },
+  execute(ctx) {
+    return <TextDisplay>You picked {ctx.options.fruit}</TextDisplay>;
+  },
+});
+```
+
+The value's type stays `string` or `number`, because Discord does not stop a user sending something that was not suggested. Check it in `execute` if that matters.
+
+### The autocomplete context
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `focused` | `string` | What the user has typed so far. |
+| `optionName` | `string` | The option being completed. |
+| `interaction` | `AutocompleteInteraction` | The raw interaction. |
+| `guild` | `Guild \| null` | The server. |
+| `member` | `GuildMember \| null` | The member. |
+| `user` | `User` | The user. |
+| `client`, `app`, `logger`, `feature`, `route`, `shards` | | As on every [context](/docs/handlers/context). |
+
+- The handler may be async and returns at most 25 choices. neocord cuts off anything after that.
+- If it throws, the error is logged and Discord gets an empty list.
+- Autocomplete does not run middleware, `guildOnly`, `permissions` or `cooldown`.
+
+## Bounds
+
+```tsx
+const options = {
+  name: option.string({ description: "Your name", minLength: 2, maxLength: 32 }),
+  rating: option.integer({ description: "From 1 to 5", minValue: 1, maxValue: 5 }),
+  weight: option.number({ description: "In kilograms", minValue: 0.1 }),
+};
+```
+
+## Channels
+
+`channelTypes` limits which channels Discord offers, and narrows the value's type:
+
+```tsx
+import { ChannelType } from "discord.js";
+import { option } from "neocord";
+
+const channel = option.channel({
+  description: "Where to post",
+  required: true,
+  channelTypes: [ChannelType.GuildText],
+});
+```
+
+`ctx.options.channel` is a text channel, so `send` is available without a type check.
+
+## user and member
+
+Both deploy as a Discord user option. The difference is what you get back.
+
+- `option.user` gives a `User`, which always exists.
+- `option.member` gives a `GuildMember`. neocord fetches the member if the interaction did not include one.
+
+Discord can only guarantee the user. If a required `member` option names someone who has left the server, neocord replies ephemerally with `The user given for "name" is not a member of this server.` and does not run the handler. An optional one is `undefined`.
+
+If any other required option cannot be resolved, the reply is `The "name" option could not be resolved.`
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Options per command | 25 |
+| Description | 1-100 characters |
+| Choices per option | 1-25 |
+| Choice name | 1-100 characters |
+| Autocomplete results | 25 |

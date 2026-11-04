@@ -1,0 +1,240 @@
+A modal is a `modal.tsx` file that defines both the form and what happens when it is submitted. Open it from another handler with `ctx.showModal`.
+
+## A modal
+
+```tsx title="src/features/moderation/modals/ban-reason/[userId]/modal.tsx"
+import { Label, TextDisplay, TextInput } from "@neocord/react";
+import { defineModal } from "neocord";
+import { z } from "zod";
+
+export default defineModal("moderation/ban-reason/[userId]", {
+  title: "Ban reason",
+  schema: z.object({ reason: z.string().min(3) }),
+  render({ field }) {
+    return (
+      <Label label="Reason" description="Shown in the audit log">
+        <TextInput customId={field("reason")} style="paragraph" maxLength={500} />
+      </Label>
+    );
+  },
+  submit(ctx) {
+    return <TextDisplay>Banning {ctx.params.userId} for: {ctx.values.reason}</TextDisplay>;
+  },
+});
+```
+
+Open it from a button, a command or a context menu:
+
+```tsx title="src/features/moderation/buttons/open-reason/[userId]/button.tsx"
+import { defineButton } from "neocord";
+
+export default defineButton("moderation/open-reason/[userId]", {
+  async execute(ctx) {
+    await ctx.showModal("moderation/ban-reason/[userId]", { userId: ctx.params.userId });
+  },
+});
+```
+
+<DiscordModal title="Ban reason">
+  <DiscordField label="Reason" description="Shown in the audit log" />
+</DiscordModal>
+
+## defineModal
+
+```ts
+defineModal(route, definition)
+```
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `title` | `string` or `(ctx) => string` | Yes | 1-45 characters. |
+| `render` | `(ctx) => node` | Yes | The form. |
+| `submit` | `(ctx) => node \| void` | Yes | Runs when the form is submitted. May be async. |
+| `schema` | Standard Schema | No | Parses the values. |
+| `respond` | `"reply"` (default) or `"update"` | No | What a node returned from `submit` does. See [After submit](#after-submit). |
+| `permissions` | `PermissionsString[]` | No | Checked at runtime when the form is submitted. |
+| `guildOnly` | `boolean` | No | Makes `ctx.guild` and `ctx.member` non-null in `submit`. |
+| `ephemeral` | `boolean` | No | Replies from `submit` are ephemeral by default. |
+| `cooldown` | Duration | No | Per user and route, applied to submissions. |
+| `layout` | `boolean` | No | `false` skips layouts for what `submit` returns. |
+
+## render and title
+
+`render` and a function `title` both receive the same object:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `params` | From the route | The params given to `showModal`. |
+| `field(name)` | `string` | Returns the field's custom id. With a `schema`, it only accepts the schema's keys, so a typo is a compile error. |
+
+```tsx
+export default defineModal("moderation/note/[userId]", {
+  title: ({ params }) => `Note for ${params.userId}`,
+  render: ({ field }) => (
+    <Label label="Note">
+      <TextInput customId={field("note")} />
+    </Label>
+  ),
+  submit: () => undefined,
+});
+```
+
+`render` is synchronous, and a suspending component throws. Layouts do not apply to modals. A modal holds 1-5 `Label` or `TextDisplay` children, and each `Label` wraps one control. Text can sit directly in the form, and a fragment can return several children. See [Modal components](/docs/ui/modal) for every control.
+
+## showModal
+
+`ctx.showModal(route, params)` is available on every context except a modal's own `submit`.
+
+- `route` is typed from your modal files, and `params` is required exactly when the route has params.
+- It must be the first response. If the interaction has already been acknowledged, it throws an error that says so.
+- A `loading.tsx` that applies to the route sends a reply first, so `showModal` cannot follow it.
+- A modal cannot open from a modal submit.
+
+## Values without a schema
+
+`ctx.values` is `Record<string, string | string[] | boolean>`, keyed by each control's `customId`:
+
+| Control | Value |
+| --- | --- |
+| `TextInput` | `string`. Omitted when left blank. |
+| Selects, `CheckboxGroup` | `string[]` |
+| `FileUpload` | `string[]` of attachment ids. |
+| `RadioGroup` | `string`. Omitted when nothing is chosen. |
+| `Checkbox` | `boolean` |
+
+Read uploaded files with `ctx.fields.getUploadedFiles(name)`.
+
+## Schemas
+
+`schema` is any [Standard Schema](https://standardschema.dev), such as zod, valibot or arktype. `neocord` has no dependency on any of them. `ctx.values` becomes the schema's output type:
+
+```tsx
+const schema = z.object({
+  reason: z.string().min(3),
+  notify: z.boolean(),
+  note: z.string().optional(),
+});
+```
+
+`TextInput` values are omitted when left blank, so use `.optional()` for a field the user can skip. If parsing fails, `submit` does not run, and the user gets an ephemeral message with the issues:
+
+<DiscordPreview ephemeral label="The modal validation message in Discord">
+  <DiscordText>Please check your answers:</DiscordText>
+  <DiscordText>- reason: Too small: expected string to have at least 3 characters.</DiscordText>
+</DiscordPreview>
+
+The exact wording of each issue comes from your schema library.
+
+## The modal context
+
+Everything in the [handler context](/docs/handlers/context) except `showModal`, plus:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `params` | From the route | The params from the custom id. |
+| `values` | From the schema | The parsed values. |
+| `fields` | `ModalSubmitFields` | The discord.js fields, for uploaded files and raw access. |
+| `update(node, options?)` | `Promise<void>` | Updates the message the modal was opened from. |
+| `deferUpdate()` | `Promise<void>` | Acknowledges without changing that message. |
+
+A modal cannot open another modal, which is why `showModal` is missing.
+
+## After submit
+
+| `submit` does | Result |
+| --- | --- |
+| Returns a node | `ctx.reply(node)`. With `respond: "update"`, `ctx.update(node)`. |
+| Calls `ctx.reply`, `ctx.update` or similar | That response stands. |
+| Nothing, on a modal opened from a message component | neocord defers the update. |
+| Nothing, on a modal opened from a command | neocord acknowledges silently, by deferring ephemerally and deleting the reply. |
+
+### Updating the message the modal came from
+
+When a button opens a modal, `respond: "update"` makes the submission change the message that button is on instead of sending a new one. This suits a confirmation flow, where the buttons should disappear once the form is sent.
+
+```tsx title="src/features/moderation/modals/ban-reason/[userId]/modal.tsx"
+import { Label, TextDisplay, TextInput } from "@neocord/react";
+import { defineModal } from "neocord";
+
+export default defineModal("moderation/ban-reason/[userId]", {
+  title: "Ban reason",
+  respond: "update",
+  render: ({ field }) => (
+    <Label label="Reason">
+      <TextInput customId={field("reason")} style="paragraph" />
+    </Label>
+  ),
+  submit: (ctx) => <TextDisplay>Banned {ctx.params.userId}.</TextDisplay>,
+});
+```
+
+A modal opened from a slash command has no message to update. There, `respond: "update"` and `ctx.update` send a reply, and `ctx.deferUpdate` defers one.
+
+See [Replying](/docs/handlers/replying).
+
+## A longer form
+
+```tsx title="src/features/support/modals/ticket/modal.tsx"
+import {
+  Checkbox,
+  FileUpload,
+  Label,
+  Option,
+  RadioGroup,
+  TextDisplay,
+  TextInput,
+} from "@neocord/react";
+import { defineModal } from "neocord";
+import { z } from "zod";
+
+export default defineModal("support/ticket", {
+  title: "New ticket",
+  ephemeral: true,
+  schema: z.object({
+    subject: z.string().min(3),
+    priority: z.enum(["low", "high"]),
+    notify: z.boolean(),
+    files: z.array(z.string()).optional(),
+  }),
+  render: ({ field }) => (
+    <>
+      Tell us what happened.
+      <Label label="Subject">
+        <TextInput customId={field("subject")} />
+      </Label>
+      <Label label="Priority">
+        <RadioGroup customId={field("priority")}>
+          <Option label="Low" value="low" default />
+          <Option label="High" value="high" />
+        </RadioGroup>
+      </Label>
+      <Label label="Email me">
+        <Checkbox customId={field("notify")} />
+      </Label>
+      <Label label="Screenshots">
+        <FileUpload customId={field("files")} maxValues={3} required={false} />
+      </Label>
+    </>
+  ),
+  submit(ctx) {
+    const files = ctx.fields.getUploadedFiles("files");
+    return <TextDisplay>Created {ctx.values.subject} with {files?.size ?? 0} files.</TextDisplay>;
+  },
+});
+```
+
+## Sharing an id with a button
+
+Each interaction type has its own route table, so `buttons/ban-reason/[userId]` and `modals/ban-reason/[userId]` can have the same id.
+
+## Testing
+
+```tsx
+import { renderModalOf, runModal } from "neocord/testing";
+import modal from "./modal";
+
+const payload = renderModalOf(modal, { params: { userId: "1" } });
+const { text } = await runModal(modal, { params: { userId: "1" }, values: { reason: "Spam" } });
+```
+
+See [Testing](/docs/testing).

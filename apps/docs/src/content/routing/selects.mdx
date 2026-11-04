@@ -1,0 +1,154 @@
+Selects work like [buttons](/docs/routing/buttons). You send a select component with a `route`, and a `select.tsx` file handles what the user picked. There are five kinds, and `type` on the handler must match the component.
+
+## A string select
+
+```tsx title="src/features/settings/commands/theme/command.tsx"
+import { ActionRow, Option, StringSelect, TextDisplay } from "@neocord/react";
+import { defineCommand } from "neocord";
+
+export default defineCommand({
+  description: "Choose a theme",
+  ephemeral: true,
+  execute() {
+    return (
+      <>
+        <TextDisplay>Pick a theme.</TextDisplay>
+        <ActionRow>
+          <StringSelect route="settings/theme" placeholder="Theme">
+            <Option label="Dark" value="dark" />
+            <Option label="Light" value="light" description="Bright" />
+          </StringSelect>
+        </ActionRow>
+      </>
+    );
+  },
+});
+```
+
+```tsx title="src/features/settings/selects/theme/select.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineSelect } from "neocord";
+
+export default defineSelect("settings/theme", {
+  execute(ctx) {
+    return <TextDisplay>Theme set to {ctx.values[0]}.</TextDisplay>;
+  },
+});
+```
+
+<DiscordPreview command="/theme" ephemeral label="The theme select in Discord">
+  <DiscordText>Pick a theme.</DiscordText>
+  <DiscordRow>
+    <DiscordSelect placeholder="Theme" />
+  </DiscordRow>
+</DiscordPreview>
+
+## defineSelect
+
+```ts
+defineSelect(route, definition)
+```
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `execute` | `(ctx) => node \| void` | Yes | The handler. May be async. |
+| `type` | `"string" \| "user" \| "role" \| "channel" \| "mentionable"` | No | The select kind. Defaults to `"string"`. |
+| `respond` | `"update" \| "reply"` | No | What a returned node does. Defaults to `"update"`. |
+| `permissions` | `PermissionsString[]` | No | Checked at runtime. |
+| `guildOnly` | `boolean` | No | Rejects use outside a server. Makes `ctx.guild` and `ctx.member` non-null. |
+| `ephemeral` | `boolean` | No | Replies from this handler are ephemeral by default. |
+| `cooldown` | Duration | No | Per user and route. |
+| `layout` | `boolean` | No | `false` skips layouts. |
+
+## The select context
+
+Everything in the [handler context](/docs/handlers/context), plus `params`, `message`, `update` and `deferUpdate` as on [buttons](/docs/routing/buttons#the-button-context), and:
+
+| Field | Available when `type` is | Type |
+| --- | --- | --- |
+| `values` | Every type | `string[]` |
+| `users` | `user`, `mentionable` | `Collection<string, User>` |
+| `members` | `user`, `mentionable` | Collection of members |
+| `roles` | `role`, `mentionable` | Collection of roles |
+| `channels` | `channel` | Collection of channels |
+
+For selects other than `string`, `values` holds the ids of what was picked. `type` narrows the context, so `ctx.roles` is only available when `type` is `"role"` or `"mentionable"`.
+
+## Types and components
+
+| `type` | Component | Picks |
+| --- | --- | --- |
+| `"string"` | `StringSelect` | Your `Option` values |
+| `"user"` | `UserSelect` | Users |
+| `"role"` | `RoleSelect` | Roles |
+| `"channel"` | `ChannelSelect` | Channels |
+| `"mentionable"` | `MentionableSelect` | Users and roles |
+
+If the two do not match, the interaction does not reach your handler. neocord logs a warning naming the file, and the user gets the ephemeral notice "This interaction is no longer available."
+
+## A role select
+
+```tsx title="src/features/moderation/selects/pick-role/select.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineSelect } from "neocord";
+
+export default defineSelect("moderation/pick-role", {
+  type: "role",
+  execute(ctx) {
+    return <TextDisplay>Picked {ctx.roles.size} roles.</TextDisplay>;
+  },
+});
+```
+
+Send it with:
+
+```tsx
+<ActionRow>
+  <RoleSelect route="moderation/pick-role" placeholder="Choose roles" minValues={1} maxValues={3} />
+</ActionRow>
+```
+
+A select must be alone in its `ActionRow`.
+
+## Params
+
+Select routes can have params, like every interaction route:
+
+```tsx title="src/features/settings/selects/role/[guildId]/select.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineSelect } from "neocord";
+
+export default defineSelect("settings/role/[guildId]", {
+  type: "role",
+  execute(ctx) {
+    return <TextDisplay>Saved for {ctx.params.guildId}.</TextDisplay>;
+  },
+});
+```
+
+```tsx
+<ActionRow>
+  <RoleSelect route="settings/role/[guildId]" params={{ guildId: ctx.guild.id }} />
+</ActionRow>
+```
+
+## update or reply
+
+Like buttons, a returned node updates the message unless `respond: "reply"` is set, and a handler that returns nothing without acknowledging gets a `deferUpdate`. See [Replying](/docs/handlers/replying).
+
+## Other ways to address a select
+
+Selects take `route` and `params`, a raw `customId`, or `onSelect` for a [live session](/docs/ui/live-sessions). The types keep them mutually exclusive. See [Interactive components](/docs/ui/interactive) for every prop and limit.
+
+Selects can also go inside a modal, where they are part of the form and use a `customId`. See [Modal components](/docs/ui/modal).
+
+## Testing
+
+```tsx
+import { runSelect } from "neocord/testing";
+import select from "./select";
+
+const { text } = await runSelect(select, { values: ["dark"] });
+```
+
+See [Testing](/docs/testing).

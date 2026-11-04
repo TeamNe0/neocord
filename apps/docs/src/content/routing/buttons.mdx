@@ -1,0 +1,176 @@
+A button has two halves: the `<Button>` in a message, and the `button.tsx` file that runs when someone clicks it. The `route` prop connects them.
+
+## A button and its handler
+
+Send the button from any handler:
+
+```tsx title="src/features/moderation/commands/ban/command.tsx"
+import { ActionRow, Button, Container, TextDisplay } from "@neocord/react";
+import { defineCommand, option } from "neocord";
+
+export default defineCommand({
+  description: "Ban a member",
+  guildOnly: true,
+  options: {
+    user: option.user({ description: "Who to ban", required: true }),
+  },
+  execute(ctx) {
+    const { user } = ctx.options;
+    return (
+      <Container>
+        <TextDisplay>Ban {user.username}?</TextDisplay>
+        <ActionRow>
+          <Button style="danger" route="moderation/confirm-ban/[userId]" params={{ userId: user.id }} label="Ban" />
+        </ActionRow>
+      </Container>
+    );
+  },
+});
+```
+
+Then handle it. The first argument must be the file's route id:
+
+```tsx title="src/features/moderation/buttons/confirm-ban/[userId]/button.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineButton } from "neocord";
+
+export default defineButton("moderation/confirm-ban/[userId]", {
+  permissions: ["BanMembers"],
+  guildOnly: true,
+  async execute(ctx) {
+    await ctx.guild.members.ban(ctx.params.userId);
+    return <TextDisplay>Banned.</TextDisplay>;
+  },
+});
+```
+
+<DiscordPreview command="/ban" label="The ban confirmation in Discord">
+  <DiscordContainer>
+    <DiscordText>Ban ada?</DiscordText>
+    <DiscordRow>
+      <DiscordButton variant="danger">Ban</DiscordButton>
+    </DiscordRow>
+  </DiscordContainer>
+</DiscordPreview>
+
+## defineButton
+
+```ts
+defineButton(route, definition)
+```
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `execute` | `(ctx) => node \| void` | Yes | The handler. May be async. |
+| `respond` | `"update" \| "reply"` | No | What a returned node does. Defaults to `"update"`. |
+| `permissions` | `PermissionsString[]` | No | Checked at runtime against the member who clicked. |
+| `guildOnly` | `boolean` | No | Rejects clicks outside a server. Makes `ctx.guild` and `ctx.member` non-null. |
+| `ephemeral` | `boolean` | No | Replies from this handler are ephemeral by default. |
+| `cooldown` | Duration | No | Per user and route. |
+| `layout` | `boolean` | No | `false` skips layouts. |
+
+## The button context
+
+Everything in the [handler context](/docs/handlers/context), plus:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `params` | From the route | `string` for `[param]`, `string[]` for `[...rest]`. |
+| `message` | `Message` | The message the button is on. |
+| `update(node, options?)` | `Promise<void>` | Updates the message. |
+| `deferUpdate()` | `Promise<void>` | Acknowledges and keeps the message as it is. |
+
+## update or reply
+
+By default, a returned node replaces the message the button is on, which is what you want for a counter or a confirmation:
+
+```tsx
+export default defineButton("general/refresh", {
+  execute(ctx) {
+    return <TextDisplay>Latency: {ctx.client.ws.ping} ms</TextDisplay>;
+  },
+});
+```
+
+Set `respond: "reply"` to send a new message instead:
+
+```tsx
+export default defineButton("general/details", {
+  respond: "reply",
+  ephemeral: true,
+  execute() {
+    return <TextDisplay>Only you can see this.</TextDisplay>;
+  },
+});
+```
+
+`respond` also sets what `autoDefer` does if the handler is slow. With `"update"` it defers the update, so Discord shows no loading message. With `"reply"` it defers a new reply.
+
+## Returning nothing
+
+If a button handler returns nothing and has not acknowledged, neocord calls `deferUpdate`, so the user does not see "This interaction failed". Do your work and return:
+
+```tsx
+export default defineButton("general/track", {
+  execute(ctx) {
+    ctx.logger.info(`Clicked by ${ctx.user.id}`);
+  },
+});
+```
+
+See [Replying](/docs/handlers/replying) for the full rules.
+
+## Opening a modal
+
+A modal must be the first response to an interaction, so call `showModal` before anything slow:
+
+```tsx
+export default defineButton("moderation/open-reason/[userId]", {
+  async execute(ctx) {
+    await ctx.showModal("moderation/ban-reason/[userId]", { userId: ctx.params.userId });
+  },
+});
+```
+
+See [Modals](/docs/routing/modals).
+
+## Who can click
+
+Anyone who can see a message can click its buttons. `permissions` and `guildOnly` on `defineButton` are checked at runtime when the button is clicked. Unlike commands, nothing is deployed to Discord, so the button still appears for everyone. To limit it to one person, put their id in a param and compare it:
+
+```tsx
+export default defineButton("general/confirm/[ownerId]", {
+  ephemeral: true,
+  execute(ctx) {
+    if (ctx.user.id !== ctx.params.ownerId) {
+      return ctx.reply(<TextDisplay>This button is not for you.</TextDisplay>);
+    }
+    return <TextDisplay>Confirmed.</TextDisplay>;
+  },
+});
+```
+
+## Other ways to address a button
+
+`<Button>` takes one of three addresses, and the types keep them mutually exclusive:
+
+| Prop | Use it for |
+| --- | --- |
+| `route` and `params` | A handler file. This is the preferred form, and it is type-checked. |
+| `customId` | A raw id. The ESLint rule [`prefer-route-prop`](/docs/eslint/prefer-route-prop) warns about literals. |
+| `onClick` | A handler in the component, which needs a [live session](/docs/ui/live-sessions). |
+
+Link buttons use `style="link"` and `url`, and premium buttons use `style="premium"` and `skuId`. They have no handler. See [Interactive components](/docs/ui/interactive) for every prop.
+
+A click that matches no route gets the ephemeral notice "This interaction is no longer available." and a warning in your logs.
+
+## Testing
+
+```tsx
+import { runButton } from "neocord/testing";
+import button from "./button";
+
+const { updates, text } = await runButton(button, { params: { userId: "1" } });
+```
+
+See [Testing](/docs/testing).

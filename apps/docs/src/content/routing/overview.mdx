@@ -1,0 +1,100 @@
+You do not register handlers in neocord. The CLI scans your files, works out each route from its path, and generates a manifest with a static import for every file. At runtime, each interaction is dispatched to the file that matches it.
+
+## From path to route
+
+Take this file:
+
+```text
+src/features/moderation/buttons/confirm-ban/[userId]/button.tsx
+```
+
+| Part | Meaning |
+| --- | --- |
+| `src/features` | The features folder. |
+| `moderation` | The feature. |
+| `buttons` | The route kind. |
+| `confirm-ban/[userId]` | The route's segments. `[userId]` is a param. |
+| `button.tsx` | The required file name for this kind. |
+
+The route id is `moderation/confirm-ban/[userId]`. A button sent with `userId` set to `123` has the custom id `moderation/confirm-ban/123`, and Discord sends that id back when someone clicks it.
+
+The file's default export must be the matching helper, and its first argument must be the route id:
+
+```tsx title="src/features/moderation/buttons/confirm-ban/[userId]/button.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineButton } from "neocord";
+
+export default defineButton("moderation/confirm-ban/[userId]", {
+  execute(ctx) {
+    return <TextDisplay>Banned {ctx.params.userId}</TextDisplay>;
+  },
+});
+```
+
+That literal is what gives `ctx.params.userId` its type, with no code generation. The runtime rejects a mismatch, and the ESLint rule [`route-matches-path`](/docs/eslint/route-matches-path) can fix it for you.
+
+## Route ids by kind
+
+| Kind | Folder | Route id | Discord sees |
+| --- | --- | --- | --- |
+| Slash command | `commands/mod/warn` | `mod warn` | `/mod warn` |
+| User command | `user-commands/report` | `moderation/report` | The `name` you set |
+| Message command | `message-commands/quote` | `moderation/quote` | The `name` you set |
+| Button | `buttons/confirm-ban/[userId]` | `moderation/confirm-ban/[userId]` | Custom id `moderation/confirm-ban/123` |
+| Select | `selects/pick-role` | `moderation/pick-role` | Custom id `moderation/pick-role` |
+| Modal | `modals/ban-reason/[userId]` | `moderation/ban-reason/[userId]` | Custom id `moderation/ban-reason/123` |
+| Event | `events/guildMemberAdd.ts` | `guildMemberAdd` | The client event |
+| Task | `tasks/cleanup.ts` | `moderation/cleanup` | Nothing, it runs on a timer |
+
+## Rules that follow from this
+
+- **Slash commands are global.** The feature is not part of the name, so `/ban` can only exist once across all features.
+- **Each interaction type has its own route table.** A button and a modal can share the id `moderation/ban-reason/[userId]`.
+- **Static segments win.** When matching a custom id, a static segment beats a `[param]`, and a `[param]` beats a `[...rest]`.
+- **Ids starting with `~` are reserved** for [live sessions](/docs/ui/live-sessions).
+- **Custom ids have a 100 character limit.** Building a longer one throws. See [Dynamic routes](/docs/routing/dynamic-routes).
+
+## How a project is checked
+
+Problems are reported at two levels.
+
+`scanProject` in the CLI reads the file tree and reports these before anything runs:
+
+- Files with the wrong name, in an unknown folder, or directly in the features folder.
+- Two routes with the same id and kind. Events are exempt, because several files can listen to one event.
+- Two dynamic routes in the same place with different param names, such as `[id]` and `[userId]`.
+- Commands deeper than three levels, invalid command names, and a command that also has subcommands.
+- Two `middleware`, `layout`, `error` or `loading` files in one folder.
+
+`validateManifest` loads the modules and checks what they export. It reports errors for wrong helpers, route literals that do not match the path, description lengths, too many options, missing group files and invalid durations. It reports warnings for things that work but probably are not what you meant, such as an event whose intent is not enabled. `startBot`, `neocord build`, `neocord deploy` and `neocord test` all run it.
+
+## See the routes
+
+`neocord routes` prints the route table:
+
+```pm
+x neocord routes
+```
+
+| Column | Meaning |
+| --- | --- |
+| `kind` | The route kind. |
+| `id` | The route id. |
+| `feature` | The feature it belongs to. |
+| `file` | The source file. |
+
+Add `--json` for machine-readable output, which also includes each route's segments, middleware, layouts, error and loading files, and any problems. See the [CLI reference](/docs/cli).
+
+## Dispatch
+
+When an interaction arrives, neocord:
+
+1. Finds the route. If nothing matches, it logs a warning and replies ephemerally with "This interaction is no longer available."
+2. Resolves the guild and member. With `guildOnly`, it fetches them if they are missing and replies with a notice if there are none.
+3. Checks `permissions` against the member's permissions.
+4. Builds the context, including parsed options, params or modal values.
+5. Runs the [middleware](/docs/handlers/middleware) chain from root to leaf.
+6. Applies the `cooldown`, sends [`loading.tsx`](/docs/handlers/loading) for commands, and runs your handler.
+7. Delivers what the handler returned. See [Replying](/docs/handlers/replying).
+
+If anything throws, the closest [error view](/docs/handlers/error-boundaries) is shown ephemerally and the error is logged.

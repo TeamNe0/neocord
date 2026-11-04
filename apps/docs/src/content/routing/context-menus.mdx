@@ -1,0 +1,87 @@
+Context menu commands appear when someone right-clicks a user or a message. A user command is a `command.tsx` in a folder under `user-commands`, and a message command is a `command.tsx` in a folder under `message-commands`.
+
+## User commands
+
+```tsx title="src/features/moderation/user-commands/report/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineUserCommand } from "neocord";
+
+export default defineUserCommand({
+  name: "Report user",
+  guildOnly: true,
+  ephemeral: true,
+  execute(ctx) {
+    return <TextDisplay>Reported {ctx.target.username}.</TextDisplay>;
+  },
+});
+```
+
+| Context field | Type | Meaning |
+| --- | --- | --- |
+| `target` | `User` | The user who was clicked. |
+| `targetMember` | `GuildMember \| null` | Their member. The type is non-null with `guildOnly: true`, but the value is `null` when the interaction carries no member, such as for a user who has left the server. |
+
+## Message commands
+
+```tsx title="src/features/moderation/message-commands/quote/command.tsx"
+import { Quote, TextDisplay, escapeMarkdown } from "@neocord/react";
+import { defineMessageCommand } from "neocord";
+
+export default defineMessageCommand({
+  name: "Quote message",
+  execute(ctx) {
+    return (
+      <TextDisplay>
+        <Quote>{escapeMarkdown(ctx.target.content || "This message has no text.")}</Quote>
+      </TextDisplay>
+    );
+  },
+});
+```
+
+| Context field | Type | Meaning |
+| --- | --- | --- |
+| `target` | `Message` | The message that was clicked. |
+
+Both contexts have everything in the [handler context](/docs/handlers/context) as well.
+
+## Fields
+
+`defineUserCommand` and `defineMessageCommand` take the same fields.
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | The name in Discord's menu, 1-32 characters. |
+| `execute` | `(ctx) => node \| void` | Yes | The handler. |
+| `permissions` | `PermissionsString[]` | No | Hides it from members without them, and is checked at runtime. |
+| `guildOnly` | `boolean` | No | Only usable in servers. Makes `ctx.guild` and `ctx.member` non-null. |
+| `ephemeral` | `boolean` | No | Replies are ephemeral by default. |
+| `cooldown` | Duration | No | Per user and route. |
+| `layout` | `boolean` | No | `false` skips layouts. |
+| `nsfw` | `boolean` | No | Marks the command as age-restricted. |
+| `nameLocalizations` | `LocalizationMap` | No | Localised names. |
+
+## Names come from the field
+
+Unlike slash commands, the `name` field is what Discord shows, and it can contain capitals and spaces. The folder name only sets the route id, such as `moderation/report`, and is not checked as a Discord name. neocord dispatches these commands by `name`, so two user commands cannot have the same name, and neither can two message commands. A user command and a message command may share a name.
+
+## Replying
+
+Context menu commands reply the same way as slash commands. Return a node, or call `ctx.reply`. If a handler returns nothing and has not acknowledged, neocord logs a warning. See [Replying](/docs/handlers/replying).
+
+A context menu command can also open a modal, which must be the first response:
+
+```tsx
+export default defineUserCommand({
+  name: "Add note",
+  async execute(ctx) {
+    await ctx.showModal("moderation/add-note/[userId]", { userId: ctx.target.id });
+  },
+});
+```
+
+See [Modals](/docs/routing/modals).
+
+## Limits
+
+Discord allows 15 user commands and 15 message commands. Both limits are checked by `validateManifest`. They deploy with your slash commands through [`neocord deploy`](/docs/deployment/deploying-commands), and `neocord deploy --dry-run` lists them as `Report user (user)` and `Quote message (message)`.

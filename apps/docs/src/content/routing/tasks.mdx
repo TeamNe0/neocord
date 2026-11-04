@@ -1,0 +1,115 @@
+A file in `tasks` runs code on an interval. The file or folder name is the task's name, and the default export is `defineTask`.
+
+```ts title="src/features/moderation/tasks/cleanup.ts"
+import { defineTask } from "neocord";
+
+export default defineTask({
+  every: "5m",
+  runOnStart: false,
+  shard: "first",
+  async execute(ctx) {
+    ctx.logger.info(`Cleaning up from shard ${ctx.shards.id}`);
+  },
+});
+```
+
+## Files
+
+```text
+src/features/moderation/tasks/cleanup.ts
+src/features/moderation/tasks/cleanup/index.ts
+```
+
+Use either form. The route id is `moderation/cleanup`, so these two would collide and neocord reports an error. Task ids must be unique, though two features can each have a `cleanup`. Unlike events, a folder holds only one task, and nesting deeper is an error.
+
+## defineTask
+
+| Field | Type | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `every` | Duration | Yes | | How often to run. |
+| `execute` | `(ctx) => unknown` | Yes | | The work. May be async. |
+| `runOnStart` | `boolean` | No | `false` | Also run once as soon as the client is ready. |
+| `shard` | `"first" \| "all"` | No | `"first"` | `"first"` runs only on the shard that holds shard 0. `"all"` runs on every shard. |
+
+## Durations
+
+`every` and [`cooldown`](/docs/routing/commands#cooldown) take a duration, which is a number of milliseconds or a string:
+
+| Input | Milliseconds |
+| --- | --- |
+| `500` | 500 |
+| `"500ms"` | 500 |
+| `"5s"` | 5000 |
+| `"5m"` | 300000 |
+| `"1h30m"` | 5400000 |
+| `"1d"` | 86400000 |
+
+The units are `ms`, `s`, `m`, `h` and `d`. `parseDuration`, exported from `neocord`, does the conversion and throws on anything else.
+
+`every` must be between 1 millisecond and 2147483647 milliseconds, which is about 24.8 days. Anything outside that is a validation error, because it is the longest delay a timer supports.
+
+## When tasks run
+
+- Tasks start on `clientReady`. The first interval begins then, so a task with `every: "5m"` first runs five minutes later, unless `runOnStart` is `true`.
+- If a run is still going when the next one is due, the next one is skipped, so runs never overlap.
+- The interval does not keep the process alive.
+- On shutdown, intervals stop, and neocord waits up to five seconds for running tasks to finish.
+
+## The task context
+
+Task contexts have the same fields as [event contexts](/docs/routing/events#the-event-context): `client`, `app`, `logger`, `feature`, `route` and `shards`. Middleware, layouts, `error.tsx` and `loading.tsx` do not apply.
+
+## Errors
+
+If `execute` throws or rejects, the error is logged with the task and file. The process keeps running, and the task runs again at the next interval.
+
+## Sharding
+
+With the default `shard: "first"`, a task runs once however many shards you have, which suits work like cleaning a database. With no sharding manager, it always runs.
+
+Use `shard: "all"` for work that only touches what each shard holds, such as its cached guilds:
+
+```ts title="src/features/general/tasks/presence.ts"
+import { defineTask } from "neocord";
+
+export default defineTask({
+  every: "10m",
+  shard: "all",
+  execute(ctx) {
+    ctx.client.user.setActivity(`${ctx.client.guilds.cache.size} servers`);
+  },
+});
+```
+
+To read across all shards from a `"first"` task, use `ctx.shards`:
+
+```ts title="src/features/general/tasks/stats.ts"
+import { defineTask } from "neocord";
+
+export default defineTask({
+  every: "1h",
+  async execute(ctx) {
+    const counts = await ctx.shards.fetchClientValues<number>("guilds.cache.size");
+    ctx.logger.info(`Serving ${counts.reduce((total, count) => total + count, 0)} guilds`);
+  },
+});
+```
+
+See [Sharding](/docs/sharding).
+
+<Callout kind="note">
+
+Tasks live in memory and restart with the process, so `every` counts from the last start. Run scheduled jobs that must not be missed from an external scheduler or from a database record.
+
+</Callout>
+
+## Testing
+
+```ts
+import { runTask } from "neocord/testing";
+import task from "./cleanup";
+
+const { error } = await runTask(task);
+```
+
+`runTask` runs the task once and resolves to `{ error }`. See [Testing](/docs/testing).

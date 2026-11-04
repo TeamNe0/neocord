@@ -1,0 +1,101 @@
+A feature is a folder in `src/features`. It groups the commands, buttons, selects, modals, events and tasks that belong together, and gives them a shared set of middleware, layouts and error views.
+
+```text
+src/features/
+  moderation/
+    feature.ts
+    error.tsx
+    commands/ban/command.tsx
+    buttons/confirm-ban/[userId]/button.tsx
+    _lib/audit.ts
+  fun/
+    commands/roll/command.tsx
+```
+
+A folder becomes a feature as soon as it holds a route or a segment file. It does not need a `feature.ts`.
+
+## defineFeature
+
+Add a `feature.ts` to configure a feature. Its default export must be `defineFeature`:
+
+```ts title="src/features/fun/feature.ts"
+import { defineFeature } from "neocord";
+import { env } from "~/env";
+
+export default defineFeature({
+  enabled: env.NODE_ENV !== "production",
+  intents: ["GuildMessages"],
+  partials: [],
+});
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `true` | When `false`, the feature contributes no commands, routes, events, tasks, intents or partials. |
+| `intents` | Keys of `GatewayIntentBits` | None | Merged with `intents` from `neocord.config.ts`, which defaults to `["Guilds"]`. |
+| `partials` | Keys of `Partials` | None | Merged with `partials` from `neocord.config.ts`. |
+
+`defineFeature()` with no argument is also valid.
+
+The type of `enabled` is `boolean`. If `SKIP_ENV_VALIDATION` leaves a raw string in its place, the strings `false`, `0`, `no`, `off`, `n` and `disabled` still disable the feature, in any case.
+
+## Intents belong with the code that needs them
+
+If only one feature listens to `messageCreate`, ask for the intent in that feature rather than in the config. Disable the feature and the intent goes with it:
+
+```ts title="src/features/logging/feature.ts"
+import { defineFeature } from "neocord";
+
+export default defineFeature({
+  intents: ["GuildMessages", "MessageContent"],
+});
+```
+
+`MessageContent`, `GuildMembers` and `GuildPresences` are privileged, so they must also be enabled in the Discord Developer Portal. Otherwise Discord closes the connection with code 4014. See [Troubleshooting](/docs/troubleshooting).
+
+## Disabling a feature
+
+A disabled feature's routes are removed from the manifest before validation, command serialisation and dispatch. Its commands are not deployed, and neocord does not listen for its events or run its tasks.
+
+<Callout kind="note">
+
+The generated manifest still imports every file statically, so the bundler sees every route. Code at the top level of a disabled feature's files still runs when the bot starts. Put work such as opening connections in a handler or in [`src/context.ts`](/docs/handlers/app-context).
+
+</Callout>
+
+If you disable a feature that sends messages with buttons, clicks on old messages reach no route. The user gets the ephemeral notice "This interaction is no longer available."
+
+## Scoped files
+
+A feature can have its own `middleware.ts`, `layout.tsx`, `error.tsx` and `loading.tsx`, which apply to everything inside it. They run after, or override, the ones in `src`:
+
+```text
+src/
+  middleware.ts       runs first, for every route
+  error.tsx           used by features with no error.tsx
+  features/
+    moderation/
+      middleware.ts   runs second, for this feature only
+      error.tsx       used instead of src/error.tsx here
+```
+
+See [Middleware](/docs/handlers/middleware), [Layouts](/docs/handlers/layouts), [Error boundaries](/docs/handlers/error-boundaries) and [Loading UI](/docs/handlers/loading).
+
+## Private code
+
+Folders and files starting with `_` are never routed, at any depth. Use them for components and helpers:
+
+```text
+src/features/moderation/
+  _components/CaseCard.tsx
+  _lib/audit.ts
+  commands/ban/_format.ts
+```
+
+Any other unexpected file in a feature is an error, which keeps a typo in a folder name from silently producing no route.
+
+## Names across features
+
+Interaction routes include the feature name, so `moderation/confirm` and `fun/confirm` do not collide. Slash commands do not include it, so two features cannot both define `/ban`. Events are not unique either, and several features can listen to `guildMemberAdd`. Tasks include the feature name.
+
+Two features can contribute to one command tree. `moderation/commands/mod/warn` and `admin/commands/mod/kick` both become subcommands of `/mod`. One group file for `/mod` must exist, in either feature.

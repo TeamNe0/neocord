@@ -1,0 +1,180 @@
+A slash command is a `command.tsx` file in a folder under `commands`. The folder names are the command's name, and the file's default export is `defineCommand`.
+
+## A command
+
+```tsx title="src/features/moderation/commands/ban/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineCommand, option } from "neocord";
+
+export default defineCommand({
+  description: "Ban a member",
+  permissions: ["BanMembers"],
+  guildOnly: true,
+  ephemeral: true,
+  cooldown: "5s",
+  options: {
+    user: option.user({ description: "Who to ban", required: true }),
+    reason: option.string({ description: "Why", maxLength: 200 }),
+    days: option.integer({ description: "Delete history", choices: [{ name: "One", value: 1 }] }),
+  },
+  async execute(ctx) {
+    await ctx.guild.members.ban(ctx.options.user, {
+      deleteMessageSeconds: (ctx.options.days ?? 0) * 86400,
+      reason: ctx.options.reason,
+    });
+    return <TextDisplay>Banned {ctx.options.user.username}</TextDisplay>;
+  },
+});
+```
+
+This is `/ban`. Because `guildOnly` is `true`, `ctx.guild` and `ctx.member` are not nullable. `ctx.options.user` is a `User`, `ctx.options.reason` is `string | undefined`, and `ctx.options.days` is `1 | undefined`.
+
+## defineCommand
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `description` | `string` | Yes | 1-100 characters. |
+| `execute` | `(ctx) => node \| void` | Yes | The handler. May be async. See [Replying](/docs/handlers/replying). |
+| `options` | Record of `option.*` | No | The keys are the option names. See [Options](/docs/routing/options). |
+| `permissions` | `PermissionsString[]` | No | Hides the command from members without them, and is checked at runtime. |
+| `guildOnly` | `boolean` | No | Only usable in servers. Makes `ctx.guild` and `ctx.member` non-null. |
+| `ephemeral` | `boolean` | No | Replies are ephemeral by default. |
+| `cooldown` | Duration | No | Per user and route, such as `"5s"`. |
+| `layout` | `boolean` | No | `false` skips [layouts](/docs/handlers/layouts) for this route. |
+| `nsfw` | `boolean` | No | Marks the command as age-restricted in Discord. |
+| `nameLocalizations` | `LocalizationMap` | No | Localised names. |
+| `descriptionLocalizations` | `LocalizationMap` | No | Localised descriptions. |
+
+There is no `name` field. The name comes from the path.
+
+### Names
+
+Command names must be lowercase, 1-32 characters, using letters, numbers, `-`, `_` or `'`. Each level of a nested command follows the same rule. Slash commands are global, so names must be unique across features.
+
+### permissions and guildOnly
+
+Both deploy to Discord, so the client hides the command, and both are also enforced at runtime.
+
+| Situation | What the user sees |
+| --- | --- |
+| `guildOnly` route used outside a server | "This can only be used in a server." |
+| `permissions` route used without a member | "This can only be used in a server." |
+| Missing permissions | "You need these permissions to do that: Ban Members." |
+
+All of these are ephemeral, and the handler does not run.
+
+### cooldown
+
+`cooldown` is a [duration](/docs/routing/tasks#durations), and is tracked per user and route, in memory, per process. If the user is on cooldown, they get an ephemeral message with a relative timestamp and the handler does not run. Middleware denials do not consume a cooldown, because the check runs after middleware.
+
+## Subcommands
+
+Discord does not allow a command to be both runnable and a parent, so a folder holds either a command file or nested commands. Add a `group.ts` next to the subcommands to give the parent its description:
+
+```text
+src/features/moderation/commands/
+  mod/
+    group.ts
+    warn/command.tsx
+    kick/command.tsx
+```
+
+```ts title="src/features/moderation/commands/mod/group.ts"
+import { defineGroup } from "neocord";
+
+export default defineGroup({
+  description: "Moderation tools",
+  permissions: ["ModerateMembers"],
+  guildOnly: true,
+});
+```
+
+```tsx title="src/features/moderation/commands/mod/warn/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineCommand, option } from "neocord";
+
+export default defineCommand({
+  description: "Warn a member",
+  options: {
+    user: option.user({ description: "Who to warn", required: true }),
+  },
+  execute(ctx) {
+    return <TextDisplay>Warned {ctx.options.user.username}</TextDisplay>;
+  },
+});
+```
+
+These are `/mod warn` and `/mod kick`. The group's `permissions` and `guildOnly` apply to every subcommand under it at runtime, merged with any set on the subcommand.
+
+<Callout kind="note">
+
+`guildOnly` on a group does not change the subcommand's types, so `ctx.guild` is still nullable there. To make it non-null, also set `guildOnly: true` on the subcommand. `validateManifest` only warns about `guildOnly` on a subcommand when its root group does not set it, so this produces no warning.
+
+</Callout>
+
+## Subcommand groups
+
+Add one more level for `/mod case view`. Every parent needs a group file, because Discord requires a description at each level:
+
+```text
+src/features/moderation/commands/
+  mod/
+    group.ts
+    case/
+      group.ts
+      view/command.tsx
+      close/command.tsx
+```
+
+Commands can be at most three levels deep, so a group cannot be three levels deep. A root command can hold subcommands and subcommand groups at the same time.
+
+## defineGroup
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `description` | `string` | Yes | 1-100 characters. |
+| `permissions` | `PermissionsString[]` | No | Deployed on a top-level group. |
+| `guildOnly` | `boolean` | No | Deployed on a top-level group. |
+| `nsfw` | `boolean` | No | Deployed on a top-level group. |
+| `nameLocalizations` | `LocalizationMap` | No | Localised names. |
+| `descriptionLocalizations` | `LocalizationMap` | No | Localised descriptions. |
+
+### Where permissions live
+
+Discord only stores `permissions`, `guildOnly` and `nsfw` on top-level commands.
+
+- On a plain command like `/ban`, they deploy from `defineCommand`.
+- On a command with subcommands, they deploy from the `group.ts` in its root folder.
+- On a subcommand, `permissions` and `guildOnly` are enforced at runtime only. `validateManifest` warns about this and tells you to use `defineGroup`.
+- On a nested group, `permissions` and `guildOnly` are enforced at runtime only. `validateManifest` warns about this and tells you to set them on the top-level group.
+
+## Organising commands
+
+Route group folders in parentheses do not change the name:
+
+```text
+src/features/moderation/commands/
+  (staff)/
+    middleware.ts
+    mod/
+      group.ts
+      warn/command.tsx
+```
+
+This is still `/mod warn`, and the `middleware.ts` applies only to what is inside `(staff)`.
+
+## What gets deployed
+
+`serializeCommands` turns your files into the JSON Discord expects. Run `neocord deploy --dry-run` to see the command tree without calling Discord. `neocord dev` syncs to your development server automatically, and production needs [`neocord deploy`](/docs/deployment/deploying-commands).
+
+## Limits
+
+These are checked by `validateManifest` when you build, deploy, test or start.
+
+| Limit | Value |
+| --- | --- |
+| Depth | 3 levels |
+| Top-level slash commands | 100 |
+| Children of one parent | 25 |
+| Description | 1-100 characters |
+| Options on a command | 25 |

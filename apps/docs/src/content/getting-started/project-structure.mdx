@@ -1,0 +1,132 @@
+neocord decides what a file is from its path. This page lists every convention. `classifyFile` in [`@neocord/routing`](/docs/api/routing) is the source of truth, and the CLI, the runtime and the ESLint plugin all use it, so a file means the same thing to each of them.
+
+## The full tree
+
+```text
+neocord.config.ts            defineConfig
+.neocord/                    generated, safe to delete
+src/
+  env.ts                     environment validation
+  context.ts                 defineContext, optional app-wide services
+  middleware.ts              optional, applies to every interaction
+  layout.tsx                 optional, wraps every reply
+  error.tsx                  optional, shown when a handler throws
+  loading.tsx                optional, placeholder for slow commands
+  features/
+    moderation/
+      feature.ts             optional defineFeature
+      middleware.ts          applies to this feature
+      layout.tsx             applies to this feature
+      error.tsx              applies to this feature
+      loading.tsx            applies to this feature
+      commands/
+        ban/command.tsx             /ban
+        mod/group.ts                metadata for /mod
+        mod/warn/command.tsx        /mod warn
+        mod/case/group.ts           metadata for /mod case
+        mod/case/view/command.tsx   /mod case view
+      user-commands/report/command.tsx     user context menu command
+      message-commands/quote/command.tsx   message context menu command
+      buttons/confirm-ban/[userId]/button.tsx   custom id moderation/confirm-ban/<userId>
+      selects/pick-role/select.tsx              custom id moderation/pick-role
+      modals/ban-reason/[userId]/modal.tsx      custom id moderation/ban-reason/<userId>
+      events/guildMemberAdd.ts       also events/guildMemberAdd/<anything>.ts
+      tasks/cleanup.ts               also tasks/cleanup/<anything>.ts
+      _lib/anything.ts               private, never a route
+```
+
+Files can end in `.ts` or `.tsx`. Files with other extensions in the features folder are ignored, and so are `.d.ts` files, folders that start with `.`, and `node_modules`.
+
+## Root files
+
+| File | Export | Purpose |
+| --- | --- | --- |
+| `neocord.config.ts` | `defineConfig({ ... })` | Bot configuration. `.mts`, `.js` and `.mjs` also work. The CLI finds the project root by looking for this file in the current folder and its parents. |
+| `src/env.ts` | Anything | Environment validation, usually with T3 Env. Not routed. See [Environment variables](/docs/type-safety/environment). |
+| `src/context.ts` | `defineContext(...)` | Shared services, read through `ctx.app`. See [App context](/docs/handlers/app-context). |
+| `src/middleware.ts` | `defineMiddleware(...)` | Applies to every interaction. See [Middleware](/docs/handlers/middleware). |
+| `src/layout.tsx` | A component | Wraps nodes that handlers return or send. See [Layouts](/docs/handlers/layouts). |
+| `src/error.tsx` | A component | Shown when a handler throws. See [Error boundaries](/docs/handlers/error-boundaries). |
+| `src/loading.tsx` | A component | Sent first for commands. See [Loading UI](/docs/handlers/loading). |
+
+Other files directly in `src`, and folders such as `src/lib`, are outside the router. Import them as normal.
+
+## Feature folders
+
+Each folder in `src/features` is a feature. Only these things can sit directly in a feature folder. Anything else is an error that tells you to use a private folder.
+
+| Entry | Purpose |
+| --- | --- |
+| `feature.ts` | Optional `defineFeature`. See [Features](/docs/routing/features). |
+| `middleware`, `layout`, `error`, `loading` | Segment files for this feature. |
+| `commands`, `user-commands`, `message-commands` | Commands. |
+| `buttons`, `selects`, `modals` | Interaction routes. |
+| `events`, `tasks` | Background work. |
+| Folders and files starting with `_` | Private code, at any depth. |
+
+## Route folders
+
+| Folder | File name | Helper | Route id | Notes |
+| --- | --- | --- | --- | --- |
+| `commands` | `command` | `defineCommand` | `ban`, `mod warn` | The feature is not part of the name. At most three levels. See [Slash commands](/docs/routing/commands). |
+| `commands` | `group` | `defineGroup` | | Metadata for a parent of subcommands. |
+| `user-commands` | `command` | `defineUserCommand` | `moderation/report` | See [Context menus](/docs/routing/context-menus). |
+| `message-commands` | `command` | `defineMessageCommand` | `moderation/quote` | See [Context menus](/docs/routing/context-menus). |
+| `buttons` | `button` | `defineButton` | `moderation/confirm-ban/[userId]` | See [Buttons](/docs/routing/buttons). |
+| `selects` | `select` | `defineSelect` | `moderation/pick-role` | See [Selects](/docs/routing/selects). |
+| `modals` | `modal` | `defineModal` | `moderation/ban-reason/[userId]` | See [Modals](/docs/routing/modals). |
+| `events` | Any | `defineEvent` | `guildMemberAdd` | The name comes from the file or its folder. See [Events](/docs/routing/events). |
+| `tasks` | Any | `defineTask` | `moderation/cleanup` | The name comes from the file or its folder. See [Tasks](/docs/routing/tasks). |
+
+Files in `commands`, `buttons`, `selects` and the others must use the exact file name, in a named folder. So `commands/ping.tsx` and `commands/ban/helper.ts` are errors. Move helpers into a folder starting with `_`.
+
+## Special folder names
+
+| Name | Meaning | Example |
+| --- | --- | --- |
+| `(group)` | Organises files without changing the route. It still counts as a scope for segment files. | `commands/(staff)/mod/warn/command.tsx` is `/mod warn`. |
+| `[param]` | One dynamic segment. | `buttons/confirm/[userId]/button.tsx` |
+| `[...rest]` | Catches the remainder. Must be last. | `buttons/page/[...rest]/button.tsx` |
+| `_private` | Never routed. | `_lib/format.ts`, `_components/Stat.tsx` |
+
+See [Dynamic routes](/docs/routing/dynamic-routes) for how params work.
+
+## Segment files
+
+`middleware`, `layout`, `error` and `loading` files apply to everything beneath them. They can live in `src`, in a feature folder, in a route kind folder such as `commands`, or in any folder under it. Only one of each is allowed per folder.
+
+| Kind | How the chain works |
+| --- | --- |
+| `middleware` | All of them run, from root to leaf. |
+| `layout` | All of them wrap the node, with the root outermost. |
+| `error` | The closest one wins. |
+| `loading` | The closest one wins. Commands only. |
+
+<Callout kind="warn">
+
+Segment file names do not work inside `events` and `tasks`, because every file there is a route. `events/error.ts` listens to the discord.js `error` event.
+
+</Callout>
+
+## Test files
+
+Files ending in `.test.ts`, `.test.tsx`, `.spec.ts` or `.spec.tsx` are ignored by the router, so they can sit next to the file they test. See [Testing](/docs/testing).
+
+## The generated .neocord folder
+
+The CLI writes generated code to `.neocord`. Add it to `.gitignore`. The [CLI reference](/docs/cli) lists every file in it.
+
+## Changing the folders
+
+`sourceDir` and `featuresDir` in `neocord.config.ts` move the source and features folders. They must point inside the project:
+
+```ts title="neocord.config.ts"
+import { defineConfig } from "neocord";
+
+export default defineConfig({
+  sourceDir: "app",
+  featuresDir: "app/modules",
+});
+```
+
+The ESLint plugin needs the same values. See [ESLint](/docs/eslint).
