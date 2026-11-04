@@ -13,7 +13,7 @@ export async function runDev(options: DevCommandOptions, ui: Ui): Promise<number
   const session = new DevSession({
     steps: createDevSteps({ root, ui, shards: options.shards, deploy: options.deploy }),
     ui,
-    createWatcher: createChokidarWatcher,
+    createWatcher: createChokidarWatcher(root),
   });
 
   let interrupts = 0;

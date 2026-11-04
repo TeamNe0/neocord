@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { CONFIG_FILE_NAMES, findConfigFile, projectPaths, type EntryName } from "./project/paths.ts";
+import { CONFIG_FILE_NAMES, findConfigFile, projectPaths, relativePosix, type EntryName } from "./project/paths.ts";
 import { errorMessage, CliError } from "./errors.ts";
 import type { Ui } from "./ui.ts";
 import { bundleEntries } from "./project/bundle.ts";
@@ -258,7 +258,9 @@ export interface DevStepsOptions {
 }
 
 export function devWatchPaths(root: string, config: Pick<CliConfig, "sourceDir" | "featuresDir"> | null): string[] {
-  const directories = new Set([config?.sourceDir ?? "src", config?.featuresDir ?? "src/features"]);
+  const sourceDir = config?.sourceDir ?? "src";
+  const featuresDir = config?.featuresDir ?? `${sourceDir}/features`;
+  const directories = featuresDir.startsWith(`${sourceDir}/`) ? [sourceDir] : [sourceDir, featuresDir];
   const files = [...CONFIG_FILE_NAMES, ...envFileNames("development"), "tsconfig.json"];
   return [...directories, ...files].map((path) => join(root, path));
 }
@@ -339,11 +341,15 @@ export function createDevSteps(options: DevStepsOptions): DevSteps {
   return steps;
 }
 
-export async function createChokidarWatcher(paths: string[], onChange: (path: string) => void): Promise<DevWatcher> {
-  const { watch } = await import("chokidar");
-  const ignored = (path: string): boolean =>
-    /[\\/](node_modules|\.neocord|\.git)([\\/]|$)/.test(path) || /\.(test|spec)\.tsx?$/.test(path);
-  const watcher = watch(paths, { ignoreInitial: true, ignored });
-  watcher.on("all", (_event, path) => onChange(path));
-  return watcher;
+export function createChokidarWatcher(root: string): DevWatcherFactory {
+  return async (paths, onChange) => {
+    const { watch } = await import("chokidar");
+    const ignored = (path: string): boolean => {
+      const inside = relativePosix(root, path);
+      return /(^|\/)(node_modules|\.neocord|\.git)(\/|$)/.test(inside) || /\.(test|spec)\.tsx?$/.test(inside);
+    };
+    const watcher = watch(paths, { ignoreInitial: true, ignored });
+    watcher.on("all", (_event, path) => onChange(relativePosix(root, path)));
+    return watcher;
+  };
 }
