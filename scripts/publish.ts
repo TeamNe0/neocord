@@ -1,4 +1,6 @@
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 interface PackageManifest {
@@ -69,19 +71,50 @@ function run(command: string[], cwd: string): void {
   }
 }
 
+function readPackedManifest(tarball: string): string {
+  const result = Bun.spawnSync(["tar", "-xzOf", tarball, "package/package.json"], { stdout: "pipe", stderr: "pipe" });
+  if (result.exitCode !== 0) throw new Error(`Could not read ${tarball}: ${result.stderr.toString()}`);
+  return result.stdout.toString();
+}
+
+function verifyPack({ directory, manifest }: WorkspacePackage, destination: string): void {
+  const before = new Set(readdirSync(destination));
+  run(["bun", "pm", "pack", "--destination", destination, "--quiet"], directory);
+  const tarball = readdirSync(destination).find((entry) => !before.has(entry));
+  if (!tarball) throw new Error(`Packing ${manifest.name} produced no tarball.`);
+
+  const packed = JSON.parse(readPackedManifest(join(destination, tarball))) as PackageManifest;
+  const ranges = { ...packed.dependencies, ...packed.peerDependencies };
+  const unresolved = Object.entries(ranges).filter(([, range]) => /^(workspace|catalog):/.test(range));
+  if (unresolved.length > 0) {
+    throw new Error(`${manifest.name} would publish unresolved ranges: ${unresolved.map(([name]) => name).join(", ")}.`);
+  }
+}
+
 const packages = sortByDependencies(await loadPublishablePackages());
+const packDirectory = dryRun ? mkdtempSync(join(tmpdir(), "neocord-pack-")) : null;
 let publishedCount = 0;
 
-for (const { directory, manifest } of packages) {
-  if (!dryRun && (await isPublished(manifest))) {
+for (const item of packages) {
+  const { directory, manifest } = item;
+  if (packDirectory !== null) {
+    console.log(`Packing ${manifest.name}@${manifest.version}`);
+    verifyPack(item, packDirectory);
+    publishedCount += 1;
+    continue;
+  }
+
+  if (await isPublished(manifest)) {
     console.log(`Skipping ${manifest.name}@${manifest.version}, already published.`);
     continue;
   }
 
-  console.log(`${dryRun ? "Packing" : "Publishing"} ${manifest.name}@${manifest.version}`);
-  run(["bun", "publish", "--access", "public", ...(dryRun ? ["--dry-run"] : [])], directory);
+  console.log(`Publishing ${manifest.name}@${manifest.version}`);
+  run(["bun", "publish", "--access", "public"], directory);
   publishedCount += 1;
 }
+
+if (packDirectory !== null) rmSync(packDirectory, { recursive: true, force: true, maxRetries: 3 });
 
 if (!dryRun && publishedCount > 0) {
   run(["bunx", "changeset", "tag"], rootDirectory);
