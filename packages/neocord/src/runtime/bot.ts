@@ -6,7 +6,7 @@ import {
   type ClientOptions,
   type Interaction,
 } from "discord.js";
-import { parentPort } from "node:worker_threads";
+import { parentPort, workerData } from "node:worker_threads";
 import type { IntentName, NeocordConfig, PartialName } from "../config.ts";
 import { parseDuration } from "../duration.ts";
 import { createLogger, currentShardLabel, resolveLogLevel, type Logger } from "../logger.ts";
@@ -15,6 +15,7 @@ import { createBaseContext, createDispatcher, createEventHandler, type Dispatche
 import { MISSING_TOKEN_MESSAGE, resolveToken } from "./deploy.ts";
 import { compileManifest, contextDefinition, listCommands, mergedIntents, mergedPartials } from "./manifest.ts";
 import { createShardHelpers } from "./shards.ts";
+import { FORCE_EXIT_GRACE_MS, HANDLER_STOP_WAIT_MS } from "./shutdown-budget.ts";
 import { createTaskRunner, type TaskRunner } from "./tasks.ts";
 import { validateManifest } from "./validate.ts";
 
@@ -26,19 +27,45 @@ export interface StartBotOptions {
 export interface StartBotDependencies {
   createClient?: (options: ClientOptions) => Client;
   installProcessHandlers?: boolean;
+  exit?: (code: number) => void;
+}
+
+export interface NeocordStartupErrorOptions extends ErrorOptions {
+  transient?: boolean;
 }
 
 export class NeocordStartupError extends Error {
   override readonly name = "NeocordStartupError";
+  readonly transient: boolean;
 
-  constructor(message: string, options?: ErrorOptions) {
+  constructor(message: string, options?: NeocordStartupErrorOptions) {
     super(message, options);
+    this.transient = options?.transient ?? false;
     this.stack = `${this.name}: ${message}`;
   }
 }
 
 export const SHUTDOWN_MESSAGE = "__neocordShutdown";
 export const FATAL_MESSAGE = "__neocordFatal";
+export const STARTUP_FAILURE_MESSAGE = "__neocordStartupFailure";
+
+export function isShutdownRequest(message: unknown): boolean {
+  return (
+    typeof message === "object" &&
+    message !== null &&
+    Object.keys(message).length === 1 &&
+    (message as { neocord?: unknown }).neocord === "shutdown"
+  );
+}
+
+export function exitCleanlyIfUncaught(error: NeocordStartupError): void {
+  const onUncaught = (reason: unknown): void => {
+    process.off("uncaughtException", onUncaught);
+    if (reason === error) process.exit(1);
+    throw reason;
+  };
+  process.on("uncaughtException", onUncaught);
+}
 
 const DEFAULT_LIVE_TTL = "14m";
 const DEFAULT_AUTO_DEFER_MS = 2000;
@@ -144,67 +171,133 @@ export function describeLoginError(error: unknown, intents: readonly IntentName[
   if (isNetworkError(error)) {
     return new NeocordStartupError(
       `Could not reach Discord: ${typeof message === "string" ? message : "network error"}. Check your internet connection and https://discordstatus.com, then try again.`,
-      { cause: error },
+      { cause: error, transient: true },
     );
   }
   return new NeocordStartupError(
     `Could not log in to Discord: ${typeof message === "string" ? message : String(error)}`,
-    { cause: error },
+    { cause: error, transient: true },
   );
 }
 
-async function notifyManagerOfFatal(message: string): Promise<void> {
+function isManagedShard(): boolean {
+  if (parentPort !== null) return Boolean((workerData as { SHARDING_MANAGER?: unknown } | null)?.SHARDING_MANAGER);
+  return typeof process.send === "function" && Boolean(process.env.SHARDING_MANAGER);
+}
+
+async function notifyManager(error: NeocordStartupError): Promise<boolean> {
+  if (!isManagedShard()) return false;
+  const message = { [error.transient ? STARTUP_FAILURE_MESSAGE : FATAL_MESSAGE]: error.message };
   if (parentPort !== null) {
-    parentPort.postMessage({ [FATAL_MESSAGE]: message });
-    return;
+    parentPort.postMessage(message);
+    return true;
   }
-  if (typeof process.send === "function" && process.env.SHARDING_MANAGER) {
-    await new Promise<void>((resolve) => {
-      process.send?.({ [FATAL_MESSAGE]: message }, undefined, undefined, () => resolve());
-    });
-  }
+  return new Promise<boolean>((resolve) => {
+    try {
+      process.send?.(message, undefined, undefined, (sendError) => resolve(sendError === null || sendError === undefined));
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 interface Disposer {
   (): void;
 }
 
-function installProcessHandlers(logger: Logger, stop: () => Promise<void>): Disposer {
+function installProcessHandlers(
+  logger: Logger,
+  exitAfterStop: (code: number) => boolean,
+  stopRequestedAt: () => number | null,
+  exit: (code: number) => void,
+): Disposer {
   const handleSignal = (signal: NodeJS.Signals): void => {
+    const requestedAt = stopRequestedAt();
+    if (requestedAt !== null) {
+      if (signal === "SIGINT" && Date.now() - requestedAt >= FORCE_EXIT_GRACE_MS) {
+        logger.warn("Received SIGINT again, exiting without finishing the shutdown.");
+        exit(130);
+      }
+      return;
+    }
     logger.info(`Received ${signal}, shutting down.`);
-    void stop().finally(() => process.exit(0));
+    exitAfterStop(0);
   };
   const onSigint = (): void => handleSignal("SIGINT");
   const onSigterm = (): void => handleSignal("SIGTERM");
+  const onSighup = (): void => handleSignal("SIGHUP");
   const onRejection = (reason: unknown): void => {
     logger.error("Unhandled promise rejection.", reason);
   };
-  const onMessage = (message: unknown): void => {
-    if (typeof message === "object" && message !== null && SHUTDOWN_MESSAGE in message) {
-      logger.info("The sharding manager requested a shutdown.");
-      void stop().finally(() => process.exit(0));
-    }
+  const managed = isManagedShard();
+  const onManagerMessage = (message: unknown): boolean => {
+    if (!managed || typeof message !== "object" || message === null || !(SHUTDOWN_MESSAGE in message)) return false;
+    logger.info("The sharding manager requested a shutdown.");
+    exitAfterStop(0);
+    return true;
+  };
+  const onProcessMessage = (message: unknown): void => {
+    if (onManagerMessage(message) || !isShutdownRequest(message)) return;
+    logger.info("Received a shutdown request, shutting down.");
+    exitAfterStop(0);
+  };
+  const onDisconnect = (): void => {
+    logger.warn("Lost the connection to the sharding manager, shutting down.");
+    exitAfterStop(0);
   };
 
   process.on("SIGINT", onSigint);
   process.on("SIGTERM", onSigterm);
+  process.on("SIGHUP", onSighup);
   process.on("unhandledRejection", onRejection);
   const port = parentPort;
+  const hasChannel = port === null && typeof process.send === "function";
   if (port !== null) {
-    port.on("message", onMessage);
-  } else if (process.env.SHARDING_MANAGER) {
-    process.on("message", onMessage);
+    port.on("message", onManagerMessage);
+  } else if (hasChannel) {
+    process.on("message", onProcessMessage);
+    if (managed) {
+      process.on("disconnect", onDisconnect);
+    } else {
+      process.channel?.unref();
+    }
   }
 
   return () => {
     process.off("SIGINT", onSigint);
     process.off("SIGTERM", onSigterm);
+    process.off("SIGHUP", onSighup);
     process.off("unhandledRejection", onRejection);
     if (port !== null) {
-      port.off("message", onMessage);
-    } else {
-      process.off("message", onMessage);
+      port.off("message", onManagerMessage);
+    } else if (hasChannel) {
+      process.off("message", onProcessMessage);
+      process.off("disconnect", onDisconnect);
     }
+  };
+}
+
+function createInFlightTracker(): { track(work: Promise<unknown>): void; drain(limit: number, onLate: (count: number) => void): Promise<void> } {
+  const running = new Set<Promise<unknown>>();
+  return {
+    track(work) {
+      running.add(work);
+      const forget = (): void => {
+        running.delete(work);
+      };
+      work.then(forget, forget);
+    },
+    async drain(limit, onLate) {
+      if (running.size === 0) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, limit);
+        timer.unref();
+      });
+      await Promise.race([Promise.allSettled([...running]), timeout]);
+      if (timer !== undefined) clearTimeout(timer);
+      if (running.size > 0) onLate(running.size);
+    },
   };
 }
 
@@ -217,9 +310,12 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
     secrets: [token],
   });
 
+  const report = async (error: NeocordStartupError): Promise<void> => {
+    if (!(await notifyManager(error))) logger.error(error.message);
+  };
+
   const fail = async (error: NeocordStartupError): Promise<never> => {
-    logger.error(error.message);
-    await notifyManagerOfFatal(error.message);
+    await report(error);
     throw error;
   };
 
@@ -272,7 +368,10 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
     } catch (error) {
       void client.destroy();
       return fail(
-        new NeocordStartupError(`src/context.ts failed to create the app context: ${(error as Error).message}`, { cause: error }),
+        new NeocordStartupError(`src/context.ts failed to create the app context: ${(error as Error).message}`, {
+          cause: error,
+          transient: true,
+        }),
       );
     }
   }
@@ -292,15 +391,21 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
     return fail(new NeocordStartupError((error as Error).message, { cause: error }));
   }
 
+  const inFlight = createInFlightTracker();
   const onInteraction = (interaction: Interaction): void => {
-    void dispatcher.handle(interaction);
+    inFlight.track(dispatcher.handle(interaction));
   };
   client.on("interactionCreate", onInteraction);
 
   const runtimeOptions = { client, app, logger, shards, commands: listCommands(compiled) };
+  const eventListeners: { event: string; listener: (...args: unknown[]) => void }[] = [];
   for (const route of compiled.events) {
-    const listener = createEventHandler(route, runtimeOptions) as (...args: unknown[]) => void;
+    const handler = createEventHandler(route, runtimeOptions);
+    const listener = (...args: unknown[]): void => {
+      inFlight.track(handler(...args));
+    };
     const event = route.definition.event as string;
+    eventListeners.push({ event, listener });
     if (route.definition.once === true) {
       client.once(event, listener);
     } else {
@@ -320,11 +425,18 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
   });
 
   let stopping: Promise<void> | null = null;
+  let announceStop = true;
   let removeHandlers: Disposer = () => undefined;
   const stop = (): Promise<void> => {
     stopping ??= (async () => {
-      removeHandlers();
-      await tasks.stop();
+      client.off("interactionCreate", onInteraction);
+      for (const { event, listener } of eventListeners) client.off(event, listener);
+      await Promise.all([
+        tasks.stop(),
+        inFlight.drain(HANDLER_STOP_WAIT_MS, (count) => {
+          logger.warn(`${count} handlers were still running after ${HANDLER_STOP_WAIT_MS / 1000}s, continuing the shutdown without them.`);
+        }),
+      ]);
       await dispatcher.shutdown();
       try {
         await dispose?.();
@@ -336,20 +448,37 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
       } catch (error) {
         logger.error("Destroying the Discord client failed.", error);
       }
-      logger.info("Stopped.");
+      removeHandlers();
+      if (announceStop) logger.info("Stopped.");
     })();
     return stopping;
   };
 
-  if (dependencies.installProcessHandlers !== false) removeHandlers = installProcessHandlers(logger, stop);
+  const exit = dependencies.exit ?? ((code: number): void => process.exit(code));
+  let stopRequestedAt: number | null = null;
+  const exitAfterStop = (code: number): boolean => {
+    if (stopRequestedAt !== null) return false;
+    stopRequestedAt = Date.now();
+    void stop().finally(() => exit(code));
+    return true;
+  };
 
+  if (dependencies.installProcessHandlers !== false) {
+    removeHandlers = installProcessHandlers(logger, exitAfterStop, () => stopRequestedAt, exit);
+  }
+
+  let loggedIn = false;
+  let fatalReported = false;
   const failedClose = new Promise<never>((_resolve, reject) => {
     client.on("shardDisconnect", (event, shardId) => {
       const message = closeCodeMessage(event.code, intentNames);
-      if (message !== null) {
-        reject(new NeocordStartupError(message));
-      } else {
+      if (message === null) {
         logger.warn(`Shard ${shardId} disconnected with close code ${event.code}.`);
+      } else if (!loggedIn) {
+        reject(new NeocordStartupError(message));
+      } else if (!fatalReported) {
+        fatalReported = true;
+        void report(new NeocordStartupError(message)).finally(() => exitAfterStop(1));
       }
     });
   });
@@ -361,6 +490,7 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
       reject(
         new NeocordStartupError(
           `Timed out after ${LOGIN_TIMEOUT_MS / 1000}s connecting to the Discord gateway. Check your connection and https://discordstatus.com.`,
+          { transient: true },
         ),
       );
     }, LOGIN_TIMEOUT_MS);
@@ -370,10 +500,11 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
 
   try {
     await Promise.race([client.login(token), failedClose, timedOut]);
+    loggedIn = true;
   } catch (error) {
     const described = describeLoginError(error, intentNames);
-    logger.error(described.message);
-    await notifyManagerOfFatal(described.message);
+    await report(described);
+    announceStop = false;
     await stop().catch(() => undefined);
     throw described;
   } finally {
@@ -383,6 +514,11 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
   return { client, app, manifest, logger, stop };
 }
 
-export function startBot(options: StartBotOptions): Promise<Bot> {
-  return startBotWith(options);
+export async function startBot(options: StartBotOptions): Promise<Bot> {
+  try {
+    return await startBotWith(options);
+  } catch (error) {
+    if (error instanceof NeocordStartupError) exitCleanlyIfUncaught(error);
+    throw error;
+  }
 }

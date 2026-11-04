@@ -3,6 +3,7 @@ import type { Logger } from "../logger.ts";
 import type { BaseContext, TaskDefinition } from "../types.ts";
 import type { Client } from "discord.js";
 import type { CompiledRoute } from "./manifest.ts";
+import { TASK_STOP_WAIT_MS } from "./shutdown-budget.ts";
 
 export interface TaskRunnerOptions {
   tasks: readonly CompiledRoute<"task">[];
@@ -17,8 +18,6 @@ export interface TaskRunner {
   stop(): Promise<void>;
   readonly active: number;
 }
-
-const STOP_WAIT_MS = 5000;
 
 export function shouldRunOnThisShard(definition: TaskDefinition, client: Client<true>): boolean {
   if ((definition.shard ?? "first") === "all") return true;
@@ -82,7 +81,7 @@ export function createTaskRunner(options: TaskRunnerOptions): TaskRunner {
       if (running.size === 0) return;
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, STOP_WAIT_MS);
+        timer = setTimeout(resolve, TASK_STOP_WAIT_MS);
         timer.unref();
       });
       await Promise.race([Promise.allSettled([...running]), timeout]);

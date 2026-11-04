@@ -9,7 +9,14 @@ import {
   defineTask,
 } from "../index.ts";
 import type { Manifest, ManifestRoute } from "../types.ts";
-import { describeLoginError, NeocordStartupError, startBotWith } from "./bot.ts";
+import { describeLoginError, isShutdownRequest, NeocordStartupError, startBotWith } from "./bot.ts";
+import {
+  HANDLER_STOP_WAIT_MS,
+  LIVE_EDIT_STOP_WAIT_MS,
+  MANAGER_SHARD_STOP_WAIT_MS,
+  SHARD_STOP_BUDGET_MS,
+  TASK_STOP_WAIT_MS,
+} from "./shutdown-budget.ts";
 
 function route(kind: ManifestRoute["kind"], id: string, value: unknown, feature = "core"): ManifestRoute {
   return {
@@ -368,6 +375,225 @@ describe("startBot", () => {
     await sleep(10);
     expect(runs).toBe(0);
     await bot.stop();
+  });
+
+  describe("stop with work in flight", () => {
+    const start = async (execute: () => unknown, onDispose: () => void) => {
+      const started: Started = { options: null, client: null };
+      const manifest = manifestOf({
+        context: { default: defineContext(() => ({ value: {}, dispose: onDispose })) },
+        routes: [route("command", "slow", defineCommand({ description: "d", execute: execute as () => string }))],
+      });
+      const bot = await startBotWith({ config, manifest }, fakeLogin(started));
+      return { bot, client: started.client as Client };
+    };
+
+    const fakeCommand = async () => {
+      const { createFakeInteraction } = await import("../testing/fakes.ts");
+      return createFakeInteraction({ kind: "command", commandName: "slow" });
+    };
+
+    test("a running handler finishes and is acknowledged before dispose", async () => {
+      const order: string[] = [];
+      const { bot, client } = await start(
+        async () => {
+          order.push("handler start");
+          await sleep(40);
+          order.push("handler end");
+          return "done";
+        },
+        () => order.push("dispose"),
+      );
+      const interaction = await fakeCommand();
+      client.emit("interactionCreate", interaction);
+      await sleep(5);
+      await bot.stop();
+      expect(order).toEqual(["handler start", "handler end", "dispose"]);
+      expect(interaction.recording.replies).toHaveLength(1);
+    });
+
+    test("a new interaction during shutdown is not dispatched", async () => {
+      let runs = 0;
+      const { bot, client } = await start(
+        async () => {
+          runs += 1;
+          await sleep(30);
+          return "done";
+        },
+        () => undefined,
+      );
+      client.emit("interactionCreate", await fakeCommand());
+      await sleep(5);
+      const stopping = bot.stop();
+      const late = await fakeCommand();
+      client.emit("interactionCreate", late);
+      await stopping;
+      expect(runs).toBe(1);
+      expect(late.recording.log).toEqual([]);
+      expect(client.listenerCount("interactionCreate")).toBe(0);
+    });
+
+    test("an event handler that is running finishes before dispose, and later events are not delivered", async () => {
+      const order: string[] = [];
+      const started: Started = { options: null, client: null };
+      const manifest = manifestOf({
+        context: { default: defineContext(() => ({ value: {}, dispose: () => void order.push("dispose") })) },
+        routes: [
+          route(
+            "event",
+            "guildCreate",
+            defineEvent("guildCreate", {
+              execute: async () => {
+                order.push("event start");
+                await sleep(30);
+                order.push("event end");
+              },
+            }),
+          ),
+        ],
+      });
+      const bot = await startBotWith({ config, manifest }, fakeLogin(started));
+      const client = started.client as Client;
+      client.emit("guildCreate", {} as never);
+      await sleep(5);
+      const stopping = bot.stop();
+      client.emit("guildCreate", {} as never);
+      await stopping;
+      expect(order).toEqual(["event start", "event end", "dispose"]);
+    });
+
+    test(
+      "a handler that never finishes does not block dispose past the bound",
+      async () => {
+        let disposed = false;
+        const { bot, client } = await start(
+          () => new Promise(() => undefined),
+          () => {
+            disposed = true;
+          },
+        );
+        client.emit("interactionCreate", await fakeCommand());
+        await sleep(5);
+        const startedAt = Date.now();
+        await bot.stop();
+        const elapsed = Date.now() - startedAt;
+        expect(disposed).toBe(true);
+        expect(elapsed).toBeGreaterThanOrEqual(HANDLER_STOP_WAIT_MS - 50);
+        expect(elapsed).toBeLessThan(HANDLER_STOP_WAIT_MS + 1500);
+      },
+      15_000,
+    );
+  });
+
+  describe("fatal gateway close codes after login", () => {
+    const run = async (code: number) => {
+      const logged: string[] = [];
+      const exits: number[] = [];
+      let disposed = 0;
+      const started: Started = { options: null, client: null };
+      const manifest = manifestOf({
+        context: {
+          default: defineContext(() => ({
+            value: {},
+            dispose: () => {
+              disposed += 1;
+            },
+          })),
+        },
+      });
+      const writeError = process.stderr.write.bind(process.stderr);
+      process.env.NEOCORD_LOG_LEVEL = "error";
+      process.stderr.write = ((chunk: string) => {
+        logged.push(String(chunk));
+        return true;
+      }) as typeof process.stderr.write;
+      try {
+        await startBotWith(
+          { config, manifest },
+          {
+            ...fakeLogin(started),
+            exit: (exitCode) => {
+              exits.push(exitCode);
+            },
+          },
+        );
+        started.client?.emit("shardDisconnect", { code, reason: "", wasClean: true } as never, 0);
+        started.client?.emit("shardDisconnect", { code, reason: "", wasClean: true } as never, 0);
+        for (let waited = 0; exits.length === 0 && waited < 2000; waited += 10) await sleep(10);
+      } finally {
+        process.stderr.write = writeError;
+        process.env.NEOCORD_LOG_LEVEL = "silent";
+      }
+      return { logged, exits, disposed };
+    };
+
+    test.each([
+      [4004, "Discord rejected the bot token"],
+      [4014, "close code 4014"],
+      [4010, "close code 4010"],
+      [4011, "close code 4011"],
+      [4012, "close code 4012"],
+      [4013, "close code 4013"],
+    ])("close code %i logs an actionable error once, stops and exits non-zero", async (code, message) => {
+      const { logged, exits, disposed } = await run(code);
+      expect(exits).toEqual([1]);
+      expect(disposed).toBe(1);
+      expect(logged.filter((line) => line.includes(message))).toHaveLength(1);
+    });
+
+    test("a recoverable close code does nothing fatal", async () => {
+      const exits: number[] = [];
+      const started: Started = { options: null, client: null };
+      const bot = await startBotWith(
+        { config, manifest: manifestOf() },
+        {
+          ...fakeLogin(started),
+          exit: (exitCode) => {
+            exits.push(exitCode);
+          },
+        },
+      );
+      started.client?.emit("shardDisconnect", { code: 4000, reason: "", wasClean: false } as never, 0);
+      await sleep(10);
+      expect(exits).toEqual([]);
+      await bot.stop();
+    });
+  });
+
+  describe("login failure classification", () => {
+    test("token, intent and config errors are not transient", () => {
+      expect(describeLoginError(Object.assign(new Error("x"), { code: "TokenInvalid" }), []).transient).toBe(false);
+      expect(describeLoginError(Object.assign(new Error("x"), { status: 401 }), []).transient).toBe(false);
+      expect(describeLoginError(new Error("Used disallowed intents"), []).transient).toBe(false);
+      expect(describeLoginError(new Error("Used invalid intents"), []).transient).toBe(false);
+      expect(describeLoginError(new Error("Authentication failed"), []).transient).toBe(false);
+      expect(describeLoginError(new Error("Sharding is required"), []).transient).toBe(false);
+    });
+
+    test("network and unknown errors are transient", () => {
+      expect(describeLoginError(Object.assign(new Error("fetch failed"), { cause: { code: "ENOTFOUND" } }), []).transient).toBe(true);
+      expect(describeLoginError(Object.assign(new Error("x"), { code: "ECONNRESET" }), []).transient).toBe(true);
+      expect(describeLoginError(new Error("strange"), []).transient).toBe(true);
+    });
+  });
+
+  describe("shutdown requests over IPC", () => {
+    test("only an exact match counts", () => {
+      expect(isShutdownRequest({ neocord: "shutdown" })).toBe(true);
+      expect(isShutdownRequest({ neocord: "shutdown", extra: 1 })).toBe(false);
+      expect(isShutdownRequest({ neocord: "other" })).toBe(false);
+      expect(isShutdownRequest({ __neocordShutdown: true })).toBe(false);
+      expect(isShutdownRequest({ _eval: "x" })).toBe(false);
+      expect(isShutdownRequest("shutdown")).toBe(false);
+      expect(isShutdownRequest(["shutdown"])).toBe(false);
+      expect(isShutdownRequest(null)).toBe(false);
+    });
+  });
+
+  test("the budgets cannot drift: the manager waits longer than a shard can take", () => {
+    expect(MANAGER_SHARD_STOP_WAIT_MS).toBeGreaterThan(SHARD_STOP_BUDGET_MS);
+    expect(SHARD_STOP_BUDGET_MS).toBeGreaterThanOrEqual(TASK_STOP_WAIT_MS + LIVE_EDIT_STOP_WAIT_MS);
+    expect(SHARD_STOP_BUDGET_MS).toBeGreaterThanOrEqual(HANDLER_STOP_WAIT_MS + LIVE_EDIT_STOP_WAIT_MS);
   });
 
   test("interactions reach the dispatcher and stop destroys the client", async () => {
