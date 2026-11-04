@@ -101,16 +101,38 @@ class FakeClock implements DevClock {
 class FakeWatcher implements DevWatcher {
   readonly paths: string[];
   readonly onChange: (path: string) => void;
+  readonly onError: (error: unknown) => void;
   closed = false;
+  addError: Error | null = null;
+  closeError: Error | null = null;
 
-  constructor(paths: string[], onChange: (path: string) => void) {
+  constructor(paths: string[], onChange: (path: string) => void, onError: (error: unknown) => void = () => {}) {
     this.paths = [...paths];
     this.onChange = onChange;
+    this.onError = onError;
   }
 
   add(paths: string[]): void {
+    if (this.addError) throw this.addError;
     this.paths.push(...paths);
   }
+
+  async close(): Promise<void> {
+    if (this.closeError) throw this.closeError;
+    this.closed = true;
+  }
+}
+
+class FakeChokidar extends EventEmitter {
+  readonly watchedPaths: string[];
+  closed = false;
+
+  constructor(paths: string[]) {
+    super();
+    this.watchedPaths = paths;
+  }
+
+  add(): void {}
 
   async close(): Promise<void> {
     this.closed = true;
@@ -145,8 +167,8 @@ function harness(steps: DevSteps, createChild: () => FakeChild = () => new FakeC
     spawned.push({ command, args, env: options.env as Record<string, string>, stdio: options.stdio });
     return child as unknown as ChildHandle;
   };
-  const createWatcher: DevWatcherFactory = (paths, onChange) => {
-    watcher = new FakeWatcher(paths, onChange);
+  const createWatcher: DevWatcherFactory = (paths, onChange, onError) => {
+    watcher = new FakeWatcher(paths, onChange, onError);
     return watcher;
   };
 
@@ -428,6 +450,136 @@ describe("DevSession", () => {
     paths = ["src", "modules"];
     await test.change();
     expect(test.watcher().paths).toEqual(["src", "modules"]);
+  });
+});
+
+describe("createChokidarWatcher", () => {
+  async function injected(): Promise<{ fake: FakeChokidar; changes: string[]; errors: unknown[] }> {
+    let fake: FakeChokidar | null = null;
+    const changes: string[] = [];
+    const errors: unknown[] = [];
+    const factory = createChokidarWatcher(join("C:", "project"), (paths) => {
+      fake = new FakeChokidar(paths);
+      return fake;
+    });
+    await factory(
+      [join("C:", "project", "src")],
+      (path) => changes.push(path),
+      (error) => errors.push(error),
+    );
+    if (fake === null) throw new Error("watcher not created");
+    return { fake, changes, errors };
+  }
+
+  test("reports a watcher error instead of throwing it", async () => {
+    const { fake, errors } = await injected();
+    const failure = new Error("watch failed");
+    expect(() => fake.emit("error", failure)).not.toThrow();
+    expect(errors).toEqual([failure]);
+  });
+
+  test("still forwards changes relative to the project root", async () => {
+    const { fake, changes } = await injected();
+    fake.emit("all", "change", join("C:", "project", "src", "a.ts"));
+    expect(changes).toEqual(["src/a.ts"]);
+  });
+});
+
+describe("DevSession watcher failures", () => {
+  function codedError(message: string, code: string): NodeJS.ErrnoException {
+    return Object.assign(new Error(message), { code });
+  }
+
+  test("logs a watcher error, keeps the bot running and keeps watching", async () => {
+    const test = harness(stubSteps());
+    await test.session.start();
+    test.watcher().onError(new Error("watch failed"));
+    expect(test.errors()).toContain("File watcher error: watch failed");
+    expect(test.errors()).not.toContain("cannot continue");
+    expect(test.session.running).toBe(true);
+    expect(test.children[0]?.signals).toEqual([]);
+
+    await test.change();
+    expect(test.children).toHaveLength(2);
+  });
+
+  test("logs a repeated error once", async () => {
+    const test = harness(stubSteps());
+    await test.session.start();
+    test.watcher().onError(new Error("watch failed"));
+    test.watcher().onError(new Error("watch failed"));
+    expect(test.errors().match(/watch failed/g)).toHaveLength(1);
+  });
+
+  test.each(["ENOSPC", "EMFILE", "ENFILE"])("says clearly when %s stops the watcher from continuing", async (code) => {
+    const test = harness(stubSteps());
+    await test.session.start();
+    test.watcher().onError(codedError(`${code}: too many watchers`, code));
+    test.watcher().onError(codedError(`${code}: too many watchers, again`, code));
+    expect(test.errors()).toContain(`File watcher error: ${code}: too many watchers`);
+    expect(test.errors().match(/cannot continue/g)).toHaveLength(1);
+    expect(test.session.running).toBe(true);
+  });
+
+  test("says clearly when the watcher closed after an error", async () => {
+    const test = harness(stubSteps());
+    await test.session.start();
+    test.watcher().closed = true;
+    test.watcher().onError(new Error("watch failed"));
+    expect(test.errors()).toContain("cannot continue");
+    expect(test.session.running).toBe(true);
+  });
+
+  test("still starts the bot when the watcher cannot be created", async () => {
+    const stderr = createCapture();
+    const children: FakeChild[] = [];
+    const session = new DevSession({
+      steps: stubSteps(),
+      ui: new Ui({ stdout: createCapture().stream, stderr: stderr.stream, env: {} }),
+      spawn: () => {
+        const child = new FakeChild();
+        children.push(child);
+        return child as unknown as ChildHandle;
+      },
+      createWatcher: () => {
+        throw new Error("no watchers left");
+      },
+      clock: new FakeClock(),
+    });
+    await session.start();
+    expect(stderr.text()).toContain("File watcher error: no watchers left");
+    expect(stderr.text()).toContain("cannot continue");
+    expect(children).toHaveLength(1);
+    expect(await session.stop()).toBe(0);
+    expect(children[0]?.signals).toEqual(["SIGTERM"]);
+  });
+
+  test("a watcher that fails to add paths does not stop the cycle", async () => {
+    let paths = ["src"];
+    const test = harness(stubSteps({ watchPaths: () => paths }));
+    await test.session.start();
+    test.watcher().addError = new Error("add failed");
+    paths = ["src", "modules"];
+    await test.change();
+    expect(test.errors()).toContain("File watcher error: add failed");
+    expect(test.children).toHaveLength(2);
+  });
+
+  test("a watcher that fails to close does not stop the shutdown", async () => {
+    const test = harness(stubSteps());
+    await test.session.start();
+    test.watcher().closeError = new Error("close failed");
+    expect(await test.session.stop()).toBe(0);
+    expect(test.children[0]?.signals).toEqual(["SIGTERM"]);
+    expect(test.errors()).toContain("close failed");
+  });
+
+  test("ignores watcher errors after stopping", async () => {
+    const test = harness(stubSteps());
+    await test.session.start();
+    await test.session.stop();
+    test.watcher().onError(new Error("too late"));
+    expect(test.errors()).toBe("");
   });
 });
 

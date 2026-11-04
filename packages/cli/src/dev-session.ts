@@ -23,11 +23,26 @@ export interface DevClock {
 }
 
 export interface DevWatcher {
+  readonly closed?: boolean;
   add(paths: string[]): unknown;
   close(): Promise<void>;
 }
 
-export type DevWatcherFactory = (paths: string[], onChange: (path: string) => void) => DevWatcher | Promise<DevWatcher>;
+export type DevWatcherFactory = (
+  paths: string[],
+  onChange: (path: string) => void,
+  onError: (error: unknown) => void,
+) => DevWatcher | Promise<DevWatcher>;
+
+export interface ChokidarLikeWatcher extends DevWatcher {
+  on(event: "all", listener: (event: string, path: string) => void): unknown;
+  on(event: "error", listener: (error: unknown) => void): unknown;
+}
+
+export type WatchFunction = (
+  paths: string[],
+  options: { ignoreInitial: boolean; ignored: (path: string) => boolean },
+) => ChokidarLikeWatcher;
 
 export interface DevBuild {
   command: string;
@@ -58,6 +73,12 @@ export interface DevStopOptions {
 
 export const DEFAULT_DEBOUNCE_MS = 100;
 
+const WATCH_LIMIT_ERRORS: ReadonlySet<unknown> = new Set(["ENOSPC", "EMFILE", "ENFILE"]);
+
+function isWatchLimitError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && WATCH_LIMIT_ERRORS.has((error as { code?: unknown }).code);
+}
+
 const realClock: DevClock = {
   setTimeout: (callback, ms) => setTimeout(callback, ms),
   clearTimeout: (handle) => clearTimeout(handle as NodeJS.Timeout),
@@ -78,7 +99,9 @@ export class DevSession {
   readonly #debounceMs: number;
   readonly #killTimeoutMs: number;
   readonly #watched = new Set<string>();
+  readonly #reportedWatcherErrors = new Set<string>();
 
+  #watcherStoppedReported = false;
   #watcher: DevWatcher | null = null;
   #child: RunningChild | null = null;
   #debounce: unknown = null;
@@ -111,8 +134,35 @@ export class DevSession {
   async start(): Promise<void> {
     const paths = this.#steps.watchPaths();
     for (const path of paths) this.#watched.add(path);
-    this.#watcher = await this.#createWatcher(paths, (path) => this.notifyChange(path));
+    try {
+      this.#watcher = await this.#createWatcher(
+        paths,
+        (path) => this.notifyChange(path),
+        (error) => this.#handleWatcherError(error),
+      );
+    } catch (error) {
+      this.#handleWatcherError(error);
+      this.#reportWatcherStopped();
+    }
     await this.#runCycles();
+  }
+
+  #handleWatcherError(error: unknown): void {
+    if (this.#stopped) return;
+    const message = errorMessage(error);
+    if (!this.#reportedWatcherErrors.has(message)) {
+      this.#reportedWatcherErrors.add(message);
+      this.#ui.warn(`File watcher error: ${message}`);
+    }
+    if (isWatchLimitError(error) || this.#watcher?.closed === true) this.#reportWatcherStopped();
+  }
+
+  #reportWatcherStopped(): void {
+    if (this.#watcherStoppedReported) return;
+    this.#watcherStoppedReported = true;
+    this.#ui.warn(
+      "The file watcher cannot continue, so changes may not restart the bot. The bot keeps running. Fix the problem above, then restart neocord dev.",
+    );
   }
 
   notifyChange(path: string): void {
@@ -155,7 +205,11 @@ export class DevSession {
       this.#clock.clearTimeout(this.#debounce);
       this.#debounce = null;
     }
-    await this.#watcher?.close();
+    try {
+      await this.#watcher?.close();
+    } catch (error) {
+      this.#ui.warn(`Could not close the file watcher: ${errorMessage(error)}`);
+    }
     await this.idle();
     await this.#stopChild();
     this.#resolveExit(0);
@@ -184,7 +238,12 @@ export class DevSession {
     const added = this.#steps.watchPaths().filter((path) => !this.#watched.has(path));
     if (added.length === 0) return;
     for (const path of added) this.#watched.add(path);
-    if (!this.#stopped) this.#watcher?.add(added);
+    if (this.#stopped) return;
+    try {
+      this.#watcher?.add(added);
+    } catch (error) {
+      this.#handleWatcherError(error);
+    }
   }
 
   async #runOnce(): Promise<void> {
@@ -362,14 +421,15 @@ export function createDevSteps(options: DevStepsOptions): DevSteps {
   return steps;
 }
 
-export function createChokidarWatcher(root: string): DevWatcherFactory {
-  return async (paths, onChange) => {
-    const { watch } = await import("chokidar");
+export function createChokidarWatcher(root: string, watchFunction?: WatchFunction): DevWatcherFactory {
+  return async (paths, onChange, onError) => {
+    const watch: WatchFunction = watchFunction ?? (await import("chokidar")).watch;
     const ignored = (path: string): boolean => {
       const inside = relativePosix(root, path);
       return /(^|\/)(node_modules|\.neocord|\.git)(\/|$)/.test(inside) || /\.(test|spec)\.tsx?$/.test(inside);
     };
     const watcher = watch(paths, { ignoreInitial: true, ignored });
+    watcher.on("error", onError);
     watcher.on("all", (_event, path) => onChange(relativePosix(root, path)));
     return watcher;
   };

@@ -49,6 +49,8 @@ If bundling or scanning fails, or the bot exits on its own, the CLI prints the r
 
 To stop or restart the bot, the CLI sends it `{ neocord: "shutdown" }` over an IPC channel, so `dispose` and the rest of the shutdown run the same way on every platform. If the channel is unavailable it falls back to `SIGTERM`, unless Ctrl+C has already signalled the bot. A bot that is still running after 20 seconds is force killed.
 
+A file watcher error is logged and the session keeps running. If the watcher cannot continue, for example because the system's limit on watched files is reached, the CLI says so. The bot keeps running, but changes may not restart it until you fix the problem and restart `neocord dev`.
+
 ### `neocord build`
 
 Creates the production bundle in `.neocord/build`: `shard.js`, `manager.js` and `deploy.js`, each with a linked source map. It generates code first, stops on any scan problem, and prints a table of routes per feature and a table of bundle sizes.
