@@ -235,6 +235,7 @@ client.on("interactionCreate", async (event) => {
 | `hasHandlers` | Whether the committed tree has any `onClick` or `onSelect`. |
 | `dispatch(customId, event)` | Runs the handler in a batch and flushes. It waits for async handlers and resolves to `false` for unknown ids. |
 | `flush()` | Applies pending updates and effects. |
+| `settle()` | Waits until nothing in the tree is suspended, then flushes. Use it before reading `payload` for a tree with `<Suspense>` or `use()`. |
 | `disableInteractive()` | Returns the payload with every button and select disabled. The tree is not changed. |
 | `unmount()` | Unmounts the tree and runs effect cleanups. Later dispatches return `false`. `payload` keeps its last value. |
 
