@@ -229,7 +229,7 @@ export interface UserCommandContext<G extends boolean = boolean>
   extends InteractionContext<UserContextMenuCommandInteraction<CacheOf<G>>, G> {
   kind: "user-command";
   target: User;
-  targetMember: MemberValue<G>;
+  targetMember: GuildMember | null;
 }
 
 export interface UserCommandInput<G extends boolean> extends CommandMetadata<G> {

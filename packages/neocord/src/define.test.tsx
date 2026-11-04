@@ -214,7 +214,7 @@ describe("handler inference", () => {
       guildOnly: true,
       execute(ctx) {
         expectTypeOf(ctx.target).toEqualTypeOf<User>();
-        expectTypeOf(ctx.targetMember).toEqualTypeOf<GuildMember>();
+        expectTypeOf(ctx.targetMember).toEqualTypeOf<GuildMember | null>();
       },
     });
     defineUserCommand({

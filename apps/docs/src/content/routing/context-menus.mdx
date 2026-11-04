@@ -19,7 +19,7 @@ export default defineUserCommand({
 | Context field | Type | Meaning |
 | --- | --- | --- |
 | `target` | `User` | The user who was clicked. |
-| `targetMember` | `GuildMember \| null` | Their member. The type is non-null with `guildOnly: true`, but the value is `null` when the interaction carries no member, such as for a user who has left the server. |
+| `targetMember` | `GuildMember \| null` | Their member. It is `null` when the interaction carries no member, such as for a user who has left the server, even with `guildOnly: true`. |
 
 ## Message commands
 

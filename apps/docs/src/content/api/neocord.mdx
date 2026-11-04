@@ -352,7 +352,7 @@ interface UserCommandContext<G extends boolean = boolean>
   extends InteractionContext<UserContextMenuCommandInteraction<CacheOf<G>>, G> {
   kind: "user-command";
   target: User;
-  targetMember: MemberValue<G>;
+  targetMember: GuildMember | null;
 }
 
 interface MessageCommandContext<G extends boolean = boolean>
