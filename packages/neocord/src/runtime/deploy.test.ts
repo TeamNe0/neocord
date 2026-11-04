@@ -73,6 +73,34 @@ describe("deployCommands", () => {
     else process.env.NEOCORD_LOG_LEVEL = originalLevel;
   });
 
+  test("clear removes every command from a scope and forgets its hash", async () => {
+    const options = { config: { token: "tok" }, manifest: manifest(), stateFile, guildId: "g1" };
+    await deployWithRest(options, () => stubRest());
+
+    const rest = stubRest();
+    const result = await deployWithRest({ ...options, clear: true }, () => rest);
+    expect(result.status).toBe("cleared");
+    expect(result.commandCount).toBe(0);
+    expect(rest.calls.find((call) => call.method === "put")?.body).toEqual([]);
+
+    const state = JSON.parse(await readFile(stateFile, "utf8")) as { scopes: Record<string, unknown> };
+    expect(state.scopes["guild:g1"]).toBeUndefined();
+
+    const redeployed = await deployWithRest(options, () => stubRest());
+    expect(redeployed.status).toBe("deployed");
+  });
+
+  test("clear ignores manifest errors and a dry run does not call Discord", async () => {
+    const broken = manifest([route("Bad Name")]);
+    const rest = stubRest();
+    const preview = await deployWithRest({ config: {}, manifest: broken, clear: true, dryRun: true }, () => rest);
+    expect(preview.status).toBe("dry-run");
+    expect(rest.calls).toHaveLength(0);
+
+    const cleared = await deployWithRest({ config: { token: "tok" }, manifest: broken, clear: true }, () => rest);
+    expect(cleared.status).toBe("cleared");
+  });
+
   test("deploys globally through the current application route", async () => {
     const rest = stubRest();
     const result = await deployWithRest({ config: { token: "tok" }, manifest: manifest(), stateFile }, () => rest);

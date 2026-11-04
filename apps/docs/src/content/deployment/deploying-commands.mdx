@@ -30,6 +30,7 @@ The command does the following:
 | `--guild <id>` | Deploy to one guild instead of globally. |
 | `--force` | Deploy even when the command hash is unchanged. |
 | `--dry-run` | Print what would be deployed without calling Discord. It needs no token. |
+| `--clear` | Remove every command from the guild given with `--guild`, or from the global scope without it. |
 
 A dry run prints the hash, followed by a tree of the commands:
 
@@ -110,7 +111,7 @@ The manager itself never deploys. The CLI runs the deploy step, then launches th
 
 <Callout kind="note">
 
-Guild commands and global commands are separate lists. If a command is registered both globally and in your development server, Discord shows it twice there. neocord has no command that clears a guild's list, so use a separate server for development when you can.
+Guild commands and global commands are separate lists. If a command is registered both globally and in your development server, Discord shows it twice there. Use a separate server for development when you can, or remove the guild's list with `neocord deploy --guild <id> --clear`. Clearing also resets the hash `neocord dev` keeps, so the next `neocord dev` run syncs its commands again.
 
 </Callout>
 

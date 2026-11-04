@@ -137,6 +137,7 @@ function runScenario(scenario: Scenario, workspace: string, tarballs: Map<string
     record(scenario.name, `build output ${file}`, exists, "missing");
   }
   run(scenario.name, "deploy dry run", ["bunx", "--bun", "neocord", "deploy", "--dry-run"], projectRoot, env);
+  run(scenario.name, "deploy clear dry run", ["bunx", "--bun", "neocord", "deploy", "--dry-run", "--clear"], projectRoot, env);
 
   const bare = exec(["node", join(projectRoot, "node_modules/@neocord/cli/dist/bin.js"), "routes"], projectRoot, env);
   record(scenario.name, "cli runs under node", bare.code === 0, bare.output);

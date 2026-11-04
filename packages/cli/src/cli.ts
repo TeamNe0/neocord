@@ -81,10 +81,17 @@ export function createProgram(ui: Ui, setExitCode: (code: number) => void): Comm
     .option("--guild <id>", "deploy to one guild instead of globally")
     .option("--force", "deploy even when the command hash is unchanged")
     .option("--dry-run", "print what would be deployed without calling Discord")
-    .action(async (options: { guild?: string; force?: boolean; dryRun?: boolean }) => {
+    .option("--clear", "remove every command from the guild or global scope")
+    .action(async (options: { guild?: string; force?: boolean; dryRun?: boolean; clear?: boolean }) => {
       await finish(
         runDeploy(
-          { cwd: cwdOf(), guild: options.guild, force: options.force === true, dryRun: options.dryRun === true },
+          {
+            cwd: cwdOf(),
+            guild: options.guild,
+            force: options.force === true,
+            dryRun: options.dryRun === true,
+            clear: options.clear === true,
+          },
           ui,
         ),
       );

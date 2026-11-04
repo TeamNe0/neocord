@@ -14,11 +14,12 @@ export interface DeployOptions {
   guildId?: string | undefined;
   force?: boolean | undefined;
   dryRun?: boolean | undefined;
+  clear?: boolean | undefined;
   stateFile?: string | undefined;
 }
 
 export interface DeployResult {
-  status: "deployed" | "unchanged" | "dry-run";
+  status: "deployed" | "unchanged" | "dry-run" | "cleared";
   scope: "global" | "guild";
   guildId?: string;
   commandCount: number;
@@ -87,16 +88,18 @@ export const MISSING_TOKEN_MESSAGE =
   "No Discord bot token found. Set DISCORD_TOKEN in your environment or pass token in neocord.config.ts. You can create one at https://discord.com/developers/applications under Bot > Reset Token.";
 
 export async function deployWithRest(options: DeployOptions, createRest: () => DeployRest): Promise<DeployResult> {
-  const { config, manifest, guildId, force = false, dryRun = false, stateFile } = options;
+  const { config, manifest, guildId, force = false, dryRun = false, clear = false, stateFile } = options;
 
-  const errors = validateManifest(manifest, config).filter((issue) => issue.severity === "error");
-  if (errors.length > 0) {
-    throw new Error(
-      `Cannot deploy commands, the manifest has errors:\n${errors.map((issue) => `  ${issue.file}: ${issue.message}`).join("\n")}`,
-    );
+  if (!clear) {
+    const errors = validateManifest(manifest, config).filter((issue) => issue.severity === "error");
+    if (errors.length > 0) {
+      throw new Error(
+        `Cannot deploy commands, the manifest has errors:\n${errors.map((issue) => `  ${issue.file}: ${issue.message}`).join("\n")}`,
+      );
+    }
   }
 
-  const serialized = serializeCommands(manifest);
+  const serialized: RESTPutAPIApplicationCommandsJSONBody = clear ? [] : serializeCommands(manifest);
   const commands = guildId === undefined ? serialized : guildPayload(serialized);
   const hash = hashPayload(commands, guildId);
   const base = {
@@ -111,7 +114,7 @@ export async function deployWithRest(options: DeployOptions, createRest: () => D
 
   const state = await readState(stateFile);
   const key = scopeKey(guildId);
-  if (!force && state.scopes[key]?.hash === hash) return { status: "unchanged", ...base };
+  if (!clear && !force && state.scopes[key]?.hash === hash) return { status: "unchanged", ...base };
 
   const token = resolveToken(config);
   if (token === undefined) throw new Error(MISSING_TOKEN_MESSAGE);
@@ -141,15 +144,20 @@ export async function deployWithRest(options: DeployOptions, createRest: () => D
   );
 
   if (stateFile !== undefined) {
-    state.scopes[key] = { hash, commandCount: commands.length, deployedAt: new Date().toISOString() };
+    if (clear) {
+      delete state.scopes[key];
+    } else {
+      state.scopes[key] = { hash, commandCount: commands.length, deployedAt: new Date().toISOString() };
+    }
     await writeState(stateFile, state);
   }
 
+  const scopeName = guildId === undefined ? "the global scope" : `guild ${guildId}`;
   createLogger({ level: resolveLogLevel(config.logLevel), scope: "deploy", secrets: [token] }).info(
-    `Deployed ${commands.length} commands to ${guildId === undefined ? "the global scope" : `guild ${guildId}`}.`,
+    clear ? `Removed all commands from ${scopeName}.` : `Deployed ${commands.length} commands to ${scopeName}.`,
   );
 
-  return { status: "deployed", ...base };
+  return { status: clear ? "cleared" : "deployed", ...base };
 }
 
 export function deployCommands(options: DeployOptions): Promise<DeployResult> {

@@ -45,10 +45,11 @@ export interface DeployOptions {
   guildId?: string | undefined;
   force?: boolean | undefined;
   dryRun?: boolean | undefined;
+  clear?: boolean | undefined;
 }
 
 export interface DeployResult {
-  status: "deployed" | "unchanged" | "dry-run";
+  status: "deployed" | "unchanged" | "dry-run" | "cleared";
   scope: "global" | "guild";
   guildId?: string;
   commandCount: number;
