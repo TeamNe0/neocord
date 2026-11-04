@@ -11,12 +11,18 @@
     "test": "neocord test",
     "typegen": "neocord typegen",
     "typecheck": "neocord typegen && bun check",
-    "lint": "eslint ."
+    "routes": "neocord routes",
+    "lint": "eslint .",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "@neocord/react": "workspace:*",
     "@t3-oss/env-core": "catalog:",
     "discord.js": "catalog:",
+    "drizzle-orm": "^0.45.4",
     "neocord": "workspace:*",
     "react": "catalog:",
     "zod": "catalog:"
@@ -30,6 +36,8 @@
     "@types/react": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "@typescript/native": "catalog:",
+    "dotenv": "catalog:",
+    "drizzle-kit": "^0.31.11",
     "eslint": "catalog:",
     "typescript": "catalog:"
   }
