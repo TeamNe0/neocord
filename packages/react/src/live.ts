@@ -6,8 +6,10 @@ import {
   createRendererRoot,
   drain,
   isRendering,
+  isSuspended,
   reconciler,
   unmountRoot,
+  waitForNextCommit,
 } from "./reconciler.ts";
 import { serializeMessage, type LiveBinding, type LiveHandler } from "./serialize.ts";
 import type { LiveInteraction, LiveRoot, LiveRootOptions, RenderResult } from "./types.ts";
@@ -203,6 +205,27 @@ export function createLiveRoot(options: LiveRootOptions): LiveRoot {
       if (unmounted) return;
       await drain(root);
       if (dispatching === 0) notify();
+      throwPending();
+      refresh();
+    },
+
+    async settle() {
+      if (unmounted) return;
+      silent += 1;
+      try {
+        for (;;) {
+          await drain(root);
+          if (container.failure !== null || !isSuspended(root)) break;
+          await waitForNextCommit(root);
+        }
+      } finally {
+        silent -= 1;
+      }
+      if (container.failure !== null) {
+        const { error } = container.failure;
+        pendingError = null;
+        throw error;
+      }
       throwPending();
       refresh();
     },

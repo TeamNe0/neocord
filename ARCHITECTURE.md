@@ -135,6 +135,7 @@ interface LiveRoot {
   readonly hasHandlers: boolean;
   dispatch(customId: string, event: unknown): Promise<boolean>;
   flush(): Promise<void>;
+  settle(): Promise<void>;
   disableInteractive(): RenderResult;
   unmount(): void;
 }

@@ -742,6 +742,39 @@ describe("one-shot rendering next to live roots", () => {
     expect(textOf(root.payload)).toEqual(["1"]);
   });
 
+  test("settle waits for suspended content and reports errors", async () => {
+    const promise = new Promise<string>((resolve) => setTimeout(() => resolve("done"), 5));
+    function Reader(): ReactNode {
+      return <TextDisplay>{use(promise)}</TextDisplay>;
+    }
+    const updates: RenderResult[] = [];
+    const root = createLiveRoot({ sessionId: "settle", onUpdate: (result) => updates.push(result) });
+    root.render(
+      <Suspense fallback={<TextDisplay>loading</TextDisplay>}>
+        <Reader />
+      </Suspense>,
+    );
+    expect(textOf(root.payload)).toEqual(["loading"]);
+    await root.settle();
+    expect(textOf(root.payload)).toEqual(["done"]);
+    expect(updates).toEqual([]);
+    root.unmount();
+
+    const failing = Promise.reject(new Error("boom"));
+    failing.catch(() => undefined);
+    function Broken(): ReactNode {
+      return <TextDisplay>{use(failing)}</TextDisplay>;
+    }
+    const broken = createLiveRoot({ sessionId: "settle-error" });
+    broken.render(
+      <Suspense fallback={null}>
+        <Broken />
+      </Suspense>,
+    );
+    await expect(broken.settle()).rejects.toThrow("boom");
+    broken.unmount();
+  });
+
   test("renderAsync and live roots share the reconciler", async () => {
     const promise = new Promise<string>((resolve) => setTimeout(() => resolve("async"), 2));
     function Reader(): ReactNode {
