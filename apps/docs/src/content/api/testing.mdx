@@ -122,7 +122,7 @@ Renders a modal to its payload. `RenderModalOptions` has `app` and `logger`, plu
 | `mockRole` | `id`, `guild`, `name`, `permissions` |
 | `mockMember` | `user`, `guild`, `nickname`, `roles`, `permissions` |
 | `mockChannel` | `id`, `guild`, `name`, `type`, which defaults to `ChannelType.GuildText` |
-| `mockMessage` | `id`, `author`, `content`, `components`, `hook`, `recording` |
+| `mockMessage` | `id`, `author`, `content`, `components`, `flags`, `hook`, `recording`. `flags` defaults to Components V2, or to none when `content` is set. |
 
 ## Exported types
 

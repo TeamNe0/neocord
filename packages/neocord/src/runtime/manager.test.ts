@@ -243,10 +243,10 @@ describe.each(["process", "worker"])("sharding on Bun in %s mode", (mode) => {
       const { result } = runScript("verify-sharding.mjs", "crash-loop", mode);
       const gaps = result.gaps ?? [];
       expect(gaps).toHaveLength(3);
-      expect(gaps[0]).toBeGreaterThanOrEqual(RESPAWN_BASE_DELAY_MS);
-      expect(gaps[1] as number).toBeGreaterThan(gaps[0] as number);
-      expect(gaps[2] as number).toBeGreaterThan(gaps[1] as number);
-      expect(result.startsInFiveSeconds).toBeLessThanOrEqual(4);
+      gaps.forEach((gap, index) => {
+        expect(gap).toBeGreaterThanOrEqual(respawnDelay(index + 1));
+      });
+      expect(result.startsInFiveSeconds).toBeLessThanOrEqual(3);
       expect(result.otherStarts).toBe(1);
     },
     60_000,

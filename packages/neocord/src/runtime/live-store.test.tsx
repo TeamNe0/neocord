@@ -1040,7 +1040,7 @@ describe("live sessions", () => {
   });
 
   describe("concurrent clicks", () => {
-    function SlowCounter({ log }: { log: string[] }): ReactNode {
+    function SlowCounter({ log, pause = () => sleep(20) }: { log: string[]; pause?: () => Promise<void> }): ReactNode {
       const [count, setCount] = useState(0);
       return (
         <>
@@ -1050,7 +1050,7 @@ describe("live sessions", () => {
               label="add"
               onClick={async () => {
                 log.push(`start ${count}`);
-                await sleep(20);
+                await pause();
                 setCount(count + 1);
                 log.push(`end ${count}`);
               }}
@@ -1074,13 +1074,22 @@ describe("live sessions", () => {
 
     test("a queued click is still acknowledged in time", async () => {
       const log: string[] = [];
-      const { harness, id } = await start(() => <SlowCounter log={log} />, { autoDeferAfter: 5 });
+      const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+      let opened = 0;
+      const pause = (): Promise<void> => {
+        const gate = gates[opened] ?? gates[0];
+        opened += 1;
+        return gate?.promise ?? Promise.resolve();
+      };
+      const { harness, id } = await start(() => <SlowCounter log={log} pause={pause} />, { autoDeferAfter: 5 });
       const first = click(id);
       const second = click(id);
       const both = Promise.all([harness.dispatch(first), harness.dispatch(second)]);
-      await sleep(15);
+      for (let waited = 0; second.recording.log.length === 0 && waited < 2000; waited += 5) await sleep(5);
       expect(log).toEqual(["start 0"]);
       expect(second.recording.log.map((entry) => entry.method)).toEqual(["deferUpdate"]);
+      gates[0]?.resolve();
+      gates[1]?.resolve();
       await both;
       expect(text(second.recording.edits.at(-1))).toBe("count 2");
       await harness.close();
