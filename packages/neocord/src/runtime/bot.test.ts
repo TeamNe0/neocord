@@ -139,6 +139,14 @@ describe("startBot", () => {
     ).rejects.toThrow('Unknown partial "Nope"');
   });
 
+  test("a live.ttl above the timer limit fails startup with a clear error", async () => {
+    const started: Started = { options: null, client: null };
+    const failure = startBotWith({ config: { ...config, live: { ttl: "30d" } }, manifest: manifestOf() }, fakeLogin(started));
+    await expect(failure).rejects.toBeInstanceOf(NeocordStartupError);
+    await expect(failure).rejects.toThrow("live.ttl must be between 1ms and 2147483647ms");
+    expect(started.client).toBeNull();
+  });
+
   test("an invalid token is translated", async () => {
     const started: Started = { options: null, client: null };
     const failure = startBotWith(

@@ -125,7 +125,7 @@ export default defineConfig({
 | Fact | Detail |
 | --- | --- |
 | Default | `14m` |
-| Accepted values | A [duration](/docs/api/neocord) string, such as `"5m"` or `"1h30m"`, or a number of milliseconds. |
+| Accepted values | A [duration](/docs/api/neocord) string, such as `"5m"` or `"1h30m"`, or a number of milliseconds, from 1ms to 2147483647ms (about 24.8 days). Anything else is a `validateManifest` error, which also fails startup. |
 | What resets it | Each click on the session. A timer calling `setState` does not. |
 | When it passes | The message is edited one last time with every button and select disabled, then the tree unmounts and effect cleanups run. |
 

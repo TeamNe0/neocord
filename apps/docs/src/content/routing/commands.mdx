@@ -147,6 +147,7 @@ Discord only stores `permissions`, `guildOnly` and `nsfw` on top-level commands.
 - On a command with subcommands, they deploy from the `group.ts` in its root folder.
 - On a subcommand, `permissions` and `guildOnly` are enforced at runtime only. `validateManifest` warns about this and tells you to use `defineGroup`.
 - On a nested group, `permissions` and `guildOnly` are enforced at runtime only. `validateManifest` warns about this and tells you to set them on the top-level group.
+- `nsfw` has no runtime check, so on a subcommand or a nested group it is ignored. `validateManifest` warns about both. Set it on the top-level group instead.
 
 ## Organising commands
 
@@ -178,3 +179,4 @@ These are checked by `validateManifest` when you build, deploy, test or start.
 | Children of one parent | 25 |
 | Description | 1-100 characters |
 | Options on a command | 25 |
+| Names, descriptions and choices of one top-level command, including its subcommands | 8000 characters, counting only the longest localization of each field |

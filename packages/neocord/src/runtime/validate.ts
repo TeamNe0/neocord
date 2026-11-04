@@ -7,6 +7,7 @@ import {
   type RouteKind,
   type Router,
 } from "@neocord/routing";
+import type { LocalizationMap } from "discord.js";
 import type { IntentName, NeocordConfig } from "../config.ts";
 import { parseDuration } from "../duration.ts";
 import type {
@@ -18,6 +19,7 @@ import type {
   ManifestRoute,
   ModuleNamespace,
   OptionDefinition,
+  OptionKind,
   TaskDefinition,
 } from "../types.ts";
 import { brandOf, describeHelper, enabledManifest, groupDefinition, mergedIntents } from "./manifest.ts";
@@ -35,7 +37,14 @@ const MAX_CHOICES = 25;
 const MAX_CHOICE_NAME_LENGTH = 100;
 const MAX_CHAT_COMMANDS = 100;
 const MAX_CONTEXT_COMMANDS = 15;
+const MAX_CHOICE_VALUE_LENGTH = 100;
+const MAX_COMMAND_CHARACTERS = 8000;
+const MAX_STRING_OPTION_LENGTH = 6000;
+const MAX_INTEGER_OPTION_VALUE = 2 ** 53 - 1;
+const MAX_NUMBER_OPTION_VALUE = 2 ** 53;
 const MAX_TIMER_MS = 2_147_483_647;
+const CHOICE_KINDS: readonly OptionKind[] = ["string", "integer", "number"];
+const CONFIG_FILE = "neocord.config.ts";
 
 interface IntentRequirement {
   anyOf: readonly IntentName[];
@@ -148,12 +157,182 @@ function checkOption(name: string, option: OptionDefinition, command: string, fi
   if (option.choices !== undefined && option.autocomplete !== undefined) {
     add("cannot use both choices and autocomplete.");
   }
+  if (option.autocomplete !== undefined && !CHOICE_KINDS.includes(option.kind)) {
+    add(`cannot use autocomplete, which only applies to string, integer and number options.`);
+  }
   if (option.choices !== undefined) {
+    if (!CHOICE_KINDS.includes(option.kind)) add("cannot have choices, which only apply to string, integer and number options.");
     if (option.choices.length < 1 || option.choices.length > MAX_CHOICES) add(`needs 1-${MAX_CHOICES} choices.`);
     for (const choice of option.choices) {
       if (!checkLength(choice.name, MAX_CHOICE_NAME_LENGTH)) {
         add(`has a choice name outside 1-${MAX_CHOICE_NAME_LENGTH} characters: "${String(choice.name)}".`);
       }
+      checkLocalizations(choice.nameLocalizations, MAX_CHOICE_NAME_LENGTH, "choice name", add);
+      checkChoiceValue(option.kind, choice.value, add);
+    }
+  }
+  checkLocalizations(option.descriptionLocalizations, MAX_DESCRIPTION_LENGTH, "description", add);
+  checkNameLocalizations(option.nameLocalizations, add);
+  checkOptionBounds(option, add);
+}
+
+function checkChoiceValue(kind: OptionKind, value: unknown, add: (message: string) => void): void {
+  if (kind === "string") {
+    if (typeof value !== "string") {
+      add(`has a choice value that must be a string: ${String(value)}.`);
+    } else if (!checkLength(value, MAX_CHOICE_VALUE_LENGTH)) {
+      add(`has a choice value outside 1-${MAX_CHOICE_VALUE_LENGTH} characters: "${value}".`);
+    }
+    return;
+  }
+  if (!CHOICE_KINDS.includes(kind)) return;
+  if (typeof value !== "number") {
+    add(`has a choice value that must be a${kind === "integer" ? "n integer" : " number"}: ${String(value)}.`);
+  } else if (kind === "integer" && !Number.isInteger(value)) {
+    add(`has a choice value that must be an integer: ${value}.`);
+  } else if (!inNumberRange(kind, value)) {
+    add(`has a choice value that must be ${describeNumberRange(kind)}: ${value}.`);
+  }
+}
+
+function inNumberRange(kind: OptionKind, value: number): boolean {
+  const limit = kind === "integer" ? MAX_INTEGER_OPTION_VALUE : MAX_NUMBER_OPTION_VALUE;
+  return Number.isFinite(value) && Math.abs(value) <= limit;
+}
+
+function describeNumberRange(kind: OptionKind): string {
+  return kind === "integer"
+    ? `an integer between -${MAX_INTEGER_OPTION_VALUE} and ${MAX_INTEGER_OPTION_VALUE}`
+    : `a number between -${MAX_NUMBER_OPTION_VALUE} and ${MAX_NUMBER_OPTION_VALUE}`;
+}
+
+function checkOptionBounds(option: OptionDefinition, add: (message: string) => void): void {
+  const { kind, minLength, maxLength, minValue, maxValue, channelTypes } = option;
+
+  if (minLength !== undefined || maxLength !== undefined) {
+    if (kind !== "string") {
+      add("sets minLength or maxLength, but minLength and maxLength only apply to string options.");
+    } else {
+      if (minLength !== undefined && !(Number.isInteger(minLength) && minLength >= 0 && minLength <= MAX_STRING_OPTION_LENGTH)) {
+        add(`minLength must be an integer between 0 and ${MAX_STRING_OPTION_LENGTH}.`);
+      }
+      if (maxLength !== undefined && !(Number.isInteger(maxLength) && maxLength >= 1 && maxLength <= MAX_STRING_OPTION_LENGTH)) {
+        add(`maxLength must be an integer between 1 and ${MAX_STRING_OPTION_LENGTH}.`);
+      }
+      if (minLength !== undefined && maxLength !== undefined && minLength > maxLength) add("minLength cannot exceed maxLength.");
+    }
+  }
+
+  if (minValue !== undefined || maxValue !== undefined) {
+    if (kind !== "integer" && kind !== "number") {
+      add("sets minValue or maxValue, but minValue and maxValue only apply to integer and number options.");
+    } else {
+      const valid = (value: number): boolean => inNumberRange(kind, value) && (kind === "number" || Number.isInteger(value));
+      if (minValue !== undefined && !valid(minValue)) add(`minValue must be ${describeNumberRange(kind)}.`);
+      if (maxValue !== undefined && !valid(maxValue)) add(`maxValue must be ${describeNumberRange(kind)}.`);
+      if (minValue !== undefined && maxValue !== undefined && minValue > maxValue) add("minValue cannot exceed maxValue.");
+    }
+  }
+
+  if (channelTypes !== undefined && kind !== "channel") add("sets channelTypes, but channelTypes only apply to channel options.");
+}
+
+function checkNameLocalizations(localizations: LocalizationMap | null | undefined, add: (message: string) => void): void {
+  for (const [locale, name] of Object.entries(localizations ?? {})) {
+    if (typeof name === "string" && !isValidCommandName(name)) {
+      add(`has an invalid localized name for "${locale}". Names are lowercase, 1-${MAX_NAME_LENGTH} characters.`);
+    }
+  }
+}
+
+function checkLocalizations(
+  localizations: LocalizationMap | null | undefined,
+  max: number,
+  label: string,
+  add: (message: string) => void,
+): void {
+  for (const [locale, text] of Object.entries(localizations ?? {})) {
+    if (typeof text === "string" && !checkLength(text, max)) {
+      add(`has an invalid localized ${label} for "${locale}". It must be 1-${max} characters.`);
+    }
+  }
+}
+
+function checkLocalizedOptionNames(
+  options: readonly (readonly [string, OptionDefinition])[],
+  command: string,
+  file: string,
+  issues: ManifestIssue[],
+): void {
+  const defaults = new Set(options.map(([name]) => name));
+  const seen = new Map<string, string>();
+  for (const [name, option] of options) {
+    for (const [locale, localized] of Object.entries(option.nameLocalizations ?? {})) {
+      if (typeof localized !== "string") continue;
+      const key = `${locale}\u0000${localized}`;
+      const earlier = seen.get(key);
+      if ((defaults.has(localized) && localized !== name) || (earlier !== undefined && earlier !== name)) {
+        issues.push({
+          severity: "error",
+          file,
+          message: `/${command} option "${name}" has a localized name "${localized}" for "${locale}" that collides with another option. Localized option names must differ from every default option name and from other names in the same locale.`,
+        });
+      }
+      seen.set(key, name);
+    }
+  }
+}
+
+function longestField(value: unknown, localizations: LocalizationMap | null | undefined): number {
+  const base = value === undefined || value === null ? 0 : String(value).length;
+  return Object.values(localizations ?? {}).reduce<number>(
+    (longest, text) => (typeof text === "string" ? Math.max(longest, text.length) : longest),
+    base,
+  );
+}
+
+function optionCharacters(name: string, option: OptionDefinition): number {
+  if (option.__neocord !== "option") return 0;
+  const own = longestField(name, option.nameLocalizations) + longestField(option.description, option.descriptionLocalizations);
+  return (option.choices ?? []).reduce(
+    (total, choice) => total + longestField(choice.name, choice.nameLocalizations) + longestField(choice.value, undefined),
+    own,
+  );
+}
+
+function leafCharacters(segment: string, definition: CommandDefinition): number {
+  const own = longestField(segment, definition.nameLocalizations) + longestField(definition.description, definition.descriptionLocalizations);
+  return Object.entries(definition.options ?? {}).reduce((total, [name, option]) => total + optionCharacters(name, option), own);
+}
+
+function checkCommandSizes(manifest: Manifest, routes: readonly ManifestRoute[], issues: ManifestIssue[]): void {
+  const roots = new Map<string, { characters: number; file: string; parents: Set<string> }>();
+  const groups = new Map(manifest.groups.map((group) => [group.segments.join(" "), group]));
+  for (const route of routes) {
+    const root = route.segments[0];
+    if (root === undefined) continue;
+    const entry = roots.get(root) ?? { characters: 0, file: route.file, parents: new Set<string>() };
+    roots.set(root, entry);
+    const leaf = route.segments.at(-1) ?? root;
+    entry.characters += leafCharacters(leaf, route.module.default as CommandDefinition);
+    for (let depth = 1; depth < route.segments.length; depth++) {
+      const path = route.segments.slice(0, depth).join(" ");
+      if (entry.parents.has(path)) continue;
+      entry.parents.add(path);
+      const group = groups.get(path);
+      const definition = group === undefined ? null : groupDefinition(group.module);
+      entry.characters +=
+        longestField(route.segments[depth - 1], definition?.nameLocalizations) +
+        longestField(definition?.description, definition?.descriptionLocalizations);
+    }
+  }
+  for (const [root, { characters, file }] of roots) {
+    if (characters > MAX_COMMAND_CHARACTERS) {
+      issues.push({
+        severity: "error",
+        file,
+        message: `/${root} uses ${characters} characters across its names, descriptions and choices, counting subcommands and the longest localization of each field. Discord allows ${MAX_COMMAND_CHARACTERS}.`,
+      });
     }
   }
 }
@@ -195,8 +374,22 @@ function checkCommand(manifest: Manifest, route: ManifestRoute, issues: Manifest
     issues.push({ severity: "error", file, message: `/${id} has ${options.length} options. Discord allows ${MAX_OPTIONS}.` });
   }
   for (const [name, option] of options) checkOption(name, option, id, file, issues);
+  checkLocalizedOptionNames(options, id, file, issues);
+
+  const addCommandIssue = (message: string): void => {
+    issues.push({ severity: "error", file, message: `/${id} ${message}` });
+  };
+  checkNameLocalizations(definition.nameLocalizations, addCommandIssue);
+  checkLocalizations(definition.descriptionLocalizations, MAX_DESCRIPTION_LENGTH, "description", addCommandIssue);
 
   if (segments.length > 1) {
+    if (definition.nsfw !== undefined) {
+      issues.push({
+        severity: "warning",
+        file,
+        message: `/${id} sets nsfw on a subcommand. Discord only reads nsfw on the top-level command, so it is ignored here. Use defineGroup({ nsfw: true }) on the top-level group.`,
+      });
+    }
     if (definition.permissions !== undefined && definition.permissions.length > 0) {
       issues.push({
         severity: "warning",
@@ -293,6 +486,18 @@ function checkCommandTree(manifest: Manifest, routes: readonly ManifestRoute[], 
         message: `Group "/${key}" is nested, so its permissions and guildOnly are enforced at runtime only. Set them on the top-level group to deploy them.`,
       });
     }
+    if (group.segments.length > 1 && definition.nsfw !== undefined) {
+      issues.push({
+        severity: "warning",
+        file: group.file,
+        message: `Group "/${key}" is nested, so its nsfw is ignored. Discord only reads nsfw on the top-level command.`,
+      });
+    }
+    const addGroupIssue = (message: string): void => {
+      issues.push({ severity: "error", file: group.file, message: `Group "/${key}" ${message}` });
+    };
+    checkNameLocalizations(definition.nameLocalizations, addGroupIssue);
+    checkLocalizations(definition.descriptionLocalizations, MAX_DESCRIPTION_LENGTH, "description", addGroupIssue);
   }
 
   for (const [path, route] of parents) {
@@ -321,6 +526,10 @@ function checkContextMenus(routes: readonly ManifestRoute[], kind: RouteKind, is
       issues.push({ severity: "error", file: route.file, message: `${kind} needs a name of 1-${MAX_NAME_LENGTH} characters.` });
       continue;
     }
+    const localizations = (route.module.default as { nameLocalizations?: LocalizationMap }).nameLocalizations;
+    checkLocalizations(localizations, MAX_NAME_LENGTH, "name", (message) => {
+      issues.push({ severity: "error", file: route.file, message: `${kind} "${String(name)}" ${message}` });
+    });
     const existing = names.get(name as string);
     if (existing !== undefined) {
       issues.push({ severity: "error", file: route.file, message: `${kind} "${String(name)}" is also defined by ${existing.file}.` });
@@ -483,6 +692,7 @@ export function validateManifest(manifest: Manifest, config?: NeocordConfig): Ma
   const commands = routes.filter((route) => route.kind === "command");
   for (const route of commands) checkCommand(enabled, route, issues);
   checkCommandTree(enabled, commands, issues);
+  checkCommandSizes(enabled, commands, issues);
   checkContextMenus(routes, "user-command", issues);
   checkContextMenus(routes, "message-command", issues);
   checkInteractionRoutes(routes, issues);
@@ -494,9 +704,19 @@ export function validateManifest(manifest: Manifest, config?: NeocordConfig): Ma
     if (!intents.has("Guilds")) {
       issues.push({
         severity: "warning",
-        file: "neocord.config.ts",
+        file: CONFIG_FILE,
         message: `The Guilds intent is not enabled, so guilds, roles and channels are not cached. ctx.guild can be null without it.`,
       });
+    }
+    if (config.live?.ttl !== undefined) {
+      const ttl = checkDuration(config.live.ttl, CONFIG_FILE, "live.ttl", issues);
+      if (ttl !== null && (ttl <= 0 || ttl > MAX_TIMER_MS)) {
+        issues.push({
+          severity: "error",
+          file: CONFIG_FILE,
+          message: `live.ttl must be between 1ms and ${MAX_TIMER_MS}ms (about 24.8 days), received ${String(config.live.ttl)}.`,
+        });
+      }
     }
   }
 

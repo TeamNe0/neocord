@@ -70,7 +70,7 @@ const size = option.string({
 });
 ```
 
-`ctx.options.size` is `"s" | "l" | undefined`. An option needs 1-25 choices, and each choice name is 1-100 characters.
+`ctx.options.size` is `"s" | "l" | undefined`. An option needs 1-25 choices, each choice name is 1-100 characters, and a string choice value is 1-100 characters.
 
 `choices` and `autocomplete` are mutually exclusive. The types forbid using both, and `validateManifest` reports it as an error.
 
@@ -165,4 +165,13 @@ If any other required option cannot be resolved, the reply is `The "name" option
 | Description | 1-100 characters |
 | Choices per option | 1-25 |
 | Choice name | 1-100 characters |
+| String choice value | 1-100 characters |
+| `minLength` | 0-6000, and not above `maxLength` |
+| `maxLength` | 1-6000 |
+| `minValue`, `maxValue` on `option.integer` | Integers from -(2^53 - 1) to 2^53 - 1 |
+| `minValue`, `maxValue` on `option.number` | -2^53 to 2^53 |
+| Localised name | Same rules as the name, and must not collide with another option on the command |
+| Localised description or choice name | Same length as the default |
 | Autocomplete results | 25 |
+
+`validateManifest` reports each of these as an error, along with bounds, `choices`, `autocomplete` or `channelTypes` on an option kind that does not accept them. See also the [8000 character limit](/docs/routing/commands#limits) per command.

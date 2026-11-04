@@ -393,4 +393,224 @@ describe("validateManifest", () => {
     expect(errors(issues).filter((message) => message.includes("mw.ts"))).toHaveLength(1);
     expect(defineMiddleware(() => undefined).__neocord).toBe("middleware");
   });
+
+  describe("live.ttl", () => {
+    test.each([["30d"], [2_147_483_648], ["25d"]])("%p exceeds the timer limit and is an error", (ttl) => {
+      const messages = errors(validateManifest(manifest({}), { live: { ttl: ttl as "30d" } }));
+      expect(messages.join("\n")).toContain("live.ttl must be between 1ms and 2147483647ms");
+    });
+
+    test("zero and malformed values are errors", () => {
+      expect(errors(validateManifest(manifest({}), { live: { ttl: 0 } })).join("\n")).toContain("live.ttl must be between");
+      expect(errors(validateManifest(manifest({}), { live: { ttl: "soon" as "1m" } })).join("\n")).toContain("live.ttl: Invalid duration");
+    });
+
+    test("values inside the range and an absent ttl pass", () => {
+      expect(errors(validateManifest(manifest({}), { live: { ttl: "14m" } }))).toEqual([]);
+      expect(errors(validateManifest(manifest({}), { live: { ttl: 2_147_483_647 } }))).toEqual([]);
+      expect(errors(validateManifest(manifest({}), {}))).toEqual([]);
+    });
+  });
+
+  describe("nsfw below the top level", () => {
+    const group = (segments: string[], nsfw?: boolean): Manifest["groups"][number] => ({
+      feature: "core",
+      segments,
+      file: `${segments.join("-")}.ts`,
+      module: { default: defineGroup({ description: "Group", ...(nsfw === undefined ? {} : { nsfw }) }) },
+    });
+
+    test("warns on a subcommand", () => {
+      const issues = validateManifest(
+        manifest({
+          groups: [group(["mod"])],
+          routes: [route("command", "mod warn", defineCommand({ description: "d", nsfw: true, execute }))],
+        }),
+      );
+      expect(warnings(issues).join("\n")).toContain("/mod warn sets nsfw on a subcommand");
+      expect(errors(issues)).toEqual([]);
+    });
+
+    test("warns on a nested group", () => {
+      const issues = validateManifest(
+        manifest({
+          groups: [group(["mod"]), group(["mod", "case"], true)],
+          routes: [route("command", "mod case view", goodCommand)],
+        }),
+      );
+      expect(warnings(issues).join("\n")).toContain('Group "/mod case" is nested, so its nsfw');
+    });
+
+    test("stays silent at the top level", () => {
+      const issues = validateManifest(
+        manifest({
+          groups: [group(["mod"], true)],
+          routes: [
+            route("command", "mod warn", goodCommand),
+            route("command", "ban", defineCommand({ description: "d", nsfw: true, execute })),
+          ],
+        }),
+      );
+      expect(warnings(issues)).toEqual([]);
+    });
+  });
+
+  describe("Discord command limits", () => {
+    const withOption = (definition: unknown) =>
+      validateManifest(
+        manifest({
+          routes: [route("command", "x", defineCommand({ description: "d", options: { opt: definition as never }, execute }))],
+        }),
+      );
+    const base = { __neocord: "option", description: "d" };
+
+    test("a command over 8000 combined characters is an error", () => {
+      const description = "d".repeat(100);
+      const options = Object.fromEntries(
+        Array.from({ length: 25 }, (_, index) => [
+          `o${index}`,
+          option.string({
+            description,
+            choices: Array.from({ length: 25 }, (_, inner) => ({ name: `${index}${inner}`.padEnd(100, "n"), value: "v".repeat(100) })),
+          }),
+        ]),
+      );
+      const issues = validateManifest(manifest({ routes: [route("command", "big", defineCommand({ description, options, execute }))] }));
+      expect(errors(issues).join("\n")).toMatch(/\/big uses \d+ characters.*Discord allows 8000/);
+    });
+
+    test("the total spans subcommands and groups of one top-level command", () => {
+      const description = "d".repeat(100);
+      const options = Object.fromEntries(
+        Array.from({ length: 25 }, (_, index) => [
+          `o${index}`,
+          option.string({
+            description,
+            choices: Array.from({ length: 25 }, (_, inner) => ({ name: `${index}${inner}`, value: "v".repeat(30) })),
+          }),
+        ]),
+      );
+      const leaf = defineCommand({ description, options, execute });
+      const issues = validateManifest(
+        manifest({
+          groups: [{ feature: "core", segments: ["root"], file: "g.ts", module: { default: defineGroup({ description }) } }],
+          routes: [route("command", "root a", leaf), route("command", "root b", leaf)],
+        }),
+      );
+      expect(errors(issues).join("\n")).toMatch(/\/root uses \d+ characters/);
+    });
+
+    test("only the longest localization of a field counts", () => {
+      const definition = defineCommand({
+        description: "d",
+        descriptionLocalizations: { fr: "f".repeat(100), de: "g".repeat(90) },
+        execute,
+      });
+      expect(errors(validateManifest(manifest({ routes: [route("command", "x", definition)] })))).toEqual([]);
+      const build = (localized: boolean) =>
+        Object.fromEntries(
+          Array.from({ length: 4 }, (_, index) => [
+            `o${index}`,
+            option.string({
+              description: "d",
+              choices: Array.from({ length: 25 }, (_, inner) => ({
+                name: `${index}${inner}`,
+                ...(localized ? { nameLocalizations: { fr: "n".repeat(100) } } : {}),
+                value: "v",
+              })),
+            }),
+          ]),
+        );
+      const check = (localized: boolean) =>
+        errors(
+          validateManifest(
+            manifest({ routes: [route("command", "big", defineCommand({ description: "d", options: build(localized), execute }))] }),
+          ),
+        );
+      expect(check(false)).toEqual([]);
+      expect(check(true).join("\n")).toContain("/big uses");
+    });
+
+    test("string choice values are limited to 100 characters", () => {
+      expect(errors(withOption({ ...base, kind: "string", choices: [{ name: "n", value: "v".repeat(101) }] })).join("\n")).toContain(
+        "choice value outside 1-100 characters",
+      );
+      expect(errors(withOption({ ...base, kind: "string", choices: [{ name: "n", value: "v".repeat(100) }] }))).toEqual([]);
+    });
+
+    test("choice values must match the option kind and the integer range", () => {
+      expect(errors(withOption({ ...base, kind: "string", choices: [{ name: "n", value: 1 }] })).join("\n")).toContain("must be a string");
+      expect(errors(withOption({ ...base, kind: "integer", choices: [{ name: "n", value: 1.5 }] })).join("\n")).toContain("must be an integer");
+      expect(errors(withOption({ ...base, kind: "integer", choices: [{ name: "n", value: 2 ** 53 }] })).join("\n")).toContain("between");
+      expect(errors(withOption({ ...base, kind: "number", choices: [{ name: "n", value: "1" }] })).join("\n")).toContain("must be a number");
+    });
+
+    test("minLength and maxLength ranges", () => {
+      expect(errors(withOption({ ...base, kind: "string", minLength: -1 })).join("\n")).toContain("minLength must be an integer between 0 and 6000");
+      expect(errors(withOption({ ...base, kind: "string", minLength: 6001 })).join("\n")).toContain("minLength must be an integer between 0 and 6000");
+      expect(errors(withOption({ ...base, kind: "string", maxLength: 0 })).join("\n")).toContain("maxLength must be an integer between 1 and 6000");
+      expect(errors(withOption({ ...base, kind: "string", maxLength: 6001 })).join("\n")).toContain("maxLength must be an integer between 1 and 6000");
+      expect(errors(withOption({ ...base, kind: "string", minLength: 5, maxLength: 4 })).join("\n")).toContain("minLength cannot exceed maxLength");
+      expect(errors(withOption({ ...base, kind: "string", minLength: 0, maxLength: 6000 }))).toEqual([]);
+    });
+
+    test("minValue and maxValue ranges", () => {
+      expect(errors(withOption({ ...base, kind: "integer", minValue: -(2 ** 53) })).join("\n")).toContain("minValue must be");
+      expect(errors(withOption({ ...base, kind: "integer", maxValue: 1.5 })).join("\n")).toContain("maxValue must be");
+      expect(errors(withOption({ ...base, kind: "number", maxValue: 2 ** 54 })).join("\n")).toContain("maxValue must be");
+      expect(errors(withOption({ ...base, kind: "number", minValue: 3, maxValue: 2 })).join("\n")).toContain("minValue cannot exceed maxValue");
+      expect(errors(withOption({ ...base, kind: "number", minValue: -(2 ** 53), maxValue: 2 ** 53 }))).toEqual([]);
+    });
+
+    test("kind specific fields are rejected on other kinds", () => {
+      expect(errors(withOption({ ...base, kind: "boolean", choices: [{ name: "n", value: "v" }] })).join("\n")).toContain("cannot have choices");
+      expect(errors(withOption({ ...base, kind: "user", autocomplete: () => [] })).join("\n")).toContain("cannot use autocomplete");
+      expect(errors(withOption({ ...base, kind: "integer", minLength: 1 })).join("\n")).toContain("minLength and maxLength only apply to string");
+      expect(errors(withOption({ ...base, kind: "string", minValue: 1 })).join("\n")).toContain("minValue and maxValue only apply to integer");
+      expect(errors(withOption({ ...base, kind: "string", channelTypes: [0] })).join("\n")).toContain("channelTypes only apply to channel");
+    });
+
+    test("localizations follow the limits of the field they translate", () => {
+      expect(errors(withOption({ ...base, kind: "string", nameLocalizations: { fr: "Bad Name" } })).join("\n")).toContain('localized name for "fr"');
+      expect(errors(withOption({ ...base, kind: "string", descriptionLocalizations: { fr: "d".repeat(101) } })).join("\n")).toContain(
+        'localized description for "fr"',
+      );
+      expect(
+        errors(withOption({ ...base, kind: "string", choices: [{ name: "n", value: "v", nameLocalizations: { fr: "n".repeat(101) } }] })).join("\n"),
+      ).toContain('localized choice name for "fr"');
+      const command = defineCommand({ description: "d", nameLocalizations: { fr: "Bad Name" }, descriptionLocalizations: { fr: "" }, execute });
+      const messages = errors(validateManifest(manifest({ routes: [route("command", "x", command)] }))).join("\n");
+      expect(messages).toContain('/x has an invalid localized name for "fr"');
+      expect(messages).toContain('/x has an invalid localized description for "fr"');
+      const menu = defineUserCommand({ name: "Report", nameLocalizations: { fr: "n".repeat(33) }, execute });
+      expect(errors(validateManifest(manifest({ routes: [route("user-command", "core/report", menu)] }))).join("\n")).toContain(
+        'localized name for "fr"',
+      );
+    });
+
+    test("localized option names must not collide on a command", () => {
+      const options = {
+        first: option.string({ description: "d", nameLocalizations: { fr: "second" } }),
+        second: option.string({ description: "d" }),
+        third: option.string({ description: "d", nameLocalizations: { de: "same" } }),
+        fourth: option.string({ description: "d", nameLocalizations: { de: "same" } }),
+      };
+      const messages = errors(validateManifest(manifest({ routes: [route("command", "x", defineCommand({ description: "d", options, execute }))] }))).join("\n");
+      expect(messages).toContain('localized name "second" for "fr" that collides');
+      expect(messages).toContain('localized name "same" for "de" that collides');
+    });
+
+    test("a command at the limits is valid", () => {
+      const definition = defineCommand({
+        description: "d".repeat(100),
+        options: {
+          text: option.string({ description: "o".repeat(100), minLength: 0, maxLength: 6000 }),
+          count: option.integer({ description: "c", minValue: -(2 ** 53) + 1, maxValue: 2 ** 53 - 1 }),
+          pick: option.string({ description: "p", choices: [{ name: "n".repeat(100), value: "v".repeat(100) }] }),
+        },
+        execute,
+      });
+      expect(validateManifest(manifest({ routes: [route("command", "x", definition)] }))).toEqual([]);
+    });
+  });
 });
