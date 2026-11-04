@@ -1,0 +1,10 @@
+{
+  "extends": "@neocord/tsconfig/app.json",
+  "compilerOptions": {
+    "types": ["node", "bun"],
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "neocord.config.ts", "drizzle.config.ts", ".neocord/types.d.ts"]
+}
