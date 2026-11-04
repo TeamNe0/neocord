@@ -5,6 +5,7 @@ import { parseDuration } from "../duration.ts";
 import type {
   ButtonDefinition,
   CommandDefinition,
+  CommandInfo,
   ContextDefinition,
   ErrorProps,
   EventDefinition,
@@ -207,6 +208,26 @@ function compileRoute<K extends RouteKind>(manifest: Manifest, route: ManifestRo
     guildOnly: metadata.guildOnly === true || groups.some((group) => group.guildOnly === true),
     cooldownMs: metadata.cooldown === undefined ? null : parseDuration(metadata.cooldown),
   };
+}
+
+export function listCommands(compiled: CompiledManifest): CommandInfo[] {
+  const shared = ({ feature, guildOnly, permissions }: CompiledRoute) => ({ feature, guildOnly, permissions });
+  return [
+    ...[...compiled.commands].map(
+      ([name, route]): CommandInfo => ({
+        kind: "command",
+        name,
+        description: route.definition.description,
+        ...shared(route),
+      }),
+    ),
+    ...[...compiled.userCommands].map(
+      ([name, route]): CommandInfo => ({ kind: "user-command", name, description: null, ...shared(route) }),
+    ),
+    ...[...compiled.messageCommands].map(
+      ([name, route]): CommandInfo => ({ kind: "message-command", name, description: null, ...shared(route) }),
+    ),
+  ].sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 }
 
 function isKind<K extends RouteKind>(route: ManifestRoute, kind: K): route is ManifestRoute & { kind: K } {

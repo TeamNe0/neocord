@@ -333,7 +333,9 @@ export default defineTask({
 });
 ```
 
-Event contexts have `client`, `app`, `logger`, `feature`, `route`, `shards`. Errors in events and tasks are logged and never crash the process.
+Event contexts have `client`, `app`, `logger`, `feature`, `route`, `shards`, `commands`. Errors in events and tasks are logged and never crash the process.
+
+Every context has `commands`, a sorted list of the enabled slash and context menu commands as `{ kind, name, description, feature, guildOnly, permissions }`. `guildOnly` and `permissions` include what parent groups contribute, so a `/help` command needs no manifest access.
 
 ### Features
 

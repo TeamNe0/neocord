@@ -23,6 +23,7 @@ import type {
   AppContext,
   ButtonDefinition,
   CommandDefinition,
+  CommandInfo,
   DefaultModalValues,
   ErrorProps,
   EventDefinition,
@@ -84,6 +85,7 @@ export interface RunOptions {
   error?: ReactComponentType<ErrorProps>;
   loading?: ReactComponentType;
   modals?: readonly ModalDefinition<string, ModalSchema, boolean>[];
+  commands?: readonly CommandInfo[];
   logger?: Logger;
   autoDeferAfter?: number | false;
   hook?: ApiHook;
@@ -166,6 +168,7 @@ export interface HarnessOptions {
   logger?: Logger;
   autoDeferAfter?: number | false;
   liveTtl?: number;
+  commands?: readonly CommandInfo[];
 }
 
 export interface Harness {
@@ -192,6 +195,7 @@ export function createHarness(options: HarnessOptions): Harness {
     compiled,
     autoDeferAfter: options.autoDeferAfter ?? false,
     liveTtl: options.liveTtl ?? 60_000,
+    commands: options.commands,
     onError: (error) => errors.push(error),
   });
   return {
@@ -214,6 +218,7 @@ async function runInteraction(spec: RouteSpec, options: RunOptions, fake: FakeIn
     manifest: manifestFor(spec, options),
     ...(options.app === undefined ? {} : { app: options.app }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
+    ...(options.commands === undefined ? {} : { commands: options.commands }),
     autoDeferAfter: options.autoDeferAfter ?? false,
   });
   const interaction = createFakeInteraction({
@@ -397,6 +402,7 @@ export async function runModal<R extends string, S extends ModalSchema, G extend
 export interface RunBackgroundOptions {
   app?: AppContext | Record<string, unknown>;
   logger?: Logger;
+  commands?: readonly CommandInfo[];
 }
 
 export interface BackgroundResult {
@@ -410,6 +416,7 @@ function backgroundDeps(options: RunBackgroundOptions, onError: (error: unknown)
     app: (options.app ?? {}) as AppContext,
     logger: options.logger ?? createLogger({ level: "silent" }),
     shards: createShardHelpers(client),
+    commands: options.commands,
     onError,
   };
 }

@@ -80,6 +80,15 @@ export type ShowModalMethod<Route extends string = ModalRoute> = <R extends Rout
   ...args: ShowModalArgs<R>
 ) => Promise<void>;
 
+export interface CommandInfo {
+  kind: "command" | "user-command" | "message-command";
+  name: string;
+  description: string | null;
+  feature: string;
+  guildOnly: boolean;
+  permissions: readonly PermissionsString[];
+}
+
 export interface BaseContext {
   client: Client<true>;
   app: AppContext;
@@ -87,6 +96,7 @@ export interface BaseContext {
   feature: string;
   route: string;
   shards: ShardHelpers;
+  commands: readonly CommandInfo[];
 }
 
 export type InteractionKind = Exclude<RouteKind, "event" | "task">;

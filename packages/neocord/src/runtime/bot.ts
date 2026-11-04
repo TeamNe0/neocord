@@ -13,7 +13,7 @@ import { createLogger, currentShardLabel, resolveLogLevel, type Logger } from ".
 import type { AppContext, Bot, Manifest } from "../types.ts";
 import { createBaseContext, createDispatcher, createEventHandler, type Dispatcher } from "./dispatch.tsx";
 import { MISSING_TOKEN_MESSAGE, resolveToken } from "./deploy.ts";
-import { compileManifest, contextDefinition, mergedIntents, mergedPartials } from "./manifest.ts";
+import { compileManifest, contextDefinition, listCommands, mergedIntents, mergedPartials } from "./manifest.ts";
 import { createShardHelpers } from "./shards.ts";
 import { createTaskRunner, type TaskRunner } from "./tasks.ts";
 import { validateManifest } from "./validate.ts";
@@ -297,7 +297,7 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
   };
   client.on("interactionCreate", onInteraction);
 
-  const runtimeOptions = { client, app, logger, shards };
+  const runtimeOptions = { client, app, logger, shards, commands: listCommands(compiled) };
   for (const route of compiled.events) {
     const listener = createEventHandler(route, runtimeOptions) as (...args: unknown[]) => void;
     const event = route.definition.event as string;

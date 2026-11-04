@@ -8,6 +8,7 @@ import {
   defineButton,
   defineCommand,
   defineFeature,
+  defineGroup,
   defineMessageCommand,
   defineMiddleware,
   defineModal,
@@ -27,7 +28,7 @@ import {
   type Recording,
 } from "../testing/fakes.ts";
 import { createHarness } from "../testing/run.tsx";
-import type { ErrorProps, LayoutProps, Manifest, ManifestRoute } from "../types.ts";
+import type { CommandInfo, ErrorProps, LayoutProps, Manifest, ManifestRoute } from "../types.ts";
 import { collectModalValues } from "./dispatch.tsx";
 
 function text(payload: { components: unknown[] } | undefined): string {
@@ -596,6 +597,53 @@ describe("modal dispatch", () => {
       message: mockMessage(),
     });
     expect(deferred.methods).toEqual(["deferUpdate"]);
+  });
+
+  test("ctx.commands lists every enabled command with inherited metadata", async () => {
+    let seen: readonly CommandInfo[] = [];
+    const definition = defineCommand({
+      description: "List",
+      execute(ctx) {
+        seen = ctx.commands;
+        return "ok";
+      },
+    });
+    const manifest: Manifest = {
+      version: 1,
+      context: null,
+      features: [
+        { name: "core", module: null },
+        { name: "off", module: { default: defineFeature({ enabled: false }) } },
+      ],
+      groups: [
+        {
+          feature: "core",
+          segments: ["mod"],
+          file: "group.ts",
+          module: { default: defineGroup({ description: "Mod", guildOnly: true, permissions: ["BanMembers"] }) },
+        },
+      ],
+      routes: [
+        route("command", "help", definition),
+        route("command", "mod warn", defineCommand({ description: "Warn", execute: () => "x" })),
+        route("user-command", "profile", defineUserCommand({ name: "Profile", execute: () => "x" })),
+        route("message-command", "quote", defineMessageCommand({ name: "Quote", execute: () => "x" })),
+        { ...route("command", "hidden", defineCommand({ description: "Hidden", execute: () => "x" })), feature: "off" },
+      ],
+    };
+    const harness = createHarness({ manifest });
+    await harness.dispatch(createFakeInteraction({ kind: "command", commandName: "help" }));
+    await harness.close();
+
+    expect(seen.map((entry) => [entry.kind, entry.name, entry.description])).toEqual([
+      ["user-command", "Profile", null],
+      ["message-command", "Quote", null],
+      ["command", "help", "List"],
+      ["command", "mod warn", "Warn"],
+    ]);
+    const warn = seen.find((entry) => entry.name === "mod warn");
+    expect(warn?.guildOnly).toBe(true);
+    expect(warn?.permissions).toEqual(["BanMembers"]);
   });
 
   test("unknown modal routes are reported", async () => {

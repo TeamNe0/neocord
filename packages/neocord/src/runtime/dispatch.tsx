@@ -31,6 +31,7 @@ import type {
   AutocompleteContext,
   BaseContext,
   CommandContext,
+  CommandInfo,
   DefaultModalValues,
   ModalContext,
   ReplyOptions,
@@ -48,7 +49,7 @@ import {
   type LiveErrorHandler,
   type LiveStore,
 } from "./live-store.ts";
-import type { CompiledManifest, CompiledRoute } from "./manifest.ts";
+import { listCommands, type CompiledManifest, type CompiledRoute } from "./manifest.ts";
 import { isRenderable, runMiddleware } from "./middleware.ts";
 import { createResponder, type ReplyTarget, type Responder, type SendOptions } from "./reply.ts";
 import { renderForInteraction, renderModalRoute, renderOneShot, stringifyParams } from "./render.tsx";
@@ -61,6 +62,7 @@ export interface DispatcherOptions {
   compiled: CompiledManifest;
   autoDeferAfter: number | false;
   liveTtl: number;
+  commands?: readonly CommandInfo[] | undefined;
   onError?: ((error: unknown) => void) | undefined;
 }
 
@@ -145,7 +147,7 @@ function formatIssues(issues: readonly StandardSchemaV1.Issue[]): ReactNode {
 }
 
 export function createBaseContext(
-  options: Pick<DispatcherOptions, "client" | "app" | "logger" | "shards">,
+  options: Pick<DispatcherOptions, "client" | "app" | "logger" | "shards" | "commands">,
   route: Pick<CompiledRoute, "id" | "feature">,
 ): BaseContext {
   return {
@@ -155,12 +157,13 @@ export function createBaseContext(
     feature: route.feature,
     route: route.id,
     shards: options.shards,
+    commands: options.commands ?? [],
   };
 }
 
 export function createEventHandler(
   route: CompiledRoute<"event">,
-  options: Pick<DispatcherOptions, "client" | "app" | "logger" | "shards" | "onError">,
+  options: Pick<DispatcherOptions, "client" | "app" | "logger" | "shards" | "commands" | "onError">,
 ): (...args: unknown[]) => Promise<void> {
   const ctx = createBaseContext(options, route);
   const execute = route.definition.execute as (ctx: BaseContext, ...args: unknown[]) => unknown;
@@ -176,6 +179,7 @@ export function createEventHandler(
 
 export function createDispatcher(options: DispatcherOptions): Dispatcher {
   const { client, compiled, logger } = options;
+  const contextOptions = { ...options, commands: options.commands ?? listCommands(compiled) };
   const cooldowns = createCooldowns();
   const live = createLiveStore({ ttl: options.liveTtl, logger, autoDeferAfter: options.autoDeferAfter });
 
@@ -253,7 +257,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     };
 
     const shared: SharedContext = {
-      ...createBaseContext(options, route),
+      ...createBaseContext(contextOptions, route),
       ...scope,
       interaction,
       user: interaction.user,
@@ -510,7 +514,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
         return;
       }
       const ctx: AutocompleteContext = {
-        ...createBaseContext(options, route),
+        ...createBaseContext(contextOptions, route),
         kind: "autocomplete",
         interaction,
         guild: interaction.guild,
