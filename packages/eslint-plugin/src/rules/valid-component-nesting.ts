@@ -9,7 +9,7 @@ import {
   SELECT_COMPONENTS,
   TEXT_COMPONENTS,
 } from "../utils/jsx.ts";
-import { createRule, type RuleKit } from "../utils/rule.ts";
+import { createRule } from "../utils/rule.ts";
 
 const MAX_BUTTONS_PER_ROW = 5;
 
