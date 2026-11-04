@@ -57,9 +57,13 @@ The entry for one process. In order, it:
 3. Creates the client, with `allowedMentions: { parse: [] }` as a default that `config.client` can override.
 4. Creates the app context from `src/context.ts`.
 5. Wires interactions and events, and starts tasks on `clientReady`.
-6. Logs in, with a 120 second timeout, and installs handlers for `SIGINT`, `SIGTERM` and unhandled rejections.
+6. Logs in, with a 120 second timeout, and installs handlers for `SIGINT`, `SIGTERM`, `SIGHUP`, the `{ neocord: "shutdown" }` IPC message and unhandled rejections.
 
-`stop()` stops tasks, expires live sessions, disposes the app context and destroys the client. It is safe to call more than once. Startup failures reject with a `NeocordStartupError`.
+`stop()` stops taking new interactions and events, waits up to five seconds for running tasks and handlers, expires live sessions, disposes the app context and destroys the client. It is safe to call more than once.
+
+Startup failures log one message and reject with a `NeocordStartupError`, so `.catch` works as usual. If nothing catches it, as with `await startBot(...)` in a generated entry, the process exits with code 1 and prints no stack trace. `error.transient` is `true` for failures worth retrying, such as a network error, and `false` for token, intent and config errors.
+
+If a fatal gateway close code arrives after login, such as 4004 when the token is reset while running, the bot logs the same actionable message, stops and exits with code 1.
 
 ## startManager
 
@@ -73,7 +77,7 @@ interface StartManagerOptions {
 }
 ```
 
-The production entry. It wraps discord.js `ShardingManager`, applies `config.sharding`, logs lifecycle events and forwards `SIGINT` and `SIGTERM`.
+The production entry. It wraps discord.js `ShardingManager`, applies `config.sharding`, logs lifecycle events, supervises respawns with a backoff, and forwards `SIGINT`, `SIGTERM`, `SIGHUP` and the `{ neocord: "shutdown" }` IPC message. A startup failure behaves as it does in `startBot`. See [Failure behaviour](/docs/sharding#failure-behaviour).
 
 The shard count comes from the `shards` argument, then `NEOCORD_SHARD_COUNT`, then `sharding.totalShards`, then `"auto"`. It does not deploy commands, because it has no manifest and must not load route modules. See [Sharding](/docs/sharding).
 

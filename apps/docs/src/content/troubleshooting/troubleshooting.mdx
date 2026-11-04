@@ -49,6 +49,16 @@ Other gateway close codes have their own messages:
 | 4012 | `Discord rejected the gateway API version (close code 4012). Update discord.js.` |
 | 4013 | `Discord reported invalid intents (close code 4013). Check the intents in neocord.config.ts: <intents>.` |
 
+Discord does not let a bot reconnect after any of these, including a bot that was already running, for example when its token is reset. With no manager the bot logs the message, stops and exits with code 1. Under a manager, that shard stops and is not respawned, the other shards keep running, and the manager exits with code 1 once none are left. Fix the cause, then start the bot again.
+
+## A shard keeps respawning
+
+```text
+Respawn attempt 3 in 4000ms.
+```
+
+A shard exited, and the manager is bringing it back with a growing delay, up to a minute. The lines around it say why, such as `Could not reach Discord` during a network outage, or an uncaught exception from your code. The delay resets once the shard has stayed ready for a minute. See [Failure behaviour](/docs/sharding#failure-behaviour).
+
 ## An event never fires
 
 Events need intents. `neocord test`, `neocord build` and startup warn when one is missing:

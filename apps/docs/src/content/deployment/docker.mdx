@@ -91,7 +91,7 @@ With SQLite, the database file must outlive the container. Mount a volume and po
 
 ## Stopping
 
-`docker stop` sends `SIGTERM` to the container's main process. When the signal reaches neocord, each shard stops tasks, expires live sessions, disposes the app context and destroys the client, and the manager gives each shard up to five seconds. See [Process managers](/docs/deployment/process-managers#what-neocord-does-on-a-signal). Docker's default grace period is ten seconds, and you can raise it with `docker stop --time`.
+`docker stop` sends `SIGTERM` to the container's main process. When the signal reaches neocord, each shard waits for running tasks and handlers, expires live sessions, disposes the app context and destroys the client, and the manager gives each shard up to twelve seconds. See [Process managers](/docs/deployment/process-managers#what-neocord-does-on-a-signal). Docker's default grace period of ten seconds is shorter than that, so a shard with slow work can be killed before `dispose` runs. Raise it with `docker stop --time 20`, or `stop_grace_period: 20s` in Compose.
 
 ## Using Node instead
 

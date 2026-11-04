@@ -120,6 +120,8 @@ function closeCodeMessage(code: number, intents: readonly IntentName[]): string 
   }
 }
 
+const FATAL_GATEWAY_ERROR = /^(Authentication failed|Invalid shard|Sharding is required|Used invalid API version|Used invalid intents|Used disallowed intents)$/;
+
 const NETWORK_CODES = new Set([
   "ENOTFOUND",
   "EAI_AGAIN",
@@ -351,7 +353,13 @@ export async function startBotWith(options: StartBotOptions, dependencies: Start
   client.on("error", (error) => logger.error("Discord client error.", error));
   client.on("warn", (message) => logger.warn(message));
   if (logger.level === "debug") client.on("debug", (message) => logger.debug(message));
-  client.on("shardError", (error, shardId) => logger.error(`Gateway error on shard ${shardId}.`, error));
+  client.on("shardError", (error, shardId) => {
+    if (FATAL_GATEWAY_ERROR.test(error.message)) {
+      logger.debug(`Gateway error on shard ${shardId}.`, error);
+    } else {
+      logger.error(`Gateway error on shard ${shardId}.`, error);
+    }
+  });
   client.on("shardReconnecting", (shardId) => logger.debug(`Shard ${shardId} is reconnecting.`));
 
   let app: AppContext = {} as AppContext;

@@ -187,7 +187,11 @@ deployCommands({ config, manifest, guildId, force, dryRun, stateFile }): Promise
 
 `startManager` never deploys commands, because it has no manifest and must not load route modules. Under `deploy.mode: "auto"`, `neocord start` runs the deploy step before launching the manager.
 
-The shard count comes from the `shards` argument, then `NEOCORD_SHARD_COUNT`, then `sharding.totalShards`. Startup failures are `NeocordStartupError`s with an actionable message. If a shard hits a fatal login error, the manager stops respawning, so a bad token cannot loop against Discord's login endpoint.
+The shard count comes from the `shards` argument, then `NEOCORD_SHARD_COUNT`, then `sharding.totalShards`. Startup failures are `NeocordStartupError`s with an actionable message, which log once and exit with code 1 and no stack trace if nothing catches them.
+
+The manager supervises shards itself, with discord.js's respawn off. A shard that exits comes back with a delay that doubles from one second to one minute, and resets after a minute of being ready. Token, intent and config errors stop that shard for good, so a bad token cannot loop against Discord's login endpoint. Network errors are retried. During the first spawn, any shard failure fails the whole startup. When no shards are left, the manager exits with code 1.
+
+`SIGINT`, `SIGTERM`, `SIGHUP` and the IPC message `{ neocord: "shutdown" }` stop the bot gracefully. In-flight handlers and tasks get up to five seconds before `dispose` runs.
 
 `process` and `worker` sharding modes both run on Bun and on Node.
 

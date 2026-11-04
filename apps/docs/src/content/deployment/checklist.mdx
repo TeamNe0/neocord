@@ -48,7 +48,7 @@ Go through this list before a bot goes live. Each item links to the page that ex
 
 - Run exactly one copy of each shard per token, and stop your local `neocord dev` before it connects to the same application as production. Two processes can both receive an interaction and race to answer it.
 - Use a host that keeps a long-running process alive. See [Hosting notes](/docs/deployment/hosting).
-- Use [Docker](/docs/deployment/docker) or a [process manager](/docs/deployment/process-managers), and give shutdowns enough time. Each shard gets up to five seconds to stop.
+- Use [Docker](/docs/deployment/docker) or a [process manager](/docs/deployment/process-managers), and give shutdowns enough time. Each shard gets up to twelve seconds to stop.
 - Include your database migration step in your release process if you have one. See [Drizzle](/docs/database/drizzle) or [Prisma](/docs/database/prisma).
 
 ## Things that reset on restart

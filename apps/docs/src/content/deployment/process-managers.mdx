@@ -1,31 +1,41 @@
-neocord manages its own shards, including respawning them after a crash, but it does not restart itself if the manager process exits or the machine reboots. Use a process manager for that.
+neocord manages its own shards, including respawning them after a crash with a growing delay, but it does not restart itself if the manager process exits or the machine reboots. Use a process manager for that.
 
 ## What neocord does on a signal
 
 The CLI forwards `SIGINT`, `SIGTERM` and `SIGHUP` to the process it launched. Under `neocord start`, that process is the sharding manager.
 
-When the manager receives `SIGINT` or `SIGTERM`:
+When the manager receives `SIGINT`, `SIGTERM` or `SIGHUP`:
 
-1. It logs `Received <signal>, stopping shards.` and turns off respawning.
-2. It asks each shard to shut down, and waits up to five seconds for each one.
+1. It logs `Received <signal>, stopping shards.` and cancels pending respawns.
+2. It asks each shard to shut down, and waits up to twelve seconds for each one.
 3. It kills any shard still running, then exits with code 0.
 
 Each shard shuts down in this order:
 
-1. Stop tasks, waiting up to five seconds for runs in progress.
-2. Expire live sessions, spending up to two seconds on the final edits that disable their components.
-3. Call the `dispose` function from `src/context.ts`.
-4. Destroy the Discord client, log `Stopped.` and exit with code 0.
+1. Stop taking new interactions and events.
+2. Wait for running tasks and running handlers, up to five seconds. These run at the same time, so a slow handler gets to acknowledge its click and still has a working `ctx.app`.
+3. Expire live sessions, spending up to two seconds on the final edits that disable their components.
+4. Call the `dispose` function from `src/context.ts`.
+5. Destroy the Discord client, log `Stopped.` and exit with code 0.
 
-A shard killed at the five second limit does not finish these steps. Keep `dispose` short.
+That is seven seconds before `dispose`, and the manager's limit leaves about five more for `dispose` and the client. A shard killed at the twelve second limit does not finish these steps, so keep `dispose` short. Set your process manager's stop timeout above twelve seconds, as the examples below do.
+
+A second `SIGTERM` or `SIGHUP` during shutdown is ignored, so a parent repeating its signal does not interrupt `dispose`. A second `SIGINT` at least one second after the first makes a shard exit at once with code 130, so pressing Ctrl+C again still works when something is stuck.
+
+A process that started `neocord` with an IPC channel can also send the message `{ neocord: "shutdown" }`. `startBot` and `startManager` treat it like `SIGTERM`, and ignore every other message. This is how `neocord dev` stops the bot on Windows, where `child.kill("SIGTERM")` ends a process immediately.
 
 ## Exit codes and restart loops
 
-`neocord start` exits with the manager's exit code. If shards cannot start, the manager exits with a non-zero code after logging a `NeocordStartupError`.
+`neocord start` exits with the manager's exit code.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | A requested stop finished. |
+| 1 | Startup failed, after logging one error with no stack trace. Or the bot was running and no shards are left to run. See [Failure behaviour](/docs/sharding#failure-behaviour). |
 
 <Callout kind="warn">
 
-The manager stops respawning after a fatal login error, such as a bad token, so that it cannot loop against Discord's login endpoint. A process manager that restarts the whole command undoes that protection. Always set a restart delay and a limit, as in the examples below.
+A bad token does not loop inside neocord: a shard that reports one is not respawned. A process manager that restarts the whole command undoes that protection. Always set a restart delay and a limit, as in the examples below.
 
 </Callout>
 
@@ -94,7 +104,7 @@ pm2 logs my-bot
 
 ## Windows
 
-Windows has no POSIX signals. Pressing Ctrl+C in a console sends the event to the whole console, so the CLI waits up to five seconds for the child to stop by itself before it forwards `SIGINT`. Other ways of ending the process may skip the shutdown steps above.
+Windows has no POSIX signals. Pressing Ctrl+C in a console sends the event to the whole console, so the CLI waits up to twenty seconds for the child to stop by itself before it forwards `SIGINT`. Other ways of ending the process may skip the shutdown steps above.
 
 ## Logs
 

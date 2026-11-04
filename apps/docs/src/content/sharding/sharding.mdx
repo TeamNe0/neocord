@@ -12,7 +12,7 @@ neocord always runs production bots through a sharding manager, so you do not ch
 | `shard.js` | Calls `startBot`. Each shard runs one copy, with its own client, app context, dispatcher and tasks. |
 | `deploy.js` | Calls `deployCommands`. See [Deploying commands](/docs/deployment/deploying-commands). |
 
-`neocord start` launches `manager.js`. The manager wraps discord.js `ShardingManager`, applies your `sharding` config, spawns `shard.js` once per shard, logs each shard's lifecycle, and forwards `SIGINT` and `SIGTERM`.
+`neocord start` launches `manager.js`. The manager wraps discord.js `ShardingManager`, applies your `sharding` config, spawns `shard.js` once per shard, logs each shard's lifecycle, respawns shards with a backoff, and forwards `SIGINT`, `SIGTERM` and `SIGHUP`.
 
 The manager never deploys commands, because it has no manifest and must not load route modules. Under `deploy.mode: "auto"`, `neocord start` runs the deploy step before it launches the manager.
 
@@ -43,7 +43,7 @@ export default defineConfig({
 | `totalShards` | `number \| "auto"` | `"auto"` | Total shards across the whole bot. `"auto"` asks Discord for its recommended count at startup. |
 | `shardList` | `readonly number[] \| "auto"` | `"auto"` | Which shard ids this manager spawns. `"auto"` spawns all of them. |
 | `mode` | `"process" \| "worker"` | `"process"` | Run each shard in a child process or a worker thread. |
-| `respawn` | `boolean` | `true` | Restart a shard after it exits. |
+| `respawn` | `boolean` | `true` | Restart a shard after it exits, with a growing delay. See [Failure behaviour](#failure-behaviour). |
 | `spawnDelay` | `number` | `5500` | Milliseconds to wait between spawning shards. |
 | `spawnTimeout` | `number` | `30000` | Milliseconds a shard has to become ready before the spawn fails. |
 
@@ -136,7 +136,9 @@ Under a manager, discord.js sends `broadcastEval` functions to other shards as s
 | --- | --- | --- |
 | Each shard runs in | A child process | A worker thread in the manager's process |
 | Fatal login errors reach the manager through | `process.send` | `parentPort.postMessage` |
-| A crash that ends the process affects | That shard, which the manager can respawn | Every shard in the process |
+| An uncaught exception in a shard affects | That shard, which the manager respawns | That shard, which the manager logs and respawns |
+| A crash that ends the whole process, such as out of memory, affects | That shard, which the manager respawns | Every shard in the process |
+| If the manager dies | Each shard sees its channel close, then stops and disposes. On Windows, the runtime kills child processes with their parent, so they do not get to dispose. | The shards end with it. |
 
 `process` is the default, and keeps shards isolated from each other. Both modes run on Bun and on Node.
 
@@ -163,7 +165,9 @@ Each shard has its own memory unless you use `ctx.shards` or an external store. 
 
 ## Failure behaviour
 
-If a shard hits a fatal login error, such as a bad token or disallowed intents, it tells the manager, and the manager stops respawning. A bad token therefore cannot loop against Discord's login endpoint. Startup then fails with a `NeocordStartupError` that carries the shard's message.
+### During the first spawn
+
+Any shard that fails while `neocord start` is bringing shards up fails the whole startup. The manager stops the shards it already started, logs one error and exits with code 1, so a process manager can decide what to do. If the shard reported why, for example a bad token, disallowed intents or an unreachable network, that is the message you see. A bad token therefore cannot loop against Discord's login endpoint.
 
 Other spawn failures produce these messages, where the first sentence comes from discord.js:
 
@@ -173,7 +177,26 @@ Other spawn failures produce these messages, where the first sentence comes from
 | `ShardingReadyDied` | `The shard process crashed during startup. Check the shard logs above for the reason.` |
 | `ShardingReadyDisconnected` | `The shard lost its gateway connection during startup. Check your token, intents and network.` |
 
-When the manager receives `SIGINT` or `SIGTERM`, it turns off respawning, asks each shard to shut down, waits up to five seconds for each one, then kills any that are still running.
+### After the first spawn
+
+The manager supervises each shard itself. discord.js's own respawn stays off, so `manager.respawn` on the returned `ShardingManager` is always `false`.
+
+| What happens to a shard | What the manager does |
+| --- | --- |
+| It crashes, exits, or an uncaught exception ends it | Respawns it after a delay, logging each attempt. |
+| Its respawn fails to log in because of the network or another temporary error | Logs the reason and tries again with a longer delay. |
+| Its respawn does not become ready within `spawnTimeout` | Asks it to stop, then tries again with a longer delay. |
+| It reports a bad token, disallowed intents or a config problem, or the gateway closes it with code 4004, 4010, 4011, 4012, 4013 or 4014 | Logs the message and does not respawn that shard. Other shards keep running. |
+| `sharding.respawn` is `false` and it exits | Does not respawn it. Other shards keep running. |
+| No shards are left to run | Logs an error and exits with code 1, so a process manager restarts the bot. |
+
+The delay starts at one second and doubles up to one minute. It resets once a shard has stayed ready for a minute. Respawns of different shards are also kept `spawnDelay` apart, because Discord rate limits gateway identifies.
+
+If you call `shard.kill()` or `manager.respawnAll()` yourself, the manager leaves that shard to you.
+
+### Stopping
+
+When the manager receives `SIGINT`, `SIGTERM`, `SIGHUP` or a [shutdown message](/docs/deployment/process-managers#what-neocord-does-on-a-signal), it cancels pending respawns, asks each shard to shut down, waits up to twelve seconds for each one, then kills any that are still running. A shard needs at most ten seconds, as [its shutdown steps](/docs/deployment/process-managers#what-neocord-does-on-a-signal) show, and the constants live together so the two cannot drift apart.
 
 Logs from a shard are prefixed with its id, and the manager logs under a `manager` scope. Set `NEOCORD_LOG_LEVEL` to override `logLevel`.
 

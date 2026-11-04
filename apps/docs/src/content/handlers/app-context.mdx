@@ -48,7 +48,7 @@ export default defineCommand({
 
 If the factory throws, the bot stops with "src/context.ts failed to create the app context: reason".
 
-On SIGINT, SIGTERM or a shutdown request from the sharding manager, `startBot` stops tasks, expires live sessions, calls `dispose`, and then destroys the client. An error from `dispose` is logged and does not stop the rest of the shutdown.
+On SIGINT, SIGTERM, SIGHUP or a shutdown request, `startBot` stops taking new interactions and events, waits up to five seconds for running tasks and handlers, expires live sessions, calls `dispose`, and then destroys the client. So a handler in the middle of an `await` can still use `ctx.app`, unless it outlasts that wait. An error from `dispose` is logged and does not stop the rest of the shutdown.
 
 ## One per process
 
