@@ -33,6 +33,7 @@ export interface Responder {
   readonly modalShown: boolean;
   readonly autoDeferred: boolean;
   readonly deferredUpdate: boolean;
+  readonly showingPlaceholder: boolean;
   armAutoDefer(): void;
   cancelAutoDefer(): void;
   settled(): Promise<void>;
@@ -313,6 +314,9 @@ export function createResponder(options: ResponderOptions): Responder {
     },
     get deferredUpdate() {
       return deferredUpdate;
+    },
+    get showingPlaceholder() {
+      return placeholder;
     },
 
     armAutoDefer() {

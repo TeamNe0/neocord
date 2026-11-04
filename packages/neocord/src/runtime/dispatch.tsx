@@ -46,6 +46,8 @@ import { createCooldowns, type Cooldowns } from "./cooldown.ts";
 import {
   createLiveStore,
   isLiveCustomId,
+  type LiveAccess,
+  type LiveComponentInteraction,
   type LiveErrorHandler,
   type LiveStore,
 } from "./live-store.ts";
@@ -214,20 +216,26 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     interaction: RepliableInteraction,
     deferMode: "reply" | "update",
     scope: GuildScope,
+    existingResponder?: Responder,
   ): RouteTools => {
     const metadata = route.definition as { ephemeral?: boolean; layout?: boolean };
-    const responder = createResponder({
-      interaction,
-      logger,
-      ephemeral: metadata.ephemeral,
-      deferMode,
-      autoDeferAfter: options.autoDeferAfter,
-    });
+    const responder =
+      existingResponder ??
+      createResponder({
+        interaction,
+        logger,
+        ephemeral: metadata.ephemeral,
+        deferMode,
+        autoDeferAfter: options.autoDeferAfter,
+      });
 
     let ctx: AnyContext | null = null;
 
     const onLiveError: LiveErrorHandler = (error, _interaction, liveResponder) =>
       reportError(error, route, ctx, liveResponder);
+
+    const liveAccess: LiveAccess = (clicked, liveResponder, proceed) =>
+      guardLiveInteraction(route, clicked, liveResponder, proceed);
 
     const deliver = async (
       node: ReactNode,
@@ -239,6 +247,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
         { node, ctx, layouts: useLayouts ? route.layouts : [] },
         live,
         onLiveError,
+        liveAccess,
       );
       let target: ReplyTarget | null;
       try {
@@ -331,6 +340,58 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     return false;
   };
 
+  const checkAccess = async (
+    route: CompiledRoute,
+    interaction: RepliableInteraction,
+    responder: Responder,
+  ): Promise<GuildScope | null> => {
+    const scope = await resolveScope(route, interaction);
+    if (route.guildOnly && (scope.guild === null || scope.member === null)) {
+      await responder.send(plainNotice(GUILD_ONLY_TEXT), { ephemeral: true });
+      return null;
+    }
+    if (route.permissions.length > 0) {
+      const granted = interaction.memberPermissions;
+      if (granted === null) {
+        await responder.send(plainNotice(GUILD_ONLY_TEXT), { ephemeral: true });
+        return null;
+      }
+      const missing = route.permissions.filter((permission) => !granted.has(permission));
+      if (missing.length > 0) {
+        await responder.send(
+          plainNotice(`You need these permissions to do that: ${missing.map(humanizePermission).join(", ")}.`),
+          { ephemeral: true },
+        );
+        return null;
+      }
+    }
+    return scope;
+  };
+
+  const guardLiveInteraction = async (
+    route: CompiledRoute,
+    interaction: LiveComponentInteraction,
+    responder: Responder,
+    proceed: () => Promise<void>,
+  ): Promise<void> => {
+    const scope = await checkAccess(route, interaction, responder);
+    if (scope === null) return;
+
+    const tools = createTools(route, interaction, "update", scope, responder);
+    const ctx = {
+      ...tools.shared,
+      kind: interaction.isButton() ? "button" : "select",
+      params: {},
+      message: interaction.message,
+      update: tools.update,
+      deferUpdate: () => responder.deferUpdate(),
+      ...(interaction.isButton() ? {} : { values: interaction.values }),
+    } as unknown as AnyContext;
+    tools.bind(ctx);
+
+    await runMiddleware(route.middleware, ctx, proceed, (node) => ctx.reply(node));
+  };
+
   const run = async <C extends AnyContext>(
     route: CompiledRoute,
     interaction: RepliableInteraction,
@@ -342,26 +403,8 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     let ctx: C | null = null;
     const bootstrap = createResponder({ interaction, logger, autoDeferAfter: false });
     try {
-      const scope = await resolveScope(route, interaction);
-      if (route.guildOnly && (scope.guild === null || scope.member === null)) {
-        await bootstrap.send(plainNotice(GUILD_ONLY_TEXT), { ephemeral: true });
-        return;
-      }
-      if (route.permissions.length > 0) {
-        const granted = interaction.memberPermissions;
-        if (granted === null) {
-          await bootstrap.send(plainNotice(GUILD_ONLY_TEXT), { ephemeral: true });
-          return;
-        }
-        const missing = route.permissions.filter((permission) => !granted.has(permission));
-        if (missing.length > 0) {
-          await bootstrap.send(
-            plainNotice(`You need these permissions to do that: ${missing.map(humanizePermission).join(", ")}.`),
-            { ephemeral: true },
-          );
-          return;
-        }
-      }
+      const scope = await checkAccess(route, interaction, bootstrap);
+      if (scope === null) return;
 
       tools = createTools(route, interaction, deferMode, scope);
       tools.responder.armAutoDefer();
@@ -405,6 +448,8 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     } else if (responder.autoDeferred && responder.state === "deferred") {
       logger.warn(`${route.kind} ${route.id} (${route.file}) was deferred automatically but returned nothing, removing the placeholder.`);
       await responder.deleteReply();
+    } else if (responder.showingPlaceholder) {
+      logger.warn(`${route.kind} ${route.id} (${route.file}) returned nothing after loading.tsx, so its loading UI stays on the message.`);
     }
   };
 

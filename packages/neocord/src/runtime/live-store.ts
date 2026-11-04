@@ -20,6 +20,12 @@ export type LiveErrorHandler = (
   responder: Responder,
 ) => Promise<void>;
 
+export type LiveAccess = (
+  interaction: LiveComponentInteraction,
+  responder: Responder,
+  proceed: () => Promise<void>,
+) => Promise<void>;
+
 export interface LiveSession {
   readonly id: string;
   readonly root: LiveRoot;
@@ -40,7 +46,7 @@ export interface LiveStoreOptions {
 
 export interface LiveStore {
   readonly size: number;
-  open(node: ReactNode, onError?: LiveErrorHandler): Promise<OpenedRoot>;
+  open(node: ReactNode, onError?: LiveErrorHandler, access?: LiveAccess): Promise<OpenedRoot>;
   handle(interaction: LiveComponentInteraction): Promise<void>;
   has(sessionId: string): boolean;
   clear(): void;
@@ -53,6 +59,7 @@ interface SessionRecord extends LiveSession {
   expire(): Promise<void>;
   retarget(target: ReplyTarget, fallback: LiveMessage | null): void;
   onError: LiveErrorHandler | undefined;
+  access: LiveAccess | undefined;
   fallback: LiveMessage | null;
 }
 
@@ -180,6 +187,7 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
       root,
       fallback: null,
       onError: undefined,
+      access: undefined,
       attach(next) {
         target = next;
         if (buffered !== null) {
@@ -234,7 +242,7 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
 
     has: (sessionId) => sessions.has(sessionId),
 
-    async open(node, onError) {
+    async open(node, onError, access) {
       const id = newSessionId();
       let session: SessionRecord | null = null;
       let earlyUpdate: RenderResult | null = null;
@@ -268,6 +276,7 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
 
       session = createSession(id, root, earlyUpdate);
       session.onError = onError;
+      session.access = access;
       sessions.set(id, session);
       session.touch();
       return { payload: root.payload, session };
@@ -281,7 +290,6 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
         return;
       }
 
-      session.touch();
       const responder = createResponder({
         interaction,
         logger,
@@ -290,8 +298,19 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
       });
       responder.armAutoDefer();
 
-      try {
+      let dispatched = false;
+      const proceed = async (): Promise<void> => {
+        dispatched = true;
+        session.touch();
         await session.root.dispatch(interaction.customId, interaction);
+      };
+
+      try {
+        if (session.access === undefined) {
+          await proceed();
+        } else {
+          await session.access(interaction, responder, proceed);
+        }
       } catch (error) {
         logger.error(`A live handler failed for "${interaction.customId}".`, error);
         if (session.onError !== undefined) {
@@ -301,6 +320,12 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
         }
       } finally {
         responder.cancelAutoDefer();
+      }
+
+      if (!dispatched) {
+        await responder.settled();
+        if (responder.state === "unacknowledged") await responder.deferUpdate();
+        return;
       }
 
       if (!sessions.has(session.id)) return;

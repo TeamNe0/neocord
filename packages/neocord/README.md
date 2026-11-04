@@ -122,6 +122,8 @@ export default defineMiddleware(
 
 ## Live components
 
+Every click re-checks the `guildOnly` and `permissions` of the route that opened the session, and runs its middleware with `ctx.kind` set to `"button"` or `"select"`. `cooldown` does not apply to clicks. Past those checks, anyone who can see the message can click, so compare `event.user.id` when only the original user should be able to.
+
 `onClick` and `onSelect` keep a component mounted, with `useState` and effects working as normal.
 
 ```tsx

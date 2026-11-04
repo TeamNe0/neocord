@@ -2,7 +2,7 @@ import { Message, renderAsync, renderModal, type ModalRenderResult, type RenderR
 import { isValidElement, type ComponentType, type ReactElement, type ReactNode } from "react";
 import { NeocordContext } from "../context-hook.tsx";
 import type { AnyContext, LayoutProps, ModalDefinition, ModalRenderContext } from "../types.ts";
-import type { LiveErrorHandler, LiveStore, OpenedRoot } from "./live-store.ts";
+import type { LiveAccess, LiveErrorHandler, LiveStore, OpenedRoot } from "./live-store.ts";
 
 export interface RenderRequest {
   node: ReactNode;
@@ -35,8 +35,9 @@ export async function renderForInteraction(
   request: RenderRequest,
   store: LiveStore,
   onError?: LiveErrorHandler,
+  access?: LiveAccess,
 ): Promise<OpenedRoot> {
-  const opened = await store.open(composeTree(request), onError);
+  const opened = await store.open(composeTree(request), onError, access);
   try {
     assertNotEmpty(opened.payload);
   } catch (error) {

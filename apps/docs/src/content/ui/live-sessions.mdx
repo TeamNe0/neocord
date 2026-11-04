@@ -82,7 +82,9 @@ return <TextDisplay>Last clicked by {interaction?.user.username ?? "nobody"}</Te
 
 <Callout kind="warn">
 
-Anyone who can see the message can click. Clicks skip `guildOnly`, `permissions`, `cooldown` and middleware, because they go straight to the session. Check `event.user.id` or `event.memberPermissions` yourself when it matters, or make the message ephemeral.
+Every click re-checks the `guildOnly` and `permissions` of the route that opened the session, then runs its middleware with `ctx.kind` set to `"button"` or `"select"`. Middleware limited with `kinds: ["command"]` does not run for clicks, and `cooldown` is not applied to them.
+
+Past those checks, anyone who can see the message can click, not only the person who ran the command. Compare `event.user.id` with the original user when that matters, or make the message ephemeral.
 
 </Callout>
 

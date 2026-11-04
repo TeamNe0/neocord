@@ -278,6 +278,72 @@ describe("live sessions", () => {
     expect((await runCommand(counter)).live).toBeNull();
   });
 
+  test("clicks re-check the permissions of the route that opened the session", async () => {
+    const guarded = defineCommand({
+      description: "d",
+      guildOnly: true,
+      permissions: ["BanMembers"],
+      execute: () => <Counter />,
+    });
+    const moderator = mockMember({ permissions: ["BanMembers"] });
+    const { live } = await runCommand(guarded, { live: true, member: moderator });
+
+    const denied = await live!.click("add", { member: mockMember({ guild: moderator.guild, permissions: [] }) });
+    expect(denied.text).toContain("permissions");
+    expect(denied.ephemeral).toBe(true);
+    expect(denied.updates).toHaveLength(0);
+
+    const allowed = await live!.click("add", { member: moderator });
+    expect(allowed.text).toContain("count 1");
+    await live!.close();
+  });
+
+  test("clicks run the middleware chain, which can reject them without touching state", async () => {
+    const seen: string[] = [];
+    const gate = defineMiddleware(async (ctx, next) => {
+      seen.push(ctx.kind);
+      if (ctx.user.username === "blocked") return <TextDisplay>Denied</TextDisplay>;
+      await next();
+    });
+    const { live } = await runCommand(counter, { live: true, middleware: [gate], user: mockUser({ username: "owner" }) });
+
+    const denied = await live!.click("add", { user: mockUser({ username: "blocked" }) });
+    expect(denied.text).toBe("Denied");
+    expect(denied.updates).toHaveLength(0);
+
+    const allowed = await live!.click("add", { user: mockUser({ username: "owner" }) });
+    expect(allowed.text).toBe("count 1 by owner");
+    expect(seen).toEqual(["command", "button", "button"]);
+    await live!.close();
+  });
+
+  test("a click middleware that stops silently acknowledges the interaction", async () => {
+    const stop = defineMiddleware(async (ctx, next) => {
+      if (ctx.kind === "command") await next();
+    });
+    const { live } = await runCommand(counter, { live: true, middleware: [stop] });
+    const result = await live!.click("add");
+    expect(result.deferredUpdate).toBe(true);
+    expect(result.updates).toHaveLength(0);
+    await live!.close();
+  });
+
+  test("middleware limited to commands does not run for clicks", async () => {
+    const onlyCommands = defineMiddleware(
+      async (_ctx, next) => {
+        await next();
+        calls += 1;
+      },
+      { kinds: ["command"] },
+    );
+    let calls = 0;
+    const { live } = await runCommand(counter, { live: true, middleware: [onlyCommands], user: mockUser({ username: "owner" }) });
+    const result = await live!.click("add");
+    expect(result.text).toBe("count 1 by owner");
+    expect(calls).toBe(1);
+    await live!.close();
+  });
+
   test("clicks and selects drive the mounted tree", async () => {
     const owner = mockUser({ username: "owner" });
     const { live, text } = await runCommand(counter, { live: true, user: owner });
