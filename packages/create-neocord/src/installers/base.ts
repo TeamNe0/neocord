@@ -1,5 +1,5 @@
 import { resolveVersion } from "../versions.ts";
-import { addDependencies, addDevDependencies, copyTemplate, type Installer } from "./shared.ts";
+import { addDependencies, addDevDependencies, copyTemplate, type Installer, replaceInFile } from "./shared.ts";
 
 export const baseInstaller: Installer = async (context) => {
   await copyTemplate(context, "base");
@@ -15,6 +15,7 @@ export const baseInstaller: Installer = async (context) => {
 
   if (context.options.packageManager === "bun") {
     addDevDependencies(context, ["@types/bun"]);
+    await replaceInFile(context, "tsconfig.json", '"types": ["node"]', '"types": ["node", "bun"]');
   }
 
   Object.assign(context.packageJson.scripts, {

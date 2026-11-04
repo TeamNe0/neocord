@@ -69,6 +69,7 @@ async function renderReadme(context: InstallerContext): Promise<void> {
   const path = join(targetDir, "README.md");
   const replacements: Record<string, string> = {
     projectName,
+    imageName: projectName.replace(/^@/, ""),
     install: installCommand(packageManager),
     dev: runScriptCommand(packageManager, "dev"),
     scripts: scriptRows(context.options),
