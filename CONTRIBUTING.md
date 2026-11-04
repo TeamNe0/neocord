@@ -4,7 +4,7 @@ Read [ARCHITECTURE.md](./ARCHITECTURE.md) first. It is the contract between the 
 
 ## Setup
 
-You need [Bun](https://bun.com) 1.4 or newer and Node.js 22.12 or newer.
+You need [Bun](https://bun.com) 1.4 or newer and Node.js 22.22 or newer.
 
 ```bash
 bun install
@@ -20,6 +20,7 @@ bun run build
 | `bun run test` | Runs every test suite |
 | `bun run lint` | Lints the packages and the example bot |
 | `bun run check:packages` | Validates the published shape of each package |
+| `bun run e2e` | Packs the real tarballs, scaffolds projects and runs them end to end |
 
 ## Conventions
 

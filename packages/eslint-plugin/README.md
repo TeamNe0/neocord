@@ -97,7 +97,7 @@ Severity columns show `recommended` / `strict`. Rules marked with a wrench have 
 | --- | --- | --- | --- |
 | [`no-direct-interaction-reply`](https://neocord.dev/docs/eslint/no-direct-interaction-reply) | warn / error | | Forbids `ctx.interaction.reply` and friends. Use `ctx.reply` or return JSX. |
 | [`no-client-instantiation`](https://neocord.dev/docs/eslint/no-client-instantiation) | error / error | | Forbids creating a discord.js `Client` or `ShardingManager`, or calling `.login()` on a client, in project source. |
-| [`no-process-env`](https://neocord.dev/docs/eslint/no-process-env) | warn / error | | Forbids `process.env` outside `src/env.ts` and `neocord.config.*`. |
+| [`no-process-env`](https://neocord.dev/docs/eslint/no-process-env) | warn / error | | Forbids `process.env` outside `src/env.ts` and root config files such as `neocord.config.ts` or `drizzle.config.ts`. |
 | [`no-hardcoded-token`](https://neocord.dev/docs/eslint/no-hardcoded-token) | error / error | | Forbids strings shaped like Discord tokens. |
 | [`no-blocking-calls`](https://neocord.dev/docs/eslint/no-blocking-calls) | warn / error | | Forbids `*Sync` calls from `fs` and `child_process`, and `Atomics.wait`, in route files. |
 | [`prefer-guild-only`](https://neocord.dev/docs/eslint/prefer-guild-only) | warn / error | bulb | Recommends `guildOnly: true` over `ctx.guild!` and `ctx.member!`. |
