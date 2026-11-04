@@ -113,7 +113,7 @@ export default defineMiddleware(
 );
 ```
 
-- Middleware runs root to leaf, and `ctx` narrows to `kinds`. A returned node short-circuits and replies. `next()` throws if called twice. Autocomplete does not run middleware.
+- Middleware runs root to leaf, and `ctx` narrows to `kinds`. A returned node short-circuits and replies. `next()` throws if called twice. Autocomplete does not run middleware, but it does check `guildOnly` and `permissions`, and answers a denied user with an empty list. A modal's `schema` runs after middleware, so `ctx.values` only exists in `submit`.
 - Layouts are plain components that wrap every node handlers return or send, unless `layout: false`. They do not apply to modals or error views. A returned `<Message>` stays at the root with layouts inside it.
 - `error.tsx` receives `{ error, ctx }` and is shown ephemerally. The closest one wins, and a built-in message covers the rest. Every error is logged.
 - `loading.tsx` applies to commands. Its UI is sent immediately and the handler's result replaces it. `showModal` cannot follow it, because a modal must be the first response.

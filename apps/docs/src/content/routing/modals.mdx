@@ -116,6 +116,8 @@ const schema = z.object({
 });
 ```
 
+The schema runs after [middleware](/docs/handlers/middleware), so a user that middleware blocks never reaches async `refine` logic, and `ctx.values` is not available to middleware. It runs before `cooldown`, so a failed parse does not use up the cooldown.
+
 `TextInput` values are omitted when left blank, so use `.optional()` for a field the user can skip. If parsing fails, `submit` does not run, and the user gets an ephemeral message with the issues:
 
 <DiscordPreview ephemeral label="The modal validation message in Discord">
@@ -132,7 +134,7 @@ Everything in the [handler context](/docs/handlers/context) except `showModal`, 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `params` | From the route | The params from the custom id. |
-| `values` | From the schema | The parsed values. |
+| `values` | From the schema | The parsed values. Set after middleware, so only `submit` can read them. |
 | `fields` | `ModalSubmitFields` | The discord.js fields, for uploaded files and raw access. |
 | `update(node, options?)` | `Promise<void>` | Updates the message the modal was opened from. |
 | `deferUpdate()` | `Promise<void>` | Acknowledges without changing that message. |

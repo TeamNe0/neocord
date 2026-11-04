@@ -43,7 +43,9 @@ import {
   type EventContext,
   type InferAppContext,
   type InferOption,
+  type InteractionKind,
   type Manifest,
+  type MiddlewareContextForKind,
   type ModalContext,
   type ModalRenderContext,
   type ModuleNamespace,
@@ -341,9 +343,17 @@ describe("handler inference", () => {
 
   test("middleware context follows kinds", () => {
     defineMiddleware((ctx, next) => {
-      expectTypeOf(ctx).toEqualTypeOf<AnyContext>();
+      expectTypeOf(ctx).toEqualTypeOf<MiddlewareContextForKind[InteractionKind]>();
       expectTypeOf(next).returns.toEqualTypeOf<Promise<void>>();
     });
+    defineMiddleware(
+      (ctx) => {
+        expectTypeOf(ctx).toEqualTypeOf<Omit<ModalContext, "values">>();
+        expectTypeOf(ctx).not.toHaveProperty("values");
+        expectTypeOf(ctx).toHaveProperty("fields");
+      },
+      { kinds: ["modal"] },
+    );
     defineMiddleware(
       (ctx) => {
         expectTypeOf(ctx).toEqualTypeOf<ContextForKind["command" | "button"]>();

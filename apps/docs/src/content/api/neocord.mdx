@@ -228,7 +228,7 @@ interface ContextFactoryArgs {
 
 type ContextFactory<T> = (args: ContextFactoryArgs) => Awaitable<ContextResult<T>>;
 type MiddlewareHandler<K extends InteractionKind = InteractionKind> = (
-  ctx: ContextForKind[K],
+  ctx: MiddlewareContextForKind[K],
   next: MiddlewareNext,
 ) => Awaitable<HandlerResult>;
 type MiddlewareNext = () => Promise<void>;
@@ -451,6 +451,7 @@ interface CommandInfo {
 | `InteractionKind` | `"command" \| "user-command" \| "message-command" \| "button" \| "select" \| "modal"` |
 | `AnyContext` | `ContextForKind[InteractionKind]`. |
 | `ContextForKind` | Maps each interaction kind to its context type. |
+| `MiddlewareContextForKind` | The same map for middleware. Its modal context has no `values`, because the schema runs after middleware. |
 | `CacheOf<G>` | `"cached"` when `G` is `true`, otherwise `CacheType`. |
 | `GuildValue<G>` | `Guild` when `G` is `true`, otherwise `Guild \| null`. |
 | `MemberValue<G>` | `GuildMember` when `G` is `true`, otherwise `GuildMember \| null`. |

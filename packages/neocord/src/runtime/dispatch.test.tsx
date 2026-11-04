@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Container, Message, TextDisplay } from "@neocord/react";
+import { ActionRow, Button, Container, Message, TextDisplay } from "@neocord/react";
 import { MessageFlags, type Interaction, type PermissionsString } from "discord.js";
 import { Suspense, use, type ReactNode } from "react";
 import { createLogger, type LogMethod } from "../logger.ts";
@@ -310,6 +310,228 @@ describe("autocomplete dispatch", () => {
     const unknown = await run([], { kind: "autocomplete", commandName: "nope", focused: { name: "x", value: "" } });
     expect(unknown.recording.choices).toEqual([]);
   });
+
+  describe("access checks", () => {
+    const guarded = (metadata: { permissions?: readonly PermissionsString[]; guildOnly?: boolean }, onCall: () => void) =>
+      defineCommand({
+        description: "d",
+        ...metadata,
+        options: {
+          topic: option.string({
+            description: "d",
+            autocomplete() {
+              onCall();
+              return [{ name: "secret", value: "secret" }];
+            },
+          }),
+        },
+        execute: () => "x",
+      });
+    const focused = { name: "topic", value: "" };
+
+    test("a member without the permissions gets no choices and the handler does not run", async () => {
+      let calls = 0;
+      const member = mockMember({ permissions: [] });
+      const result = await run([route("command", "search", guarded({ permissions: ["BanMembers"] }, () => (calls += 1)))], {
+        kind: "autocomplete",
+        commandName: "search",
+        focused,
+        member,
+        guild: member.guild,
+      });
+      expect(calls).toBe(0);
+      expect(result.recording.choices).toEqual([]);
+      expect(result.methods).toEqual(["respond"]);
+    });
+
+    test("a DM user on a guildOnly route gets no choices and the handler does not run", async () => {
+      let calls = 0;
+      const result = await run([route("command", "search", guarded({ guildOnly: true }, () => (calls += 1)))], {
+        kind: "autocomplete",
+        commandName: "search",
+        focused,
+      });
+      expect(calls).toBe(0);
+      expect(result.recording.choices).toEqual([]);
+      expect(result.methods).toEqual(["respond"]);
+    });
+
+    test("a permissions route in a DM gets no choices", async () => {
+      let calls = 0;
+      const result = await run([route("command", "search", guarded({ permissions: ["BanMembers"] }, () => (calls += 1)))], {
+        kind: "autocomplete",
+        commandName: "search",
+        focused,
+      });
+      expect(calls).toBe(0);
+      expect(result.recording.choices).toEqual([]);
+    });
+
+    test("a member with the permissions gets the handler's choices", async () => {
+      let calls = 0;
+      const member = mockMember({ permissions: ["BanMembers"] });
+      const result = await run(
+        [route("command", "search", guarded({ guildOnly: true, permissions: ["BanMembers"] }, () => (calls += 1)))],
+        { kind: "autocomplete", commandName: "search", focused, member, guild: member.guild },
+      );
+      expect(calls).toBe(1);
+      expect(result.recording.choices).toEqual([{ name: "secret", value: "secret" }]);
+    });
+
+    test("middleware stays skipped for autocomplete", async () => {
+      let middlewareCalls = 0;
+      const middleware = [
+        mod(
+          "m.ts",
+          defineMiddleware((_ctx, next) => {
+            middlewareCalls += 1;
+            return next();
+          }),
+        ),
+      ];
+      const result = await run([route("command", "search", guarded({}, () => undefined), { middleware })], {
+        kind: "autocomplete",
+        commandName: "search",
+        focused,
+      });
+      expect(middlewareCalls).toBe(0);
+      expect(result.recording.choices).toHaveLength(1);
+    });
+  });
+});
+
+describe("middleware on live clicks", () => {
+  type Seen = { kind: string; params?: unknown; options?: unknown };
+
+  const liveView = (): ReactNode => (
+    <ActionRow>
+      <Button label="x" onClick={() => undefined} />
+    </ActionRow>
+  );
+
+  const liveCustomId = (recording: Recording): string =>
+    /"custom_id":"(~[^"]+)"/.exec(JSON.stringify(recording.replies[0] ?? recording.updates[0]))?.[1] ?? "";
+
+  const recordingMiddleware = (seen: Seen[]) => [
+    mod(
+      "m.ts",
+      defineMiddleware(async (ctx, next) => {
+        const entry = ctx as unknown as Seen;
+        seen.push({ kind: entry.kind, params: entry.params, options: entry.options });
+        await next();
+      }),
+    ),
+  ];
+
+  test("gets the options of the command that opened the session", async () => {
+    const seen: Seen[] = [];
+    const definition = defineCommand({
+      description: "d",
+      options: { reason: option.string({ description: "d" }) },
+      execute: () => liveView(),
+    });
+    const harness = createHarness({
+      manifest: manifestOf([route("command", "x", definition, { middleware: recordingMiddleware(seen) })]),
+    });
+    const origin = createFakeInteraction({ kind: "command", commandName: "x", options: { reason: "spam" } }) as Interaction & {
+      recording: Recording;
+    };
+    await harness.dispatch(origin);
+    await harness.dispatch(createFakeInteraction({ kind: "button", customId: liveCustomId(origin.recording) }));
+    await harness.close();
+    expect(seen.map((entry) => entry.kind)).toEqual(["command", "button"]);
+    expect(seen[1]?.options).toEqual({ reason: "spam" });
+    expect(seen[1]?.params).toEqual({});
+  });
+
+  test("gets the params of the button route that opened the session", async () => {
+    const seen: Seen[] = [];
+    const definition = defineButton("core/open/[userId]", { execute: () => liveView() });
+    const harness = createHarness({
+      manifest: manifestOf([route("button", "core/open/[userId]", definition, { middleware: recordingMiddleware(seen) })]),
+    });
+    const origin = createFakeInteraction({ kind: "button", customId: "core/open/42" }) as Interaction & { recording: Recording };
+    await harness.dispatch(origin);
+    await harness.dispatch(createFakeInteraction({ kind: "button", customId: liveCustomId(origin.recording) }));
+    await harness.close();
+    expect(seen[1]?.params).toEqual({ userId: "42" });
+    expect(seen[1]?.options).toBeUndefined();
+  });
+});
+
+describe("auto defer cleanup", () => {
+  const slow = async (): Promise<void> => {
+    await sleep(25);
+  };
+
+  test("a slow reply button returning nothing removes the thinking placeholder", async () => {
+    const definition = defineButton("core/slow", { respond: "reply", execute: slow });
+    const result = await run([route("button", "core/slow", definition)], { kind: "button", customId: "core/slow" }, { autoDeferAfter: 5 });
+    expect(result.methods).toEqual(["deferReply", "deleteReply"]);
+    expect(result.logs.some((entry) => entry.level === "warn" && entry.line.includes("removing the placeholder"))).toBe(true);
+  });
+
+  test("a slow reply select returning nothing removes the thinking placeholder", async () => {
+    const definition = defineSelect("core/slow", { respond: "reply", execute: slow });
+    const result = await run(
+      [route("select", "core/slow", definition)],
+      { kind: "string-select", customId: "core/slow", values: ["a"] },
+      { autoDeferAfter: 5 },
+    );
+    expect(result.methods).toEqual(["deferReply", "deleteReply"]);
+  });
+
+  test("a slow modal submit returning nothing removes the thinking placeholder", async () => {
+    const definition = defineModal("core/slow", { title: "t", render: () => null, submit: slow });
+    const result = await run([route("modal", "core/slow", definition)], { kind: "modal", customId: "core/slow" }, { autoDeferAfter: 5 });
+    expect(result.methods).toEqual(["deferReply", "deleteReply"]);
+  });
+
+  test("a slow modal from a message with respond reply removes the thinking placeholder", async () => {
+    const definition = defineModal("core/slow", { title: "t", render: () => null, submit: slow });
+    const result = await run(
+      [route("modal", "core/slow", definition)],
+      { kind: "modal", customId: "core/slow", message: mockMessage() },
+      { autoDeferAfter: 5 },
+    );
+    expect(result.methods).toEqual(["deferReply", "deleteReply"]);
+  });
+
+  test("slow middleware that blocks silently removes the thinking placeholder", async () => {
+    const middleware = [
+      mod(
+        "block.ts",
+        defineMiddleware(async () => {
+          await sleep(25);
+        }),
+      ),
+    ];
+    const result = await run(
+      [route("command", "x", command(() => "x"), { middleware })],
+      { kind: "command", commandName: "x" },
+      { autoDeferAfter: 5 },
+    );
+    expect(result.methods).toEqual(["deferReply", "deleteReply"]);
+  });
+
+  test("a handler that answered after the auto defer keeps its answer", async () => {
+    const definition = defineButton("core/slow", {
+      respond: "reply",
+      async execute(ctx) {
+        await sleep(25);
+        await ctx.reply("done");
+      },
+    });
+    const result = await run([route("button", "core/slow", definition)], { kind: "button", customId: "core/slow" }, { autoDeferAfter: 5 });
+    expect(result.methods).toEqual(["deferReply", "editReply"]);
+    expect(result.recording.deletes).toBe(0);
+  });
+
+  test("an update button keeps its message when it was auto deferred and returned nothing", async () => {
+    const definition = defineButton("core/slow", { execute: slow });
+    const result = await run([route("button", "core/slow", definition)], { kind: "button", customId: "core/slow" }, { autoDeferAfter: 5 });
+    expect(result.methods).toEqual(["deferUpdate"]);
+  });
 });
 
 describe("context menu dispatch", () => {
@@ -532,6 +754,97 @@ describe("modal dispatch", () => {
       modalValues: { text: "hello", blank: "", many: ["a", "b"], tick: true, untick: false },
     });
     expect(seen).toEqual({ text: "hello", many: ["a", "b"], tick: true, untick: false });
+  });
+
+  describe("schema parsing runs after middleware", () => {
+    test("a blocked user does not trigger the schema and gets the middleware reply", async () => {
+      let validated = 0;
+      const schema = fakeSchema(async () => {
+        validated += 1;
+        return { issues: [{ message: "Too short" }] };
+      });
+      const definition = defineModal("core/ban", { title: "t", schema, render: () => null, submit: () => "x" });
+      const middleware = [mod("deny.ts", defineMiddleware(() => "Blocked"))];
+      const result = await run([route("modal", "core/ban", definition, { middleware })], { kind: "modal", customId: "core/ban" });
+      expect(validated).toBe(0);
+      expect(text(result.recording.replies[0])).toBe("Blocked");
+      expect(result.recording.replies).toHaveLength(1);
+    });
+
+    test("middleware runs first and does not see values, while fields stay readable", async () => {
+      const order: string[] = [];
+      let seenValues: unknown = "unset";
+      let seenField: unknown;
+      const schema = fakeSchema((value) => {
+        order.push("schema");
+        return { value: value as { reason: string } };
+      });
+      const definition = defineModal("core/ban", {
+        title: "t",
+        schema,
+        render: () => null,
+        submit(ctx) {
+          order.push("submit");
+          return ctx.values.reason;
+        },
+      });
+      const middleware = [
+        mod(
+          "m.ts",
+          defineMiddleware(
+            async (ctx, next) => {
+              order.push("middleware");
+              seenValues = (ctx as unknown as { values?: unknown }).values;
+              seenField = ctx.fields.getTextInputValue("reason");
+              await next();
+            },
+            { kinds: ["modal"] },
+          ),
+        ),
+      ];
+      const result = await run([route("modal", "core/ban", definition, { middleware })], {
+        kind: "modal",
+        customId: "core/ban",
+        modalValues: { reason: "spam" },
+      });
+      expect(order).toEqual(["middleware", "schema", "submit"]);
+      expect(seenValues).toBeUndefined();
+      expect(seenField).toBe("spam");
+      expect(text(result.recording.replies[0])).toBe("spam");
+    });
+
+    test("a failed parse after middleware still replies with the issues and skips submit", async () => {
+      let submitted = false;
+      const schema = fakeSchema(() => ({ issues: [{ message: "Too short", path: ["reason"] }] }));
+      const definition = defineModal("core/ban", {
+        title: "t",
+        schema,
+        render: () => null,
+        submit: () => {
+          submitted = true;
+        },
+      });
+      const middleware = [mod("pass.ts", defineMiddleware((_ctx, next) => next()))];
+      const result = await run([route("modal", "core/ban", definition, { middleware })], { kind: "modal", customId: "core/ban" });
+      expect(submitted).toBe(false);
+      expect(text(result.recording.replies[0])).toContain("reason: Too short");
+      expect(ephemeral(result.recording.replies[0])).toBe(true);
+    });
+
+    test("a failed parse does not consume the cooldown", async () => {
+      let valid = false;
+      const schema = fakeSchema(() => (valid ? { value: { reason: "ok" } } : { issues: [{ message: "Bad" }] }));
+      const definition = defineModal("core/ban", { title: "t", schema, cooldown: "1h", render: () => null, submit: () => "ok" });
+      const harness = createHarness({ manifest: manifestOf([route("modal", "core/ban", definition)]) });
+      const first = createFakeInteraction({ kind: "modal", customId: "core/ban" }) as Interaction & { recording: Recording };
+      await harness.dispatch(first);
+      valid = true;
+      const second = createFakeInteraction({ kind: "modal", customId: "core/ban" }) as Interaction & { recording: Recording };
+      await harness.dispatch(second);
+      await harness.close();
+      expect(text(first.recording.replies[0])).toContain("Bad");
+      expect(text(second.recording.replies[0])).toBe("ok");
+    });
   });
 
   test("returning nothing acknowledges silently, or defers an update from a message", async () => {

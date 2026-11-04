@@ -25,7 +25,7 @@ export default defineCommand({
 
 `undefined`, `null` and booleans count as returning nothing. Anything else is rendered. A node that renders no components throws "The returned node rendered no components, so there is nothing to send to Discord."
 
-If a command was deferred by `autoDefer` and then returns nothing, neocord logs a warning and deletes the placeholder.
+If `autoDefer` showed a "thinking" placeholder and the handler then returns nothing, neocord logs a warning and deletes the placeholder. That applies to commands, context menus, modal submits, buttons and selects with `respond: "reply"`, and middleware that stops silently. A button or select that updates shows no placeholder, so there is nothing to delete.
 
 ## The methods
 

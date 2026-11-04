@@ -92,6 +92,8 @@ interface SharedContext extends BaseContext, GuildScope {
   showModal(route: string, params?: Record<string, unknown>): Promise<void>;
 }
 
+type AccessCheckedInteraction = RepliableInteraction | AutocompleteInteraction;
+
 interface RouteTools {
   responder: Responder;
   shared: SharedContext;
@@ -235,7 +237,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
       reportError(error, route, ctx, liveResponder);
 
     const liveAccess: LiveAccess = (clicked, liveResponder, proceed) =>
-      guardLiveInteraction(route, clicked, liveResponder, proceed);
+      guardLiveInteraction(route, ctx, clicked, liveResponder, proceed);
 
     const deliver = async (
       node: ReactNode,
@@ -301,7 +303,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     };
   };
 
-  const resolveScope = async (route: CompiledRoute, interaction: RepliableInteraction): Promise<GuildScope> => {
+  const resolveScope = async (route: CompiledRoute, interaction: AccessCheckedInteraction): Promise<GuildScope> => {
     let guild = interaction.guild;
     if (guild === null && route.guildOnly && interaction.guildId !== null) {
       guild = await client.guilds.fetch(interaction.guildId).catch((error: unknown) => {
@@ -340,36 +342,38 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     return false;
   };
 
+  const evaluateAccess = async (
+    route: CompiledRoute,
+    interaction: AccessCheckedInteraction,
+  ): Promise<{ scope: GuildScope; denial: null } | { scope: null; denial: string }> => {
+    const scope = await resolveScope(route, interaction);
+    if (route.guildOnly && (scope.guild === null || scope.member === null)) {
+      return { scope: null, denial: GUILD_ONLY_TEXT };
+    }
+    if (route.permissions.length > 0) {
+      const granted = interaction.memberPermissions;
+      if (granted === null) return { scope: null, denial: GUILD_ONLY_TEXT };
+      const missing = route.permissions.filter((permission) => !granted.has(permission));
+      if (missing.length > 0) {
+        return { scope: null, denial: `You need these permissions to do that: ${missing.map(humanizePermission).join(", ")}.` };
+      }
+    }
+    return { scope, denial: null };
+  };
+
   const checkAccess = async (
     route: CompiledRoute,
     interaction: RepliableInteraction,
     responder: Responder,
   ): Promise<GuildScope | null> => {
-    const scope = await resolveScope(route, interaction);
-    if (route.guildOnly && (scope.guild === null || scope.member === null)) {
-      await responder.send(plainNotice(GUILD_ONLY_TEXT), { ephemeral: true });
-      return null;
-    }
-    if (route.permissions.length > 0) {
-      const granted = interaction.memberPermissions;
-      if (granted === null) {
-        await responder.send(plainNotice(GUILD_ONLY_TEXT), { ephemeral: true });
-        return null;
-      }
-      const missing = route.permissions.filter((permission) => !granted.has(permission));
-      if (missing.length > 0) {
-        await responder.send(
-          plainNotice(`You need these permissions to do that: ${missing.map(humanizePermission).join(", ")}.`),
-          { ephemeral: true },
-        );
-        return null;
-      }
-    }
+    const { scope, denial } = await evaluateAccess(route, interaction);
+    if (denial !== null) await responder.send(plainNotice(denial), { ephemeral: true });
     return scope;
   };
 
   const guardLiveInteraction = async (
     route: CompiledRoute,
+    origin: AnyContext | null,
     interaction: LiveComponentInteraction,
     responder: Responder,
     proceed: () => Promise<void>,
@@ -377,11 +381,13 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     const scope = await checkAccess(route, interaction, responder);
     if (scope === null) return;
 
+    const { params, options: originOptions } = (origin ?? {}) as { params?: unknown; options?: unknown };
     const tools = createTools(route, interaction, "update", scope, responder);
     const ctx = {
       ...tools.shared,
       kind: interaction.isButton() ? "button" : "select",
-      params: {},
+      params: params ?? {},
+      ...(originOptions === undefined ? {} : { options: originOptions }),
       message: interaction.message,
       update: tools.update,
       deferUpdate: () => responder.deferUpdate(),
@@ -392,11 +398,20 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     await runMiddleware(route.middleware, ctx, proceed, (node) => ctx.reply(node));
   };
 
+  const removeAutoDeferPlaceholder = async (route: CompiledRoute, tools: RouteTools): Promise<void> => {
+    const { responder } = tools;
+    await responder.settled();
+    if (responder.autoDeferred && responder.state === "deferred") {
+      logger.warn(`${route.kind} ${route.id} (${route.file}) was deferred automatically but returned nothing, removing the placeholder.`);
+      await responder.deleteReply();
+    }
+  };
+
   const run = async <C extends AnyContext>(
     route: CompiledRoute,
     interaction: RepliableInteraction,
     deferMode: "reply" | "update",
-    build: (tools: RouteTools, scope: GuildScope) => Promise<C | null>,
+    build: (tools: RouteTools, scope: GuildScope) => Promise<C>,
     terminal: (ctx: C, tools: RouteTools) => Promise<void>,
   ): Promise<void> => {
     let tools: RouteTools | null = null;
@@ -409,7 +424,6 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
       tools = createTools(route, interaction, deferMode, scope);
       tools.responder.armAutoDefer();
       ctx = await build(tools, scope);
-      if (ctx === null) return;
       tools.bind(ctx);
 
       const activeTools = tools;
@@ -420,6 +434,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
         () => terminal(activeCtx, activeTools),
         (node) => activeCtx.reply(node),
       );
+      await removeAutoDeferPlaceholder(route, activeTools);
     } catch (error) {
       const responder = tools?.responder ?? bootstrap;
       if (error instanceof OptionResolutionError) {
@@ -445,9 +460,6 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     await responder.settled();
     if (responder.state === "unacknowledged") {
       logger.warn(`${route.kind} ${route.id} (${route.file}) returned nothing and did not acknowledge the interaction.`);
-    } else if (responder.autoDeferred && responder.state === "deferred") {
-      logger.warn(`${route.kind} ${route.id} (${route.file}) was deferred automatically but returned nothing, removing the placeholder.`);
-      await responder.deleteReply();
     } else if (responder.showingPlaceholder) {
       logger.warn(`${route.kind} ${route.id} (${route.file}) returned nothing after loading.tsx, so its loading UI stays on the message.`);
     }
@@ -558,12 +570,18 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
         await interaction.respond([]);
         return;
       }
+      const { scope, denial } = await evaluateAccess(route, interaction);
+      if (scope === null) {
+        logger.debug(`Autocomplete denied for "/${key}" option "${focused.name}": ${denial}`);
+        await interaction.respond([]);
+        return;
+      }
       const ctx: AutocompleteContext = {
         ...createBaseContext(contextOptions, route),
         kind: "autocomplete",
         interaction,
-        guild: interaction.guild,
-        member: isGuildMember(interaction.member) ? interaction.member : null,
+        guild: scope.guild,
+        member: scope.member,
         user: interaction.user,
         focused: String(focused.value),
         optionName: focused.name,
@@ -676,6 +694,17 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
       interaction,
       route.definition.respond === "update" ? "update" : "reply",
       async (tools) => {
+        const { showModal: _showModal, ...shared } = tools.shared;
+        return {
+          ...(shared as unknown as ModalContext),
+          kind: "modal",
+          params,
+          fields: interaction.fields,
+          update: tools.update,
+          deferUpdate: () => tools.responder.deferUpdate(),
+        } as ModalContext;
+      },
+      async (ctx, tools) => {
         const raw = collectModalValues(interaction);
         let values: unknown = raw;
         const schema = route.definition.schema;
@@ -697,22 +726,11 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
               }),
               { ephemeral: true },
             );
-            return null;
+            return;
           }
           values = parsed.value;
         }
-        const { showModal: _showModal, ...shared } = tools.shared;
-        return {
-          ...(shared as unknown as ModalContext),
-          kind: "modal",
-          params,
-          values,
-          fields: interaction.fields,
-          update: tools.update,
-          deferUpdate: () => tools.responder.deferUpdate(),
-        } as ModalContext;
-      },
-      async (ctx, tools) => {
+        ctx.values = values as ModalContext["values"];
         if (!(await applyCooldown(route, ctx.user, tools))) return;
         const result = await route.definition.submit(ctx);
         if (isRenderable(result)) {

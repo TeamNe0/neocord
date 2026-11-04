@@ -28,7 +28,9 @@ Middleware runs for commands, context menus, buttons, selects and modals. It doe
 - Autocomplete handlers.
 - Events and tasks. A file named `middleware.ts` directly in `events` or `tasks` is an event or task with that name, not middleware.
 
-It also runs on clicks in a [live session](/docs/ui/live-sessions). The chain of the route that opened the session runs again, with `ctx.kind` set to `"button"` or `"select"` and `ctx.params` empty. If it returns a node, neocord sends it with `ctx.reply` and the live handler does not run. Middleware limited with `kinds: ["command"]` skips these clicks.
+It also runs on clicks in a [live session](/docs/ui/live-sessions). The chain of the route that opened the session runs again, with `ctx.kind` set to `"button"` or `"select"`. `ctx.params` and `ctx.options` hold the values of the route that opened the session, so `ctx.params` is empty when a command opened it, and `ctx.options` is only there when a command opened it. If it returns a node, neocord sends it with `ctx.reply` and the live handler does not run. Middleware limited with `kinds: ["command"]` skips these clicks.
+
+On a modal, middleware runs before the [schema](/docs/routing/modals#schemas), so a blocked user never triggers it. `ctx.values` does not exist in middleware. Read raw input from `ctx.fields` there, and treat it as unvalidated.
 
 ## The handler signature
 
@@ -39,7 +41,7 @@ It also runs on clicks in a [live session](/docs/ui/live-sessions). The chain of
 | Calls `await next()` | The next middleware runs, and finally the route handler. |
 | Returns a node | neocord calls `ctx.reply(node)`. Without `next()`, the route handler never runs. |
 | Calls `ctx.reply` and does not call `next()` | The route handler never runs. |
-| Returns nothing and does not call `next()` | The route handler never runs and nothing is acknowledged, so Discord shows the interaction as failed. |
+| Returns nothing and does not call `next()` | The route handler never runs and nothing is acknowledged, so Discord shows the interaction as failed. If `autoDefer` already showed a "thinking" placeholder, it is deleted. |
 | Calls `next()` twice | The second call throws `next() was called more than once in middleware "file"`. |
 | Throws | The closest [error view](/docs/handlers/error-boundaries) is shown. |
 
@@ -83,7 +85,7 @@ Use [`src/context.ts`](/docs/handlers/app-context) for services that live as lon
 
 ## Ordering with other checks
 
-`guildOnly` and `permissions` run before middleware. `cooldown` and `loading.tsx` run after it, so a request denied by middleware does not consume a cooldown and does not send a loading message. The full order is on the [handler context](/docs/handlers/context#checks-before-the-handler) page.
+`guildOnly` and `permissions` run before middleware. A modal's `schema`, `cooldown` and `loading.tsx` run after it, so a request denied by middleware does not parse the form, does not consume a cooldown and does not send a loading message. The full order is on the [handler context](/docs/handlers/context#checks-before-the-handler) page.
 
 ## Testing
 

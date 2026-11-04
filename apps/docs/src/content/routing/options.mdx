@@ -117,7 +117,8 @@ The value's type stays `string` or `number`, because Discord does not stop a use
 
 - The handler may be async and returns at most 25 choices. neocord cuts off anything after that.
 - If it throws, the error is logged and Discord gets an empty list.
-- Autocomplete does not run middleware, `guildOnly`, `permissions` or `cooldown`.
+- `guildOnly` and `permissions` of the command are checked first. A user who fails them gets an empty list, the handler does not run, and no message is sent.
+- Autocomplete does not run middleware or `cooldown`.
 
 ## Bounds
 

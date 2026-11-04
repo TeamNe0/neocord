@@ -185,10 +185,11 @@ neocord runs these steps in order for commands, context menus, buttons, selects 
 1. Resolve `guild` and `member`, and enforce `guildOnly`.
 2. Enforce `permissions` against `interaction.memberPermissions`. A missing permission gets an ephemeral list of what is missing.
 3. Start the `autoDefer` timer.
-4. Build the context. This resolves options and parses the modal schema.
+4. Build the context. This resolves options.
 5. Run [middleware](/docs/handlers/middleware), root to leaf.
-6. Apply `cooldown`. It is per user and route, kept in memory, so middleware denials do not consume it.
-7. Send [`loading.tsx`](/docs/handlers/loading), for commands only.
-8. Run the handler and deliver what it returns.
+6. Parse the modal schema, for modals only. A failed parse replies with the issues and stops here.
+7. Apply `cooldown`. It is per user and route, kept in memory, so middleware denials and failed parses do not consume it.
+8. Send [`loading.tsx`](/docs/handlers/loading), for commands only.
+9. Run the handler and deliver what it returns.
 
 A required option that cannot be resolved stops at step 4 with an ephemeral notice. A required `member` option whose user has left the server replies "The user given for "name" is not a member of this server."

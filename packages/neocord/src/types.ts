@@ -423,8 +423,12 @@ export type AnyContext = ContextForKind[InteractionKind];
 
 export type MiddlewareNext = () => Promise<void>;
 
+export interface MiddlewareContextForKind extends Omit<ContextForKind, "modal"> {
+  modal: Omit<ModalContext, "values">;
+}
+
 export type MiddlewareHandler<K extends InteractionKind = InteractionKind> = (
-  ctx: ContextForKind[K],
+  ctx: MiddlewareContextForKind[K],
   next: MiddlewareNext,
 ) => Awaitable<HandlerResult>;
 
