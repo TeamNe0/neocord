@@ -375,7 +375,7 @@ interface ManifestRoute {
 
 ### Sharding
 
-`startManager({ config, shardFile })` wraps discord.js `ShardingManager`. It applies `sharding` config, logs lifecycle events and forwards SIGINT and SIGTERM. It is the production entry. `ctx.shards` exposes `id`, `ids`, `count`, `fetchClientValues`, `broadcastEval`, each typed. With no manager, they run against the local client, so handler code is the same in single-process development.
+`startManager({ config, shardFile })` wraps discord.js `ShardingManager`. It applies `sharding` config, logs lifecycle events and forwards SIGINT and SIGTERM. It is the production entry. It never deploys commands, because it has no manifest and must not load route modules: under `deploy.mode: "auto"`, `neocord start` runs the deploy step before launching the manager. `ctx.shards` exposes `id`, `ids`, `count`, `fetchClientValues`, `broadcastEval`, each typed. With no manager, they run against the local client, so handler code is the same in single-process development.
 
 `startBot({ config, manifest })` is the entry for one process: merges intents, builds the client, creates the app context, wires events, interactions and tasks, logs in, and shuts down cleanly on signals.
 
