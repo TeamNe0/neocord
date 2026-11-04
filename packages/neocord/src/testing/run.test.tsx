@@ -321,6 +321,33 @@ describe("live sessions", () => {
     await live!.close();
   });
 
+  test("a handler that replies separately keeps the live message targetable", async () => {
+    function Guarded(): ReactNode {
+      const [count, setCount] = useState(0);
+      return (
+        <>
+          <TextDisplay>{`count ${count}`}</TextDisplay>
+          <ActionRow>
+            <Button
+              label="guarded"
+              onClick={async (event) => {
+                if (count === 0) {
+                  await event.reply({ content: "not yet" });
+                }
+                setCount(count + 1);
+              }}
+            />
+          </ActionRow>
+        </>
+      );
+    }
+    const { live } = await runCommand(defineCommand({ description: "d", execute: () => <Guarded /> }), { live: true });
+    const first = await live!.click("guarded");
+    expect(first.replies).toHaveLength(1);
+    expect((await live!.click("guarded")).text).toBe("count 2");
+    await live!.close();
+  });
+
   test("a tree with no handlers has no session even when requested", async () => {
     const plain = defineCommand({ description: "d", execute: () => <TextDisplay>x</TextDisplay> });
     expect((await runCommand(plain, { live: true })).live).toBeNull();

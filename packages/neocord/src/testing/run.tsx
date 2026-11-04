@@ -234,7 +234,7 @@ function createLiveTestSession(harness: Harness, first: RenderResult | null, ori
         member: options.member !== undefined ? options.member : options.user === undefined ? (origin.member ?? null) : null,
       }),
     );
-    current = latestPayload(recording) ?? current;
+    current = recording.updates.at(-1) ?? recording.edits.at(-1) ?? current;
     return resultFrom(recording, harness.errors[seen] ?? null);
   };
 
