@@ -13,6 +13,7 @@ create neocord my-bot --db prisma --dialect sqlite
 | `db:push` | `prisma db push` | Apply the schema directly, which suits development. |
 | `db:generate` | `prisma generate` | Generate the Prisma client. |
 | `db:migrate` | `prisma migrate dev` | Create and apply a migration. |
+| `db:deploy` | `prisma migrate deploy` | Apply committed migrations in production. |
 | `db:studio` | `prisma studio` | Browse the data in a local UI. |
 | `postinstall` | `prisma generate` | Generates the client after install. |
 
@@ -47,6 +48,7 @@ Add the scripts to `package.json`:
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate"
   }
@@ -321,6 +323,6 @@ See [Docker](/docs/deployment/docker).
 
 ## Production
 
-`db:push` suits development. `db:migrate` runs `prisma migrate dev`, which creates migrations during development, and those belong in version control. Run the Prisma CLI's deploy command for your migrations before starting the bot. `prisma` is a dev dependency, so that step needs dev dependencies installed.
+`db:push` suits development. `db:migrate` runs `prisma migrate dev`, which creates migrations during development, and those belong in version control. Run `db:deploy` before starting the bot in production. `prisma` is a dev dependency, so that step needs dev dependencies installed.
 
 Each shard process creates its own client, so size connection pools for your [shard count](/docs/sharding). In [tests](/docs/testing), pass a fake or a test database with the `app` option.

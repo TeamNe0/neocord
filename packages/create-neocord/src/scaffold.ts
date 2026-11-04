@@ -58,6 +58,9 @@ function databaseSection(context: InstallerContext): string {
     `| ${run("db:push")} | Apply the schema directly, which suits development. |`,
     `| ${run("db:generate")} | ${context.options.database === "prisma" ? "Generate the Prisma client." : "Generate a SQL migration from the schema."} |`,
     `| ${run("db:migrate")} | ${context.options.database === "prisma" ? "Create and apply a migration." : "Apply pending migrations."} |`,
+    ...(context.options.database === "prisma"
+      ? [`| ${run("db:deploy")} | Apply committed migrations in production. |`]
+      : []),
     `| ${run("db:studio")} | Browse the data in a local UI. |`,
     "",
     "",
@@ -129,7 +132,7 @@ export async function scaffold(options: ProjectOptions, hooks: ScaffoldHooks = {
       scripts: {},
       dependencies: {},
       devDependencies: {},
-      engines: { node: ">=22.12.0" },
+      engines: { node: ">=22.22.0" },
     },
   };
 

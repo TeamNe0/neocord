@@ -30,6 +30,7 @@ export const prismaInstaller: Installer = async (context) => {
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     postinstall: "prisma generate",
   });
