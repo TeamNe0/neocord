@@ -1,4 +1,4 @@
-import { Children, isValidElement, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 const MANAGERS = ["bun", "npm", "pnpm", "yarn"] as const;
 type Manager = (typeof MANAGERS)[number];
@@ -24,7 +24,8 @@ function chooseManager(manager: Manager): void {
 }
 
 function managerOf(child: ReactNode): Manager | null {
-  if (!isValidElement<{ "data-pm"?: string }>(child)) return null;
+  if (!isValidElement<{ "data-pm"?: string; children?: ReactNode }>(child)) return null;
+  if (child.type === Fragment) return managerOf(child.props.children);
   const value = child.props["data-pm"];
   return MANAGERS.find((manager) => manager === value) ?? null;
 }

@@ -43,7 +43,7 @@ export function createRoutes(): RouteObject[] {
         },
         {
           Component: DocsLayout,
-          children: ALL_PAGES.filter((page) => CONTENT[`./content/${page.file}.mdx`]).map(docRoute),
+          children: ALL_PAGES.map(docRoute),
         },
         { path: "*", Component: NotFound },
       ],

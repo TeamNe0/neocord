@@ -1,3 +1,4 @@
 dist
 .ssr
+.tmp-*
 src/content/eslint/rules

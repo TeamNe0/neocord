@@ -13,8 +13,8 @@
     max-width: 18ch;
     font-size: clamp(2.6rem, 7.5vw, 5.4rem);
     font-weight: 800;
-    letter-spacing: -0.035em;
-    line-height: 1.02;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
   }
 
   .hero-lede {
@@ -155,7 +155,7 @@
 
   @media (min-width: 72rem) {
     .hero-demo {
-      grid-template-columns: 21.5rem minmax(0, 1fr);
+      grid-template-columns: 19.5rem minmax(0, 1fr);
       grid-template-areas: "tree main";
     }
 
@@ -165,7 +165,7 @@
 
     .example-panel {
       grid-area: main;
-      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
     }
 
     .pane + .pane,

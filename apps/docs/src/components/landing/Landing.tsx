@@ -305,7 +305,7 @@ export function Landing() {
 
       <section className="landing-final" aria-labelledby="start-heading">
         <h2 id="start-heading">Start a bot</h2>
-        <p className="landing-text">Answer a few prompts, set a token, and run it. You need Bun, or Node 22.12 or later.</p>
+        <p className="landing-text">Answer a few prompts, set a token, and run it. You need Bun, or Node 22.22 or later.</p>
         <p className="hero-actions">
           <code className="hero-command">bun create neocord</code>
           <Link to="/docs/quick-start" className="button button-primary">

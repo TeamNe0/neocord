@@ -21,8 +21,9 @@ function convertLine(line: string, manager: PackageManager): string {
       const [name = "", ...others] = rest;
       const extra = others.join(" ");
       if (manager === "npm") {
-        const location = others.filter((part) => !part.startsWith("-"));
-        const flags = others.filter((part) => part.startsWith("-"));
+        const firstFlag = others.findIndex((part) => part.startsWith("-"));
+        const location = firstFlag === -1 ? others : others.slice(0, firstFlag);
+        const flags = firstFlag === -1 ? [] : others.slice(firstFlag);
         const positional = location.length > 0 ? ` ${location.join(" ")}` : "";
         return `npm create ${name}@latest${positional}${flags.length > 0 ? ` -- ${flags.join(" ")}` : ""}`;
       }
