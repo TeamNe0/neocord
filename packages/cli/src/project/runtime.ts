@@ -1,5 +1,5 @@
 import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
-import { delimiter, dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import { CliError } from "../errors.ts";
 import type { RuntimePreference } from "./config.ts";
 
@@ -55,8 +55,16 @@ export function findExecutable(name: string, context: RuntimeContext = currentRu
   return null;
 }
 
+function isBunxBinary(file: string): boolean {
+  return /^bunx(\.exe)?$/i.test(basename(file));
+}
+
 export function findBun(context: RuntimeContext = currentRuntimeContext()): string | null {
-  if (context.bunVersion !== undefined) return context.execPath;
+  if (context.bunVersion !== undefined) {
+    if (!isBunxBinary(context.execPath)) return context.execPath;
+    const sibling = join(dirname(context.execPath), basename(context.execPath).replace(/^bunx/i, "bun"));
+    if (isRunnable(sibling, context.platform)) return sibling;
+  }
   const found = findExecutable("bun", context);
   if (found === null || context.platform !== "win32" || !/\.(cmd|bat)$/i.test(found)) return found;
   const nativeBinary = join(dirname(found), "node_modules", "bun", "bin", "bun.exe");
@@ -92,7 +100,7 @@ export function resolveRuntime(
   const node = findNode(context);
   if (node === null) {
     throw new CliError('The config selects the "node" runtime, but node was not found on PATH.', {
-      hint: 'Install Node.js 22.12 or newer, or set runtime: "bun" in neocord.config.',
+      hint: 'Install Node.js 22.22 or newer, or set runtime: "bun" in neocord.config.',
     });
   }
   return { name: "node", command: node, args: ["--enable-source-maps"] };

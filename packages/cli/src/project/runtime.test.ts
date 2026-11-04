@@ -46,6 +46,27 @@ afterEach(() => {
   for (const fixture of fixtures.splice(0)) fixture.cleanup();
 });
 
+describe("findBun under bunx", () => {
+  test("uses the bun binary next to bunx, because bunx treats a path as a package", () => {
+    const directory = tempBinDirectory(["bun", "bunx", "bun.exe", "bunx.exe"]);
+    const unix = context({ bunVersion: "1.4.4", execPath: join(directory, "bunx") });
+    const windows = context({ bunVersion: "1.4.4", execPath: join(directory, "bunx.exe") });
+    expect(findBun(unix)).toBe(join(directory, "bun"));
+    expect(findBun(windows)).toBe(join(directory, "bun.exe"));
+  });
+
+  test("falls back to PATH when bunx has no sibling", () => {
+    const lonely = tempBinDirectory(["bunx"]);
+    const onPath = tempBinDirectory(["bun"]);
+    const lookup = context({ bunVersion: "1.4.4", execPath: join(lonely, "bunx"), path: onPath });
+    expect(findBun(lookup)).toBe(join(onPath, "bun"));
+  });
+
+  test("keeps the current binary when it is not bunx", () => {
+    expect(findBun(context({ bunVersion: "1.4.4", execPath: "/opt/bun" }))).toBe("/opt/bun");
+  });
+});
+
 describe("resolveRuntime", () => {
   test("auto picks node when not invoked through bun", () => {
     expect(resolveRuntime("auto", context())).toEqual({
