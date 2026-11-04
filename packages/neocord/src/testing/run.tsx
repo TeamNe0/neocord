@@ -165,6 +165,11 @@ function collectText(components: readonly unknown[]): string[] {
   });
 }
 
+function payloadText(payload: RenderResult): string[] {
+  const { content, components } = payload as { content?: string; components?: readonly unknown[] };
+  return [...(content === undefined ? [] : [content]), ...collectText(components ?? [])];
+}
+
 function resultFrom(recording: Recording, error: unknown): TestResult {
   const all = [...recording.replies, ...recording.updates, ...recording.edits, ...recording.followUps];
   return {
@@ -177,7 +182,7 @@ function resultFrom(recording: Recording, error: unknown): TestResult {
     deferredUpdate: recording.deferredUpdate,
     ephemeral: recording.ephemeral,
     error,
-    text: all.flatMap((payload) => collectText(payload.components)).join("\n"),
+    text: all.flatMap(payloadText).join("\n"),
     live: null,
   };
 }

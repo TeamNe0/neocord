@@ -344,6 +344,7 @@ describe("live sessions", () => {
     const { live } = await runCommand(defineCommand({ description: "d", execute: () => <Guarded /> }), { live: true });
     const first = await live!.click("guarded");
     expect(first.replies).toHaveLength(1);
+    expect(first.text).toBe("not yet");
     expect((await live!.click("guarded")).text).toBe("count 2");
     await live!.close();
   });
