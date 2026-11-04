@@ -123,7 +123,9 @@ await ctx.reply(<TextDisplay>Ban recorded.</TextDisplay>);
 await ctx.followUp(<TextDisplay>Check the audit log.</TextDisplay>, { ephemeral: true });
 ```
 
-`ctx.update` changes the message that holds the component. Calling it after an acknowledgement edits the same message, so this is how to finish a slow button:
+`ctx.update` changes the message that holds the component. The message can be one you sent another way, such as `channel.send` with `content` or `embeds`. Discord requires those fields cleared when a message becomes Components V2, so neocord clears them. Discord does not let a message change back afterwards. neocord does not clear a poll or stickers, so updating a message with either fails.
+
+Calling `ctx.update` after an acknowledgement edits the same message, so this is how to finish a slow button:
 
 ```tsx
 export default defineButton("general/slow", {

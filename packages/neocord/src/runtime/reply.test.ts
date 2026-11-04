@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { ComponentType, MessageFlags, RESTJSONErrorCodes, type RepliableInteraction } from "discord.js";
+import { ComponentType, MessageFlags, RESTJSONErrorCodes, type Message, type RepliableInteraction } from "discord.js";
 import type { RenderResult } from "@neocord/react";
 import { createLogger, type LogMethod } from "../logger.ts";
-import { createFakeInteraction, type ApiHook, type FakeKind, type Recording } from "../testing/fakes.ts";
+import { createFakeInteraction, mockMessage, type ApiHook, type FakeKind, type Recording } from "../testing/fakes.ts";
 import { createResponder, toEditPayload, type ResponderOptions } from "./reply.ts";
 
 function payload(text: string, ephemeral = false): RenderResult {
@@ -24,14 +24,15 @@ function isEphemeral(result: RenderResult | undefined): boolean {
 }
 
 function setup(
-  options: { kind?: FakeKind; hook?: ApiHook } & Partial<Omit<ResponderOptions, "interaction" | "logger">> = {},
+  options: { kind?: FakeKind; hook?: ApiHook; message?: Message } & Partial<Omit<ResponderOptions, "interaction" | "logger">> = {},
 ) {
-  const { kind = "command", hook, ...responderOptions } = options;
+  const { kind = "command", hook, message, ...responderOptions } = options;
   const logs: { level: LogMethod; line: string }[] = [];
   const logger = createLogger({ level: "debug", sink: (level, line) => logs.push({ level, line }) });
   const interaction = createFakeInteraction({
     kind,
     ...(hook === undefined ? {} : { hook }),
+    ...(message === undefined ? {} : { message }),
   }) as unknown as RepliableInteraction & { recording: Recording };
   const responder = createResponder({ interaction, logger, ...responderOptions });
   return { interaction, recording: interaction.recording, responder, logs };
@@ -55,6 +56,78 @@ describe("toEditPayload", () => {
     expect(result.flags).toBe(MessageFlags.IsComponentsV2);
     expect(result.allowedMentions).toEqual({ parse: [] });
     expect(result.components).toHaveLength(1);
+  });
+});
+
+describe("updating a message without the Components V2 flag", () => {
+  const plain = (): Message => mockMessage({ content: "hello", flags: 0 });
+
+  test("update clears content and embeds", async () => {
+    const { responder, recording } = setup({ kind: "button", message: plain() });
+    await responder.update(payload("x", true));
+    expect(recording.updates[0]).toMatchObject({ content: null, embeds: [], flags: MessageFlags.IsComponentsV2 });
+  });
+
+  test("an edit after deferUpdate clears them too", async () => {
+    const { responder, recording } = setup({ kind: "button", message: plain() });
+    await responder.deferUpdate();
+    await responder.update(payload("x"));
+    expect(recording.edits[0]).toMatchObject({ content: null, embeds: [], flags: MessageFlags.IsComponentsV2 });
+  });
+
+  test("an auto deferred update clears them too", async () => {
+    const { responder, recording } = setup({ kind: "button", message: plain(), deferMode: "update", autoDeferAfter: 2 });
+    responder.armAutoDefer();
+    await sleep(15);
+    await responder.settled();
+    await responder.edit(payload("x"));
+    expect(recording.edits[0]).toMatchObject({ content: null, embeds: [] });
+  });
+
+  test("a modal opened from the message clears them", async () => {
+    const { responder, recording } = setup({ kind: "modal", message: plain() });
+    await responder.update(payload("x"));
+    expect(recording.updates[0]).toMatchObject({ content: null, embeds: [], flags: MessageFlags.IsComponentsV2 });
+  });
+
+  test("once converted, later edits send only components", async () => {
+    const { responder, recording } = setup({ kind: "button", message: plain() });
+    const target = await responder.update(payload("x"));
+    await target?.edit(payload("y"));
+    await responder.update(payload("z"));
+    expect(recording.edits).toHaveLength(2);
+    for (const edit of recording.edits) {
+      expect(edit).not.toHaveProperty("content");
+      expect(edit).not.toHaveProperty("embeds");
+    }
+  });
+
+  test("a failed update does not count as converted", async () => {
+    let first = true;
+    const hook: ApiHook = (method) => {
+      if (method === "update" && first) {
+        first = false;
+        throw apiError(RESTJSONErrorCodes.InteractionHasAlreadyBeenAcknowledged);
+      }
+    };
+    const { responder, recording } = setup({ kind: "button", message: plain(), hook });
+    await responder.update(payload("x"));
+    expect(recording.edits[0]).toMatchObject({ content: null, embeds: [] });
+  });
+
+  test("a source that already has the flag is left alone", async () => {
+    const { responder, recording } = setup({ kind: "button", message: mockMessage() });
+    await responder.update(payload("x"));
+    expect(recording.updates[0]).not.toHaveProperty("content");
+    expect(recording.updates[0]).not.toHaveProperty("embeds");
+  });
+
+  test("a reply and its edits never clear anything", async () => {
+    const { responder, recording } = setup({ kind: "button", message: plain() });
+    await responder.send(payload("x"));
+    await responder.edit(payload("y"));
+    expect(recording.replies[0]).not.toHaveProperty("content");
+    expect(recording.edits[0]).not.toHaveProperty("content");
   });
 });
 

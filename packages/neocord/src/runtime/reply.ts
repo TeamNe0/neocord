@@ -5,6 +5,7 @@ import {
   type InteractionEditReplyOptions,
   type InteractionReplyOptions,
   type InteractionUpdateOptions,
+  type Message,
   type RepliableInteraction,
 } from "discord.js";
 import type { Logger } from "../logger.ts";
@@ -91,10 +92,18 @@ function updatable(interaction: RepliableInteraction): UpdatableInteraction | nu
   return null;
 }
 
+function sourceMessageOf(interaction: RepliableInteraction): Message | null {
+  if (interaction.isMessageComponent()) return interaction.message;
+  if (interaction.isModalSubmit() && interaction.isFromMessage()) return interaction.message;
+  return null;
+}
+
 export function createResponder(options: ResponderOptions): Responder {
   const { interaction, logger } = options;
   const deferMode = options.deferMode ?? "reply";
   const defaultEphemeral = options.ephemeral;
+  const source = sourceMessageOf(interaction);
+  let sourceHasFlag = source === null || source.flags.has(MessageFlags.IsComponentsV2);
 
   let state: ReplyState = "unacknowledged";
   let acknowledgedEphemeral = false;
@@ -178,11 +187,20 @@ export function createResponder(options: ResponderOptions): Responder {
     }
   };
 
-  const originalTarget: ReplyTarget = {
-    edit: async (payload) => {
-      await interaction.editReply(toEditPayload(payload) as InteractionEditReplyOptions);
-    },
+  const originalIsSource = (): boolean => source !== null && interaction.ephemeral === null;
+
+  const sourcePayload = (payload: RenderResult): EditPayload & { content?: null; embeds?: [] } =>
+    sourceHasFlag ? toEditPayload(payload) : { ...toEditPayload(payload), content: null, embeds: [] };
+
+  const originalPayload = (payload: RenderResult): EditPayload =>
+    originalIsSource() ? sourcePayload(payload) : toEditPayload(payload);
+
+  const editOriginalMessage = async (payload: RenderResult): Promise<void> => {
+    await interaction.editReply(originalPayload(payload) as InteractionEditReplyOptions);
+    if (originalIsSource()) sourceHasFlag = true;
   };
+
+  const originalTarget: ReplyTarget = { edit: editOriginalMessage };
 
   const messageTarget = (messageId: string): ReplyTarget => ({
     edit: async (payload) => {
@@ -199,7 +217,7 @@ export function createResponder(options: ResponderOptions): Responder {
   };
 
   const editOriginal = (name: string, payload: RenderResult): Promise<boolean> =>
-    guarded(name, () => interaction.editReply(toEditPayload(payload) as InteractionEditReplyOptions));
+    guarded(name, () => editOriginalMessage(payload));
 
   const sendFollowUp = async (payload: RenderResult, ephemeral: boolean): Promise<ReplyTarget | null> => {
     let target: ReplyTarget | null = null;
@@ -264,8 +282,11 @@ export function createResponder(options: ResponderOptions): Responder {
       cancelAutoDefer();
       const delivered = await guarded(
         "update",
-        () => target.update(toEditPayload(payload) as InteractionUpdateOptions),
-        () => interaction.editReply(toEditPayload(payload) as InteractionEditReplyOptions),
+        async () => {
+          await target.update(sourcePayload(payload) as InteractionUpdateOptions);
+          sourceHasFlag = true;
+        },
+        () => editOriginalMessage(payload),
       );
       if (!expired) state = "updated";
       return delivered ? originalTarget : null;

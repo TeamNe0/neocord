@@ -215,6 +215,109 @@ describe("real discord.js interaction classes", () => {
     await harness.close();
   });
 
+  describe("a route on a message sent without Components V2", () => {
+    const plainMessage = {
+      id: "777777777777777777",
+      channel_id: "444444444444444444",
+      author: USER,
+      content: "Close this ticket?",
+      timestamp: new Date(0).toISOString(),
+      edited_timestamp: null,
+      tts: false,
+      mention_everyone: false,
+      mentions: [],
+      mention_roles: [],
+      attachments: [],
+      embeds: [{ title: "Ticket" }],
+      pinned: false,
+      type: 0,
+      flags: 0,
+      components: [],
+    };
+
+    test("a real update serialises the fields Discord requires cleared", async () => {
+      const definition = defineButton("core/close", { execute: () => <TextDisplay>closed</TextDisplay> });
+      const harness = createHarness({ manifest: manifestOf([route("button", "core/close", definition)]) });
+      await harness.dispatch(
+        construct<Interaction>(ButtonInteraction, {
+          ...baseRaw(InteractionType.MessageComponent),
+          data: { component_type: ComponentType.Button, custom_id: "core/close" },
+          message: plainMessage,
+        }),
+      );
+      await harness.close();
+      expect(harness.errors).toEqual([]);
+      const data = calls[0]?.body.data as { content?: unknown; embeds?: unknown; flags?: number };
+      expect(calls[0]?.body.type).toBe(InteractionResponseType.UpdateMessage);
+      expect(data.content).toBe("");
+      expect(data.embeds).toEqual([]);
+      expect(data.flags).toBe(MessageFlags.IsComponentsV2);
+    });
+
+    test("a real edit after a deferred update serialises them too", async () => {
+      const definition = defineButton("core/close", {
+        async execute(ctx) {
+          await ctx.deferUpdate();
+          return <TextDisplay>closed</TextDisplay>;
+        },
+      });
+      const harness = createHarness({ manifest: manifestOf([route("button", "core/close", definition)]) });
+      await harness.dispatch(
+        construct<Interaction>(ButtonInteraction, {
+          ...baseRaw(InteractionType.MessageComponent),
+          data: { component_type: ComponentType.Button, custom_id: "core/close" },
+          message: plainMessage,
+        }),
+      );
+      await harness.close();
+      expect(harness.errors).toEqual([]);
+      const body = calls[1]?.body as { content?: unknown; embeds?: unknown; flags?: number };
+      expect(calls[1]?.method).toBe("patch");
+      expect(body.content).toBe("");
+      expect(body.embeds).toEqual([]);
+      expect(body.flags).toBe(MessageFlags.IsComponentsV2);
+    });
+
+    test("a real modal update serialises them too", async () => {
+      const modal = defineModal("core/close", {
+        title: "t",
+        respond: "update",
+        render: () => null,
+        submit: () => <TextDisplay>closed</TextDisplay>,
+      });
+      const harness = createHarness({ manifest: manifestOf([route("modal", "core/close", modal)]) });
+      await harness.dispatch(
+        construct<Interaction>(ModalSubmitInteraction, {
+          ...baseRaw(InteractionType.ModalSubmit),
+          data: { custom_id: "core/close", components: [] },
+          message: plainMessage,
+        }),
+      );
+      await harness.close();
+      expect(harness.errors).toEqual([]);
+      const data = calls[0]?.body.data as { content?: unknown; embeds?: unknown; flags?: number };
+      expect(calls[0]?.body.type).toBe(InteractionResponseType.UpdateMessage);
+      expect(data.content).toBe("");
+      expect(data.embeds).toEqual([]);
+    });
+
+    test("a source with the flag sends no content or embeds", async () => {
+      const definition = defineButton("core/close", { execute: () => <TextDisplay>closed</TextDisplay> });
+      const harness = createHarness({ manifest: manifestOf([route("button", "core/close", definition)]) });
+      await harness.dispatch(
+        construct<Interaction>(ButtonInteraction, {
+          ...baseRaw(InteractionType.MessageComponent),
+          data: { component_type: ComponentType.Button, custom_id: "core/close" },
+          message: { ...plainMessage, content: "", embeds: [], flags: MessageFlags.IsComponentsV2 },
+        }),
+      );
+      await harness.close();
+      const data = calls[0]?.body.data as { content?: unknown; embeds?: unknown };
+      expect(data.content).toBeUndefined();
+      expect(data.embeds).toBeUndefined();
+    });
+  });
+
   test("a live click on a real button updates through the real API", async () => {
     function Counter(): ReactNode {
       const [count, setCount] = useState(0);

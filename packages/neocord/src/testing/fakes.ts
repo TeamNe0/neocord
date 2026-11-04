@@ -6,6 +6,7 @@ import {
   ComponentType,
   InteractionType,
   MessageFlags,
+  MessageFlagsBitField,
   ModalSubmitFields,
   PermissionsBitField,
   type Guild,
@@ -275,16 +276,19 @@ export interface MockMessageOptions {
   author?: User;
   content?: string;
   components?: readonly { toJSON(): unknown }[];
+  flags?: number;
   hook?: ApiHook;
   recording?: Recording;
 }
 
 export function mockMessage(options: MockMessageOptions = {}): Message {
+  const flags = options.flags ?? (options.content === undefined || options.content === "" ? MessageFlags.IsComponentsV2 : 0);
   const message = {
     id: options.id ?? nextId(),
     author: options.author ?? mockUser(),
     content: options.content ?? "",
     components: options.components ?? [],
+    flags: new MessageFlagsBitField(flags),
     edit: async (payload: unknown) => {
       await options.hook?.("message.edit", payload);
       options.recording?.log.push({ method: "message.edit", payload });
