@@ -33,7 +33,7 @@ neocord.config.ts            defineConfig
 src/
   env.ts                     t3-env schema
   context.ts                 defineContext, optional app-wide services such as the database
-  middleware.ts              optional, applies to every interaction
+  middleware.ts              optional, applies to every interaction except autocomplete
   layout.tsx error.tsx loading.tsx
   features/
     moderation/
@@ -142,6 +142,8 @@ interface LiveRoot {
 ```
 
 `onUpdate(result)` fires for commits that happen outside a dispatch, such as a timer calling `setState`. One-shot `render` throws a clear error if it meets a handler prop, directing users to `ctx.reply` or `createLiveRoot`.
+
+The `neocord` live store tracks sessions by target message. Any delivery through `ctx`, a route `update` or a modal `update` destroys the session on the message it writes to, so an old tree cannot overwrite newer content at its TTL. Clicks on one session run one at a time, with the auto-defer timer already armed while they wait. Each click records its message as the fallback for edits after the token dies. During a click the event's response methods go through the responder, so `event.reply` still works after an auto-defer. A click on a dead session removes only components whose `custom_id` starts with `~`.
 
 ## `neocord`
 
@@ -253,7 +255,7 @@ export default defineModal("moderation/ban-reason/[userId]", {
 });
 ```
 
-`schema` is any Standard Schema (zod, valibot, arktype), so `neocord` has no zod dependency. Without a schema, `ctx.values` is `Record<string, string | string[] | boolean>`. A failed parse replies ephemerally with the issues and does not call `submit`.
+`schema` is any Standard Schema (zod, valibot, arktype), so `neocord` has no zod dependency. Without a schema, `ctx.values` is `Record<string, string | string[] | boolean>`. Parsing runs after middleware and before the cooldown, so `ctx.values` only exists in `submit`. A failed parse replies ephemerally with the issues and does not call `submit`.
 
 ### Context
 
@@ -285,7 +287,7 @@ Component contexts add `update(node)`, `deferUpdate()` and `message`. Modal cont
 
 `reply` is state-aware: first call replies, after a defer it edits the deferred reply, after a reply it follows up. Handlers may return a node instead of calling `reply`, which is the idiomatic form. Returning a node from a button or select uses `update` unless `respond: "reply"`. Returning a node from a modal replies unless `respond: "update"`. If a component handler returns nothing and has not acknowledged, the runtime calls `deferUpdate`. If a command returns nothing and has not acknowledged, the runtime logs a warning.
 
-`autoDefer` defers once `after` ms pass without an acknowledgement so slow handlers never hit Discord's three second limit.
+`autoDefer` defers once `after` ms pass without an acknowledgement so slow handlers never hit Discord's three second limit. If that shows a "thinking" placeholder and the route then finishes without answering, the runtime logs a warning and deletes the placeholder.
 
 If `loading.tsx` applies to a command, its UI is sent immediately as the reply and the handler's result replaces it.
 
@@ -300,7 +302,7 @@ export default defineMiddleware(async (ctx, next) => {
 });
 ```
 
-Returning a node short-circuits and replies. `defineMiddleware(handler, { kinds: ["command", "button"] })` narrows it.
+Returning a node short-circuits and replies. `defineMiddleware(handler, { kinds: ["command", "button"] })` narrows it. Middleware does not run for autocomplete, which only checks `guildOnly` and `permissions` and answers a denied user with an empty list. On a live click it runs with the `params` and `options` of the route that opened the session.
 
 Layouts are plain components: `export default function Layout({ children }: LayoutProps) {}`. They wrap nodes that handlers return or send, unless `layout: false`. They do not apply to modals.
 

@@ -52,7 +52,9 @@ You can mix them. A tree can hold `onClick` buttons and `route` buttons at once.
 
 Ids follow React's identity rules: a component keeps its id across re-renders for as long as its position and key stay the same. So a click on the current message always reaches the newest closure.
 
-The [`autoDefer`](/docs/handlers/replying#autodefer) timer also runs during a click, and defers the update if your handler is slow.
+Clicks on one session run one at a time, in the order they arrive, so a double click on an async handler runs it twice in sequence and keeps both state updates. Different sessions do not wait for each other.
+
+The [`autoDefer`](/docs/handlers/replying#autodefer) timer also runs during a click, including while a click waits for the one before it, and defers the update if your handler is slow.
 
 ## The handler argument
 
@@ -70,6 +72,18 @@ The handler receives the discord.js interaction. You can read from it, or respon
   }}
 />
 ```
+
+A slow handler can outlast `autoDefer`, which acknowledges the click for you. The event's response methods keep working when that happens, so the same handler works however long it takes:
+
+| Call after the automatic defer | What neocord does |
+| --- | --- |
+| `event.reply(options)` | Sends it as a follow-up, which resolves to a `Message`. An ephemeral flag still applies. |
+| `event.update(options)` | Edits the message with `editReply`. |
+| `event.deferUpdate()` | Nothing, because the click is already acknowledged. |
+| `event.deferReply(options)` | Nothing yet. The next `event.editReply` sends a new message, and later ones edit that message. `event.deleteReply` deletes it. |
+| `event.showModal(modal)` | Throws an error that names `autoDefer`, because a modal must be the first response. The route's error view shows it. |
+
+Before the automatic defer, these methods behave as they do in discord.js. Open a modal before any slow work.
 
 `useLiveInteraction()` returns the current event in components that render during a dispatch, and `null` otherwise.
 
@@ -112,6 +126,19 @@ function Countdown() {
 
 Edits are coalesced: one edit runs at a time, and only the newest pending payload is sent. Intermediate states can be skipped under load. Discord rate limits still apply, so do not update more often than you need. A tree needs at least one handler for a session to exist, and without one it is unmounted right after sending.
 
+## Replacing the message
+
+A message shows one thing at a time, so a new delivery to the message ends the session on it. The tree unmounts, its effect cleanups run, and neither a timer nor the TTL can edit the message again.
+
+| What replaces the message | Example |
+| --- | --- |
+| Editing the reply through the same `ctx` | `await ctx.reply(<Confirm />)`, then `await ctx.editReply(<Banned />)`. |
+| A route button or select that updates | A `route` button in the same tree that returns a node. |
+| A modal with `respond: "update"` opened from the message | `submit` returns a node. |
+| Deleting the reply | `await ctx.deleteReply()`. |
+
+A follow-up, or a route with `respond: "reply"`, sends a new message and leaves the session running. So does a route that returns nothing. A response made directly on a raw interaction, such as `ctx.interaction.update(...)` or `ctx.message.edit(...)`, is not tracked, so the session keeps running and can overwrite it.
+
 ## TTL
 
 A session has an idle timeout, set by `live.ttl`.
@@ -129,7 +156,7 @@ export default defineConfig({
 | What resets it | Each click on the session. A timer calling `setState` does not. |
 | When it passes | The message is edited one last time with every button and select disabled, then the tree unmounts and effect cleanups run. |
 
-The default sits under Discord's 15 minute lifetime for interaction tokens, which is what neocord edits through. The initial token is replaced by each click's. With a longer `ttl`, edits on an idle session can fail once the token expires. After at least one click, neocord falls back to editing through the message. Otherwise it logs a warning, and the components stay enabled on the message.
+The default sits under Discord's 15 minute lifetime for interaction tokens, which is what neocord edits through. The initial token is replaced by each click's, unless the handler answered that click with a reply of its own. A click late in a token's life also extends the TTL past it, and so can a longer `ttl`, so edits on an idle session can fail once the token expires. After at least one click of any kind, neocord falls back to editing through the message. Otherwise it logs a warning, and the components stay enabled on the message. Ephemeral messages cannot be edited through the message, so they keep their components in that case too.
 
 ## Per-process limits
 
@@ -145,7 +172,7 @@ Sessions live in a `Map` in the process that created them.
 | --- | --- |
 | Graceful stop (SIGINT, SIGTERM, manager shutdown) | neocord tries to expire every session, so their components are disabled. It waits up to two seconds for those edits, then unmounts the rest. |
 | Crash or kill | Nothing runs, so messages keep their enabled buttons. |
-| A click after either | The session is gone, so neocord removes the components from the message and sends an ephemeral "This message has expired." notice. If that would leave the message empty, only the notice is sent. |
+| A click after either | The session is gone, so neocord removes the live components from the message and sends an ephemeral "This message has expired." notice. Route buttons, route selects and link buttons stay, and rows or containers left empty are removed. If that would leave the message empty, only the notice is sent. |
 
 The handler code does not run again. If users need a button to work after a deploy, use a route file and put the state in its params or your database.
 

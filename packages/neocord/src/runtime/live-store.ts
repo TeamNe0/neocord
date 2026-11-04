@@ -6,11 +6,13 @@ import {
   type AnySelectMenuInteraction,
   type InteractionReplyOptions,
   type InteractionUpdateOptions,
+  type Message as DiscordMessage,
 } from "discord.js";
 import { randomUUID } from "node:crypto";
 import { createElement, type ReactNode } from "react";
 import type { Logger } from "../logger.ts";
 import { createResponder, toEditPayload, type Responder, type ReplyTarget } from "./reply.ts";
+import { LIVE_EDIT_STOP_WAIT_MS } from "./shutdown-budget.ts";
 
 export type LiveComponentInteraction = ButtonInteraction | AnySelectMenuInteraction;
 
@@ -49,6 +51,7 @@ export interface LiveStore {
   open(node: ReactNode, onError?: LiveErrorHandler, access?: LiveAccess): Promise<OpenedRoot>;
   handle(interaction: LiveComponentInteraction): Promise<void>;
   has(sessionId: string): boolean;
+  release(key: string, message?: DiscordMessage | null): void;
   clear(): void;
   shutdown(): Promise<void>;
 }
@@ -57,7 +60,9 @@ interface SessionRecord extends LiveSession {
   push(payload: RenderResult): void;
   touch(): void;
   expire(): Promise<void>;
-  retarget(target: ReplyTarget, fallback: LiveMessage | null): void;
+  retarget(target: ReplyTarget): void;
+  bindMessage(message: DiscordMessage): void;
+  serialize(task: () => Promise<void>): Promise<void>;
   onError: LiveErrorHandler | undefined;
   access: LiveAccess | undefined;
   fallback: LiveMessage | null;
@@ -68,7 +73,6 @@ interface LiveMessage {
 }
 
 const EXPIRED_TEXT = "This message has expired.";
-const SHUTDOWN_EDIT_TIMEOUT_MS = 2000;
 
 export function isLiveCustomId(customId: string): boolean {
   return customId.startsWith("~");
@@ -83,25 +87,41 @@ function newSessionId(): string {
   return randomUUID().replaceAll("-", "").slice(0, 16);
 }
 
-type JsonComponent = { type: number; components?: JsonComponent[]; accessory?: { type: number } };
+type JsonComponent = { type: number; custom_id?: string; components?: JsonComponent[]; accessory?: JsonComponent };
 
-function withoutInteractive(components: readonly JsonComponent[]): JsonComponent[] {
+function isLiveComponent(component: JsonComponent | undefined): boolean {
+  return typeof component?.custom_id === "string" && isLiveCustomId(component.custom_id);
+}
+
+function withoutLive(components: readonly JsonComponent[]): JsonComponent[] {
   return components.flatMap((component): JsonComponent[] => {
-    if (component.type === ComponentType.ActionRow) return [];
-    if (component.type === ComponentType.Section && component.accessory?.type === ComponentType.Button) {
+    if (isLiveComponent(component)) return [];
+    if (component.type === ComponentType.Section && isLiveComponent(component.accessory)) {
       return component.components ?? [];
     }
-    if (component.type === ComponentType.Container) {
-      const children = withoutInteractive(component.components ?? []);
+    if (component.type === ComponentType.ActionRow || component.type === ComponentType.Container) {
+      const children = withoutLive(component.components ?? []);
       return children.length === 0 ? [] : [{ ...component, components: children }];
     }
     return [component];
   });
 }
 
+function messageComponents(message: DiscordMessage): JsonComponent[] {
+  const components = message.components as unknown as readonly { toJSON(): JsonComponent }[];
+  return components.map((component) => component.toJSON());
+}
+
 function strippedMessageComponents(interaction: LiveComponentInteraction): JsonComponent[] {
-  const components = interaction.message.components as unknown as readonly { toJSON(): JsonComponent }[];
-  return withoutInteractive(components.map((component) => component.toJSON()));
+  return withoutLive(messageComponents(interaction.message));
+}
+
+function liveSessionIdsIn(components: readonly JsonComponent[]): string[] {
+  return components.flatMap((component) => [
+    ...(component.custom_id !== undefined && isLiveCustomId(component.custom_id) ? [sessionIdOf(component.custom_id)] : []),
+    ...(component.accessory === undefined ? [] : liveSessionIdsIn([component.accessory])),
+    ...liveSessionIdsIn(component.components ?? []),
+  ]);
 }
 
 function expiredNotice(): RenderResult {
@@ -138,6 +158,13 @@ async function replyExpired(interaction: LiveComponentInteraction, logger: Logge
 export function createLiveStore(options: LiveStoreOptions): LiveStore {
   const { ttl, logger } = options;
   const sessions = new Map<string, SessionRecord>();
+  const sessionsByKey = new Map<string, SessionRecord>();
+
+  const bindKey = (record: SessionRecord, key: string): void => {
+    const existing = sessionsByKey.get(key);
+    if (existing !== undefined && existing !== record) existing.destroy();
+    sessionsByKey.set(key, record);
+  };
 
   const createSession = (id: string, root: LiveRoot, pending: RenderResult | null): SessionRecord => {
     let target: ReplyTarget | null = null;
@@ -146,11 +173,23 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
     let queued: RenderResult | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let destroyed = false;
+    let dispatches: Promise<unknown> = Promise.resolve();
+    let markGone: () => void = () => undefined;
+    const gone = new Promise<void>((resolve) => {
+      markGone = resolve;
+    });
+    const keys = new Set<string>();
+
+    const remember = (key: string): void => {
+      keys.add(key);
+      bindKey(record, key);
+    };
 
     const deliver = async (payload: RenderResult): Promise<void> => {
       if (target === null) return;
       try {
-        await target.edit(payload);
+        const messageId = await target.edit(payload);
+        if (messageId !== null && !destroyed && !sessionsByKey.has(messageId)) remember(messageId);
       } catch (error) {
         logger.debug("Editing through the interaction token failed.", error);
         if (record.fallback === null) {
@@ -166,7 +205,7 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
     };
 
     const drain = (): void => {
-      if (inFlight !== null || queued === null || target === null) return;
+      if (destroyed || inFlight !== null || queued === null || target === null) return;
       const payload = queued;
       queued = null;
       inFlight = deliver(payload).finally(() => {
@@ -190,15 +229,29 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
       access: undefined,
       attach(next) {
         target = next;
+        remember(next.key);
         if (buffered !== null) {
           queued = buffered;
           buffered = null;
           drain();
         }
       },
-      retarget(next, fallback) {
+      retarget(next) {
         target = next;
-        record.fallback = fallback;
+        remember(next.key);
+      },
+      bindMessage(message) {
+        record.fallback = message as unknown as LiveMessage;
+        remember(message.id);
+      },
+      serialize(task) {
+        const previous = dispatches;
+        const run = (async () => {
+          await Promise.race([previous, gone]);
+          await task();
+        })();
+        dispatches = run.catch(() => undefined);
+        return run;
       },
       push(payload) {
         if (destroyed) return;
@@ -227,12 +280,72 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
       destroy() {
         if (destroyed) return;
         destroyed = true;
+        queued = null;
         clearTimer();
         sessions.delete(id);
+        for (const key of keys) {
+          if (sessionsByKey.get(key) === record) sessionsByKey.delete(key);
+        }
         root.unmount();
+        markGone();
       },
     };
     return record;
+  };
+
+  const runClick = async (session: SessionRecord, interaction: LiveComponentInteraction, responder: Responder): Promise<void> => {
+    if (!sessions.has(session.id)) {
+      responder.cancelAutoDefer();
+      await responder.send(expiredNotice(), { ephemeral: true }).catch((error: unknown) => {
+        logger.debug("Could not send the expired notice.", error);
+      });
+      return;
+    }
+
+    session.bindMessage(interaction.message);
+
+    let dispatched = false;
+    const proceed = async (): Promise<void> => {
+      if (!sessions.has(session.id)) return;
+      dispatched = true;
+      session.touch();
+      await session.root.dispatch(interaction.customId, interaction);
+    };
+
+    try {
+      if (session.access === undefined) {
+        await proceed();
+      } else {
+        await session.access(interaction, responder, proceed);
+      }
+    } catch (error) {
+      logger.error(`A live handler failed for "${interaction.customId}".`, error);
+      if (session.onError !== undefined) {
+        await session.onError(error, interaction, responder).catch((handlerError: unknown) => {
+          logger.error("Could not report a live handler error.", handlerError);
+        });
+      }
+    } finally {
+      responder.cancelAutoDefer();
+    }
+
+    await responder.settled();
+
+    if (!dispatched) {
+      if (responder.state === "unacknowledged") await responder.deferUpdate();
+      return;
+    }
+
+    if (!sessions.has(session.id)) return;
+
+    const payload = session.root.payload;
+    const state = responder.state;
+    if (state === "unacknowledged" || state === "updated") {
+      const target = await responder.update(payload);
+      if (target !== null) session.retarget(target);
+    } else {
+      session.push(payload);
+    }
   };
 
   return {
@@ -241,6 +354,14 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
     },
 
     has: (sessionId) => sessions.has(sessionId),
+
+    release(key, message) {
+      sessionsByKey.get(key)?.destroy();
+      if (message === null || message === undefined) return;
+      for (const sessionId of liveSessionIdsIn(messageComponents(message))) {
+        sessions.get(sessionId)?.destroy();
+      }
+    },
 
     async open(node, onError, access) {
       const id = newSessionId();
@@ -296,49 +417,9 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
         deferMode: "update",
         autoDeferAfter: options.autoDeferAfter ?? false,
       });
+      responder.interceptEventResponses();
       responder.armAutoDefer();
-
-      let dispatched = false;
-      const proceed = async (): Promise<void> => {
-        dispatched = true;
-        session.touch();
-        await session.root.dispatch(interaction.customId, interaction);
-      };
-
-      try {
-        if (session.access === undefined) {
-          await proceed();
-        } else {
-          await session.access(interaction, responder, proceed);
-        }
-      } catch (error) {
-        logger.error(`A live handler failed for "${interaction.customId}".`, error);
-        if (session.onError !== undefined) {
-          await session.onError(error, interaction, responder).catch((handlerError: unknown) => {
-            logger.error("Could not report a live handler error.", handlerError);
-          });
-        }
-      } finally {
-        responder.cancelAutoDefer();
-      }
-
-      if (!dispatched) {
-        await responder.settled();
-        if (responder.state === "unacknowledged") await responder.deferUpdate();
-        return;
-      }
-
-      if (!sessions.has(session.id)) return;
-
-      const payload = session.root.payload;
-      const fallback = interaction.message as unknown as LiveMessage;
-      const state = responder.state;
-      if (state === "unacknowledged" || state === "updated") {
-        const target = await responder.update(payload);
-        if (target !== null) session.retarget(target, fallback);
-      } else {
-        session.push(payload);
-      }
+      await session.serialize(() => runClick(session, interaction, responder));
     },
 
     clear() {
@@ -349,7 +430,7 @@ export function createLiveStore(options: LiveStoreOptions): LiveStore {
       const expiring = Promise.allSettled([...sessions.values()].map((session) => session.expire()));
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, SHUTDOWN_EDIT_TIMEOUT_MS);
+        timer = setTimeout(resolve, LIVE_EDIT_STOP_WAIT_MS);
         timer.unref();
       });
       await Promise.race([expiring, timeout]);

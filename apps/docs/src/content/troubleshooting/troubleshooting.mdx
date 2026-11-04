@@ -169,7 +169,7 @@ Users see this when no route matches a command or custom id, and the log says `N
 This message has expired.
 ```
 
-The live session that owned this button or select is gone. Sessions are in memory per process, so they end on restart, and they also end after the idle timeout, `live.ttl`, which defaults to `14m`. See [Live sessions](/docs/ui/live-sessions).
+The live session that owned this button or select is gone. Sessions are in memory per process, so they end on restart, and they also end after the idle timeout, `live.ttl`, which defaults to `14m`, or when a new delivery replaces the message. See [Live sessions](/docs/ui/live-sessions).
 
 ## TypeScript 7 and ESLint
 

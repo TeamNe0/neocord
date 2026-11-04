@@ -142,7 +142,9 @@ function Counter() {
 
 - The handler receives the discord.js interaction. If it does not acknowledge, neocord updates the message. State changes outside a click edit the message.
 - `live.ttl`, default `14m`, is an idle timeout, and each click extends it. When it passes, components are disabled and the tree unmounts.
-- Sessions live in memory per process. After a restart, clicking an old button shows an ephemeral "This message has expired" notice and removes its components.
+- Sessions live in memory per process. After a restart, clicking an old button shows an ephemeral "This message has expired" notice and removes its live components. Route and link buttons stay.
+- A new delivery to the message ends its session, including a route button that updates it, so an old tree cannot overwrite newer content.
+- Clicks on one session run one at a time. `event.reply` keeps working after `autoDefer` has acknowledged a slow click, by becoming a follow-up.
 - Anyone who can see the message can click. Check `interaction.user.id` if that matters.
 
 ## Events, tasks, features, context

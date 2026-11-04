@@ -396,6 +396,8 @@ export function createFakeInteraction(options: FakeInteractionOptions): Interact
 
   const followUpMessage = (): Message => mockMessage({ recording, ...(hook === undefined ? {} : { hook }) });
 
+  let originalMessage = message;
+
   const interaction = {
     recording,
     id: nextId(),
@@ -452,6 +454,7 @@ export function createFakeInteraction(options: FakeInteractionOptions): Interact
       interaction.ephemeral = hasEphemeral(payload);
       recording.ephemeral = hasEphemeral(payload);
       recording.replies.push(payload);
+      if (isComponent || kind === "modal") originalMessage = followUpMessage();
       return { id: nextId() };
     },
     async deferReply(payload: { flags?: number } = {}) {
@@ -461,15 +464,18 @@ export function createFakeInteraction(options: FakeInteractionOptions): Interact
       interaction.ephemeral = hasEphemeral(payload);
       recording.ephemeral = hasEphemeral(payload);
       recording.deferred = true;
+      if (isComponent || kind === "modal") originalMessage = followUpMessage();
       return { id: nextId() };
     },
-    async editReply(payload: RenderResult) {
+    async editReply(payload: RenderResult & { message?: string }) {
       assertAcknowledged();
       assertNoEphemeral("editReply", payload);
       await call("editReply", payload);
       interaction.replied = true;
       recording.edits.push(payload);
-      return followUpMessage();
+      if (payload.message !== undefined) return mockMessage({ id: payload.message, recording });
+      originalMessage ??= followUpMessage();
+      return originalMessage;
     },
     async followUp(payload: RenderResult) {
       assertAcknowledged();

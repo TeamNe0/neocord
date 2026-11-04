@@ -53,7 +53,7 @@ import {
 } from "./live-store.ts";
 import { listCommands, type CompiledManifest, type CompiledRoute } from "./manifest.ts";
 import { isRenderable, runMiddleware } from "./middleware.ts";
-import { createResponder, type ReplyTarget, type Responder, type SendOptions } from "./reply.ts";
+import { createResponder, sourceMessageOf, type ReplyTarget, type Responder, type SendOptions, type WriteMode } from "./reply.ts";
 import { renderForInteraction, renderModalRoute, renderOneShot, stringifyParams } from "./render.tsx";
 
 export interface DispatcherOptions {
@@ -239,9 +239,16 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     const liveAccess: LiveAccess = (clicked, liveResponder, proceed) =>
       guardLiveInteraction(route, ctx, clicked, liveResponder, proceed);
 
+    const source = sourceMessageOf(interaction);
+
+    const releaseMessage = (key: string | null): void => {
+      if (key !== null) live.release(key, key === source?.id ? source : null);
+    };
+
     const deliver = async (
       node: ReactNode,
       replyOptions: ReplyOptions | undefined,
+      mode: WriteMode,
       send: (payload: RenderResult, sendOptions: SendOptions) => Promise<ReplyTarget | null>,
     ): Promise<void> => {
       const useLayouts = replyOptions?.layout ?? metadata.layout ?? true;
@@ -251,6 +258,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
         onLiveError,
         liveAccess,
       );
+      releaseMessage(responder.writeKey(mode));
       let target: ReplyTarget | null;
       try {
         target = await send(payload, { ephemeral: replyOptions?.ephemeral });
@@ -258,13 +266,12 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
         session?.destroy();
         throw error;
       }
-      if (session !== null) {
-        if (target === null) {
-          session.destroy();
-        } else {
-          session.attach(target);
-        }
+      if (target === null) {
+        session?.destroy();
+        return;
       }
+      releaseMessage(target.key);
+      session?.attach(target);
     };
 
     const shared: SharedContext = {
@@ -273,11 +280,14 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
       interaction,
       user: interaction.user,
       state: {},
-      reply: (node, replyOptions) => deliver(node, replyOptions, (payload, send) => responder.send(payload, send)),
-      editReply: (node, replyOptions) => deliver(node, replyOptions, (payload, send) => responder.edit(payload, send)),
-      followUp: (node, replyOptions) => deliver(node, replyOptions, (payload, send) => responder.followUp(payload, send)),
+      reply: (node, replyOptions) => deliver(node, replyOptions, "send", (payload, send) => responder.send(payload, send)),
+      editReply: (node, replyOptions) => deliver(node, replyOptions, "edit", (payload, send) => responder.edit(payload, send)),
+      followUp: (node, replyOptions) => deliver(node, replyOptions, "followUp", (payload, send) => responder.followUp(payload, send)),
       defer: (deferOptions) => responder.defer(deferOptions),
-      deleteReply: () => responder.deleteReply(),
+      deleteReply: async () => {
+        releaseMessage(responder.writeKey("delete"));
+        await responder.deleteReply();
+      },
       showModal: async (modalRoute, params) => {
         const entry = compiled.modalsById.get(modalRoute);
         if (entry === undefined) {
@@ -291,11 +301,11 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     return {
       responder,
       shared,
-      update: (node, replyOptions) => deliver(node, replyOptions, (payload) => responder.update(payload)),
+      update: (node, replyOptions) => deliver(node, replyOptions, "update", (payload) => responder.update(payload)),
       sendLoading: async () => {
         if (route.loading === null) return;
         const Loading = route.loading;
-        await deliver(<Loading />, undefined, (payload, send) => responder.sendPlaceholder(payload, send));
+        await deliver(<Loading />, undefined, "send", (payload, send) => responder.sendPlaceholder(payload, send));
       },
       bind: (next) => {
         ctx = next;

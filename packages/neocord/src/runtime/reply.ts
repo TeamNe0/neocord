@@ -1,7 +1,11 @@
 import type { ModalRenderResult, RenderResult } from "@neocord/react";
 import {
   MessageFlags,
+  MessageFlagsBitField,
+  MessagePayload,
   RESTJSONErrorCodes,
+  type ButtonInteraction,
+  type InteractionDeferReplyOptions,
   type InteractionEditReplyOptions,
   type InteractionReplyOptions,
   type InteractionUpdateOptions,
@@ -12,8 +16,11 @@ import type { Logger } from "../logger.ts";
 
 export type ReplyState = "unacknowledged" | "deferred" | "replied" | "updated";
 
+export type WriteMode = "send" | "update" | "edit" | "followUp" | "delete";
+
 export interface ReplyTarget {
-  edit(payload: RenderResult): Promise<void>;
+  readonly key: string;
+  edit(payload: RenderResult): Promise<string | null>;
 }
 
 export interface SendOptions {
@@ -37,6 +44,8 @@ export interface Responder {
   readonly showingPlaceholder: boolean;
   armAutoDefer(): void;
   cancelAutoDefer(): void;
+  interceptEventResponses(): void;
+  writeKey(mode: WriteMode): string | null;
   settled(): Promise<void>;
   send(payload: RenderResult, options?: SendOptions): Promise<ReplyTarget | null>;
   sendPlaceholder(payload: RenderResult, options?: SendOptions): Promise<ReplyTarget | null>;
@@ -81,21 +90,23 @@ function isUnknownInteraction(error: unknown): boolean {
   return errorCode(error) === RESTJSONErrorCodes.UnknownInteraction;
 }
 
-interface UpdatableInteraction {
-  update(options: InteractionUpdateOptions): Promise<unknown>;
-  deferUpdate(): Promise<unknown>;
-}
+type RawResponses = Pick<ButtonInteraction, "reply" | "deferReply" | "editReply" | "deleteReply" | "update" | "deferUpdate" | "showModal">;
 
-function updatable(interaction: RepliableInteraction): UpdatableInteraction | null {
-  if (interaction.isMessageComponent()) return interaction;
-  if (interaction.isModalSubmit() && interaction.isFromMessage()) return interaction;
-  return null;
-}
-
-function sourceMessageOf(interaction: RepliableInteraction): Message | null {
+export function sourceMessageOf(interaction: RepliableInteraction): Message | null {
   if (interaction.isMessageComponent()) return interaction.message;
   if (interaction.isModalSubmit() && interaction.isFromMessage()) return interaction.message;
   return null;
+}
+
+function messageIdOf(result: unknown): string | null {
+  const id = typeof result === "object" && result !== null && "id" in result ? result.id : null;
+  return typeof id === "string" ? id : null;
+}
+
+function withExtraFlags<T>(options: T, flags: number): T {
+  if (flags === 0 || options instanceof MessagePayload) return options;
+  const plain = (typeof options === "string" ? { content: options } : options) as { flags?: ConstructorParameters<typeof MessageFlagsBitField>[0] };
+  return { ...plain, flags: new MessageFlagsBitField(plain.flags).add(flags).bitfield } as T;
 }
 
 export function createResponder(options: ResponderOptions): Responder {
@@ -104,6 +115,7 @@ export function createResponder(options: ResponderOptions): Responder {
   const defaultEphemeral = options.ephemeral;
   const source = sourceMessageOf(interaction);
   let sourceHasFlag = source === null || source.flags.has(MessageFlags.IsComponentsV2);
+  let raw = interaction as unknown as RawResponses;
 
   let state: ReplyState = "unacknowledged";
   let acknowledgedEphemeral = false;
@@ -135,7 +147,7 @@ export function createResponder(options: ResponderOptions): Responder {
     if (interaction.replied) {
       state = "replied";
     } else if (interaction.deferred) {
-      state = interaction.ephemeral === null && updatable(interaction) !== null ? "updated" : "deferred";
+      state = interaction.ephemeral === null && source !== null ? "updated" : "deferred";
     } else {
       return;
     }
@@ -195,19 +207,29 @@ export function createResponder(options: ResponderOptions): Responder {
   const originalPayload = (payload: RenderResult): EditPayload =>
     originalIsSource() ? sourcePayload(payload) : toEditPayload(payload);
 
-  const editOriginalMessage = async (payload: RenderResult): Promise<void> => {
-    await interaction.editReply(originalPayload(payload) as InteractionEditReplyOptions);
+  const editOriginalMessage = async (payload: RenderResult): Promise<string | null> => {
+    const result = await raw.editReply(originalPayload(payload) as InteractionEditReplyOptions);
     if (originalIsSource()) sourceHasFlag = true;
+    return messageIdOf(result);
   };
 
-  const originalTarget: ReplyTarget = { edit: editOriginalMessage };
+  const originalKey = (): string => (source !== null && originalIsSource() ? source.id : `original:${interaction.id}`);
+
+  const originalTarget: ReplyTarget = {
+    get key() {
+      return originalKey();
+    },
+    edit: editOriginalMessage,
+  };
 
   const messageTarget = (messageId: string): ReplyTarget => ({
+    key: messageId,
     edit: async (payload) => {
-      await interaction.editReply({
+      await raw.editReply({
         ...(toEditPayload(payload) as InteractionEditReplyOptions),
         message: messageId,
       });
+      return messageId;
     },
   });
 
@@ -230,7 +252,7 @@ export function createResponder(options: ResponderOptions): Responder {
 
   const replaceAcknowledgement = async (payload: RenderResult, ephemeral: boolean): Promise<ReplyTarget | null> => {
     if (ephemeral && !acknowledgedEphemeral) {
-      await guarded("delete the public reply", () => interaction.deleteReply());
+      await guarded("delete the public reply", () => raw.deleteReply());
       acknowledgedEphemeral = true;
       state = "replied";
       placeholder = false;
@@ -249,8 +271,8 @@ export function createResponder(options: ResponderOptions): Responder {
     cancelAutoDefer();
     const delivered = await guarded(
       "reply",
-      () => interaction.reply(withEphemeral(payload, ephemeral) as InteractionReplyOptions),
-      () => interaction.editReply(toEditPayload(payload) as InteractionEditReplyOptions),
+      () => raw.reply(withEphemeral(payload, ephemeral) as InteractionReplyOptions),
+      () => raw.editReply(toEditPayload(payload) as InteractionEditReplyOptions),
     );
     if (!expired) {
       state = "replied";
@@ -277,13 +299,12 @@ export function createResponder(options: ResponderOptions): Responder {
   const updateNow = async (payload: RenderResult): Promise<ReplyTarget | null> => {
     sync();
     if (state === "unacknowledged") {
-      const target = updatable(interaction);
-      if (target === null) return firstReply(payload, resolveEphemeral(payload));
+      if (source === null) return firstReply(payload, resolveEphemeral(payload));
       cancelAutoDefer();
       const delivered = await guarded(
         "update",
         async () => {
-          await target.update(sourcePayload(payload) as InteractionUpdateOptions);
+          await raw.update(sourcePayload(payload) as InteractionUpdateOptions);
           sourceHasFlag = true;
         },
         () => editOriginalMessage(payload),
@@ -301,16 +322,15 @@ export function createResponder(options: ResponderOptions): Responder {
     sync();
     if (state !== "unacknowledged") return false;
     cancelAutoDefer();
-    const target = mode === "update" ? updatable(interaction) : null;
-    if (target !== null) {
-      const delivered = await guarded("defer the update", () => target.deferUpdate());
+    if (mode === "update" && source !== null) {
+      const delivered = await guarded("defer the update", () => raw.deferUpdate());
       if (!expired) state = "updated";
       if (delivered) deferredUpdate = true;
       return delivered;
     }
     const ephemeral = sendOptions?.ephemeral ?? defaultEphemeral === true;
     const delivered = await guarded("defer the reply", () =>
-      interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {}),
+      raw.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {}),
     );
     if (!expired) {
       state = "deferred";
@@ -358,6 +378,97 @@ export function createResponder(options: ResponderOptions): Responder {
 
     cancelAutoDefer,
 
+    interceptEventResponses() {
+      const event = interaction as unknown as RawResponses;
+      const original: RawResponses = {
+        reply: event.reply.bind(event),
+        deferReply: event.deferReply.bind(event),
+        editReply: event.editReply.bind(event),
+        deleteReply: event.deleteReply.bind(event),
+        update: event.update.bind(event),
+        deferUpdate: event.deferUpdate.bind(event),
+        showModal: event.showModal.bind(event),
+      };
+      raw = original;
+
+      let convertedFlags: number | null = null;
+      let convertedMessage: string | null = null;
+
+      Object.assign(event, {
+        reply: (replyOptions: Parameters<RawResponses["reply"]>[0]) =>
+          enqueue(async () => {
+            sync();
+            if (!autoDeferred) return original.reply(replyOptions);
+            return interaction.followUp(replyOptions);
+          }),
+        deferReply: (deferOptions: InteractionDeferReplyOptions = {}) =>
+          enqueue(async () => {
+            sync();
+            if (!autoDeferred) return original.deferReply(deferOptions);
+            convertedFlags = new MessageFlagsBitField(deferOptions.flags as MessageFlags | undefined).has(MessageFlags.Ephemeral)
+              ? MessageFlags.Ephemeral
+              : 0;
+            return undefined;
+          }),
+        update: (updateOptions: Parameters<RawResponses["update"]>[0]) =>
+          enqueue(async () => {
+            sync();
+            if (!autoDeferred) return original.update(updateOptions);
+            return original.editReply((updateOptions ?? {}) as Parameters<RawResponses["editReply"]>[0]);
+          }),
+        deferUpdate: (deferOptions?: Parameters<RawResponses["deferUpdate"]>[0]) =>
+          enqueue(async () => {
+            sync();
+            if (!autoDeferred) return original.deferUpdate(deferOptions);
+            return undefined;
+          }),
+        editReply: (editOptions: Parameters<RawResponses["editReply"]>[0]) =>
+          enqueue(async () => {
+            if (convertedFlags === null) return original.editReply(editOptions);
+            if (convertedMessage === null) {
+              const message = await interaction.followUp(withExtraFlags(editOptions, convertedFlags) as InteractionReplyOptions);
+              convertedMessage = message.id;
+              return message;
+            }
+            if (editOptions instanceof MessagePayload) return original.editReply(editOptions);
+            const plain = typeof editOptions === "string" ? { content: editOptions } : editOptions;
+            return original.editReply({ ...plain, message: plain.message ?? convertedMessage });
+          }),
+        deleteReply: (message?: Parameters<RawResponses["deleteReply"]>[0]) =>
+          enqueue(async () => {
+            if (convertedFlags === null) return original.deleteReply(message);
+            if (message === undefined && convertedMessage === null) return undefined;
+            return original.deleteReply(message ?? convertedMessage ?? undefined);
+          }),
+        showModal: (...modalArgs: Parameters<RawResponses["showModal"]>) =>
+          enqueue(async () => {
+            sync();
+            if (autoDeferred) {
+              throw new Error(
+                `event.showModal() cannot open a modal here, because autoDefer already acknowledged this click after ${String(options.autoDeferAfter)}ms and a modal must be the first response. Call event.showModal() before any slow work, or raise autoDefer.after.`,
+              );
+            }
+            return original.showModal(...modalArgs);
+          }),
+      });
+    },
+
+    writeKey(mode) {
+      sync();
+      switch (mode) {
+        case "update":
+        case "edit":
+          if (state === "unacknowledged") return source?.id ?? null;
+          return originalKey();
+        case "send":
+          return state === "deferred" || (state !== "unacknowledged" && placeholder) ? originalKey() : null;
+        case "followUp":
+          return state === "deferred" ? originalKey() : null;
+        case "delete":
+          return state === "unacknowledged" ? null : originalKey();
+      }
+    },
+
     settled: () => tail.then(() => undefined),
 
     send: (payload, sendOptions) => enqueue(() => sendNow(payload, sendOptions)),
@@ -375,7 +486,7 @@ export function createResponder(options: ResponderOptions): Responder {
       enqueue(async () => {
         sync();
         if (state === "unacknowledged") {
-          return updatable(interaction) !== null
+          return source !== null
             ? updateNow(payload)
             : firstReply(payload, resolveEphemeral(payload, sendOptions));
         }
@@ -411,7 +522,7 @@ export function createResponder(options: ResponderOptions): Responder {
           logger.warn("deleteReply() was called before the interaction was acknowledged.");
           return;
         }
-        await guarded("delete the reply", () => interaction.deleteReply());
+        await guarded("delete the reply", () => raw.deleteReply());
         placeholder = false;
       }),
 
@@ -427,7 +538,7 @@ export function createResponder(options: ResponderOptions): Responder {
           throw new Error("showModal() cannot respond to a modal submit.");
         }
         cancelAutoDefer();
-        const delivered = await guarded("show the modal", () => interaction.showModal(modal));
+        const delivered = await guarded("show the modal", () => raw.showModal(modal));
         if (!expired) {
           state = "replied";
           modalShown = delivered;
@@ -439,7 +550,7 @@ export function createResponder(options: ResponderOptions): Responder {
         sync();
         if (state !== "unacknowledged") return;
         const delivered = await deferNow("reply", { ephemeral: true });
-        if (delivered) await guarded("delete the reply", () => interaction.deleteReply());
+        if (delivered) await guarded("delete the reply", () => raw.deleteReply());
       }),
   };
 }
