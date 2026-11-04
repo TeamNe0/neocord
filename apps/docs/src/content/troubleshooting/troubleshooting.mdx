@@ -92,7 +92,7 @@ command <id> (<file>) was deferred automatically but returned nothing, removing 
 Could not reply: the interaction expired before neocord responded (code 10062).
 ```
 
-The first word after `Could not` changes with the action, such as `edit the reply`, `follow up` or `show the modal`. Discord no longer accepts this interaction, usually because the three second limit passed before the first acknowledgement. See [The three second limit](#the-three-second-limit). This is logged as a warning, and does not crash the handler.
+The words after `Could not` change with the action, such as `edit the reply`, `follow up` or `show the modal`. Discord no longer accepts this interaction, usually because the three second limit passed before the first acknowledgement. See [The three second limit](#the-three-second-limit). This is logged as a warning, and does not crash the handler.
 
 ## Already acknowledged (40060)
 
@@ -103,7 +103,7 @@ Could not reply: the interaction was already acknowledged (code 40060).
 Something else responded first. The likely causes are:
 
 - **Two processes are using the same token.** A common one is `neocord dev` running while production is up, or two replicas of a service. Each process receives the interaction and they race. Stop one.
-- **A handler called `ctx.interaction.reply` directly**, which neocord's state machine cannot see. Use `ctx.reply` or return JSX. The [`no-direct-interaction-reply`](/docs/eslint/no-direct-interaction-reply) rule catches this.
+- **A handler called `ctx.interaction.reply` directly.** neocord follows the raw interaction's state, but it cannot see a response that is still in flight, so the two can race. Use `ctx.reply` or return JSX. The [`no-direct-interaction-reply`](/docs/eslint/no-direct-interaction-reply) rule catches this.
 
 neocord recovers where it can. A first reply or update that fails this way is retried as an edit, and handlers do not crash. See [Replying](/docs/handlers/replying).
 

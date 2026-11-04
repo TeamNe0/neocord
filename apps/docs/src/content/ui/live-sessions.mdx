@@ -39,7 +39,7 @@ export default defineCommand({
 | Use a live session for | Use a [route file](/docs/routing/buttons) for |
 | --- | --- |
 | Short-lived UI: pagination, wizards, confirmations, games. | Buttons that must keep working after a restart or days later. |
-| State that does not need to survive. | Anything that needs middleware, `permissions` or `cooldown`. |
+| State that does not need to survive. | Anything that needs a `cooldown`, or `permissions` and middleware of its own. |
 
 You can mix them. A tree can hold `onClick` buttons and `route` buttons at once.
 
@@ -47,7 +47,7 @@ You can mix them. A tree can hold `onClick` buttons and `route` buttons at once.
 
 1. neocord renders your node through a live root. If the committed tree has any handler, the session is stored.
 2. Each live component gets a custom id of the form `~<sessionId>:<index>`. The `~` prefix is reserved, so your own custom ids cannot start with it.
-3. A click dispatches to the handler for that id. It waits for an async handler to finish.
+3. A click re-checks the route that opened the session, as the warning below describes, then dispatches to the handler for that id. It waits for an async handler to finish.
 4. If the handler did not acknowledge the interaction, neocord updates the message with the latest render.
 
 Ids follow React's identity rules: a component keeps its id across re-renders for as long as its position and key stay the same. So a click on the current message always reaches the newest closure.

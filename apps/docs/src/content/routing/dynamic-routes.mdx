@@ -67,7 +67,7 @@ The `neocord` CLI generates `.neocord/types.d.ts` from your files. It registers 
 ```ts title=".neocord/types.d.ts"
 declare module "@neocord/react" {
   interface RegisteredRoutes {
-    buttons: "moderation/confirm-ban/[userId]" | "general/refresh";
+    buttons: "general/refresh" | "moderation/confirm-ban/[userId]";
     selects: "moderation/pick-role";
     modals: "moderation/ban-reason/[userId]";
   }

@@ -126,7 +126,7 @@ type Params = RouteParams<"mod/[id]/[...rest]">;
 
 Types do not reach everything, so these are also checked at runtime:
 
-- `validateManifest` runs in `neocord build`, `neocord test` and at startup. It checks brands, route literals, names, descriptions and intent requirements.
+- `validateManifest` runs in `neocord build`, `neocord deploy`, `neocord test` and at startup. It checks brands, route literals, names, descriptions and intent requirements.
 - `@neocord/react` validates every message against Discord's limits when it renders.
 - `buildCustomId` throws a `CustomIdError` if a filled-in route exceeds Discord's 100 characters.
 - [`src/env.ts`](/docs/type-safety/environment) validates environment variables when it loads.

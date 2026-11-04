@@ -54,6 +54,25 @@ test("ping replies with the text it was given", async () => {
 });
 ```
 
+<Callout kind="warn">
+
+vitest does not collect `node:test` tests. They run as a side effect, vitest prints `Tests  no tests`, and the command exits with 0 even when an assertion fails. If vitest is a project dependency, rewrite the scaffolded test with vitest's imports, and use them in place of `bun:test` in the examples below.
+
+</Callout>
+
+```tsx title="src/features/general/commands/ping/command.test.tsx"
+import { runCommand } from "neocord/testing";
+import { expect, test } from "vitest";
+import command from "./command";
+
+test("ping replies with the text it was given", async () => {
+  const { replies, text } = await runCommand(command, { options: { message: "hello" } });
+
+  expect(replies).toHaveLength(1);
+  expect(text).toContain("hello");
+});
+```
+
 Test files next to a route are not routes. `classifyFile` ignores any file that ends in `.test.ts`, `.test.tsx`, `.spec.ts` or `.spec.tsx`.
 
 ## Testing a command

@@ -33,7 +33,7 @@ If a command was deferred by `autoDefer` and then returns nothing, neocord logs 
 | --- | --- |
 | `ctx.reply(node, options)` | Replies first, edits after a defer, follows up after that. |
 | `ctx.editReply(node, options)` | Edits the reply. On an unacknowledged component it updates the message, and on an unacknowledged command it replies. |
-| `ctx.followUp(node, options)` | Sends another message. |
+| `ctx.followUp(node, options)` | Sends another message. After a defer, it fills in the deferred reply instead. |
 | `ctx.update(node, options)` | Buttons, selects and modals. Updates the message the component is on. On a modal opened from a command there is no message to update, so it replies. |
 | `ctx.defer({ ephemeral })` | Acknowledges with a "thinking" state. A no-op if already acknowledged. |
 | `ctx.deferUpdate()` | Buttons, selects and modals. Acknowledges without changing anything. A no-op if already acknowledged. On a modal opened from a command it defers the reply instead. |
@@ -95,7 +95,7 @@ export default defineCommand({
 
 ## autoDefer
 
-Discord fails an interaction that is not acknowledged within three seconds. `autoDefer` starts a timer when the handler is about to run, and defers if nothing has acknowledged the interaction by then. The default is `{ after: 2000 }`.
+Discord fails an interaction that is not acknowledged within three seconds. `autoDefer` starts a timer once the `guildOnly` and `permissions` checks pass, before middleware and the handler run, and defers if nothing has acknowledged the interaction by then. The default is `{ after: 2000 }`.
 
 ```ts title="neocord.config.ts"
 export default defineConfig({
@@ -116,14 +116,14 @@ The timer does nothing while another response is in flight. If it fires before y
 
 ## followUp and update
 
-`ctx.followUp` always creates a new message once the interaction is acknowledged. Use it for extra messages, or to send something private from a public handler:
+`ctx.followUp` creates a new message once a reply exists. After a defer, the first call fills in the deferred reply, as the table above shows. Use it for extra messages, or to send something private from a public handler:
 
 ```tsx
 await ctx.reply(<TextDisplay>Ban recorded.</TextDisplay>);
 await ctx.followUp(<TextDisplay>Check the audit log.</TextDisplay>, { ephemeral: true });
 ```
 
-`ctx.update` changes the message that holds the component. Calling it after an acknowledgement edits the same message, so these are equivalent ways to finish a slow button:
+`ctx.update` changes the message that holds the component. Calling it after an acknowledgement edits the same message, so this is how to finish a slow button:
 
 ```tsx
 export default defineButton("general/slow", {

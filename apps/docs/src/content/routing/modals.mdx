@@ -83,7 +83,7 @@ export default defineModal("moderation/note/[userId]", {
 
 ## showModal
 
-`ctx.showModal(route, params)` is available on every context except a modal's own `submit`.
+`ctx.showModal(route, params)` is available on commands, context menus, buttons and selects. Modal `submit`, autocomplete, events and tasks do not have it.
 
 - `route` is typed from your modal files, and `params` is required exactly when the route has params.
 - It must be the first response. If the interaction has already been acknowledged, it throws an error that says so.

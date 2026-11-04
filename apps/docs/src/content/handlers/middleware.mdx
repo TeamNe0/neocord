@@ -27,7 +27,8 @@ Middleware runs for commands, context menus, buttons, selects and modals. It doe
 
 - Autocomplete handlers.
 - Events and tasks. A file named `middleware.ts` directly in `events` or `tasks` is an event or task with that name, not middleware.
-- Clicks on [live components](/docs/ui/live-sessions), which go straight to the session.
+
+It also runs on clicks in a [live session](/docs/ui/live-sessions). The chain of the route that opened the session runs again, with `ctx.kind` set to `"button"` or `"select"` and `ctx.params` empty. If it returns a node, neocord sends it with `ctx.reply` and the live handler does not run. Middleware limited with `kinds: ["command"]` skips these clicks.
 
 ## The handler signature
 

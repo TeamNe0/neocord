@@ -1,4 +1,4 @@
-Every handler receives a `ctx` object as its first argument. Its type depends on the route kind, so `ctx.options` only exists on slash commands and `ctx.update` only exists on buttons and selects.
+Every handler receives a `ctx` object as its first argument. Its type depends on the route kind, so `ctx.options` only exists on slash commands and `ctx.update` only exists on buttons, selects and modals.
 
 ```tsx title="src/features/general/commands/whoami/command.tsx"
 import { TextDisplay } from "@neocord/react";
@@ -92,7 +92,7 @@ Commands, context menus, buttons, selects and modals add these fields.
 | `state` | `Record<string, unknown>` | A fresh object for each interaction, shared along the middleware chain and with the handler. |
 | `reply(node, options?)` | `Promise<void>` | Replies, edits after a defer, or follows up. See [Replying](/docs/handlers/replying). |
 | `editReply(node, options?)` | `Promise<void>` | Edits the reply. |
-| `followUp(node, options?)` | `Promise<void>` | Sends another message. |
+| `followUp(node, options?)` | `Promise<void>` | Sends another message. After a defer, it fills in the deferred reply instead. |
 | `defer(options?)` | `Promise<void>` | Acknowledges now. `options` is `{ ephemeral?: boolean }`. A no-op if already acknowledged. |
 | `deleteReply()` | `Promise<void>` | Deletes the reply. |
 | `showModal(route, params?)` | `Promise<void>` | Opens a modal route. It must be the first response. Not on modal contexts. |

@@ -135,7 +135,7 @@ my-bot/
 
 ### What the options change
 
-- `--db` adds `src/db`, a `src/context.ts` that exposes the client as `ctx.app.db`, `DATABASE_URL` in `src/env.ts` and `.env.example`, a `/remember` command, and the `db:push`, `db:generate`, `db:migrate` and `db:studio` scripts. See [Drizzle](/docs/database/drizzle) and [Prisma](/docs/database/prisma).
+- `--db` adds `src/db`, a `src/context.ts` that exposes the client as `ctx.app.db`, `DATABASE_URL` in `src/env.ts` and `.env.example`, a `/remember` command, and the `db:push`, `db:generate`, `db:migrate` and `db:studio` scripts. Prisma also gets `db:deploy`. See [Drizzle](/docs/database/drizzle) and [Prisma](/docs/database/prisma).
 - `--eslint` adds `eslint.config.js`, the `lint` script, and native TypeScript 7 next to TypeScript 6. Without it, `typescript` is TypeScript 7 alone. [Manual setup](/docs/manual-setup#typescript-7-and-typescript-6) explains why.
 - Choosing bun as the package manager adds `@types/bun` and sets `"types": ["node", "bun"]` in `tsconfig.json`.
 
@@ -190,9 +190,10 @@ Then start the bot:
 run dev
 ```
 
-`neocord dev` generates code and types into `.neocord`, bundles the bot, syncs the commands to your server, and starts it. You should see lines like these. The first one only appears when the commands have changed:
+`neocord dev` generates code and types into `.neocord`, bundles the bot, syncs the commands to your server, and starts it. You should see lines like these. The first two only appear when the commands have changed:
 
 ```text
+2026-11-04T12:00:00.000Z INFO  [deploy] Deployed 2 commands to guild 123456789012345678.
 ✓ Synced 2 commands to guild 123456789012345678.
 ✓ Bot started.
 2026-11-04T12:00:00.000Z INFO  [clientReady] Logged in as my-bot#1234

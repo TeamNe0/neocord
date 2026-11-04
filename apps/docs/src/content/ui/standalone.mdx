@@ -111,7 +111,7 @@ await interaction.showModal(
 
 ## Custom ids and routes
 
-With no CLI, `route` is a plain `string` and `params` is an optional record. Use `buildCustomId` for the same id format, and `@neocord/routing` for matching:
+With no CLI, `route` is a plain `string` and `params` is an optional record. Use `buildCustomId` for the same id format. For matching, add `@neocord/routing` to your own dependencies and use its router:
 
 ```ts
 import { buildCustomId } from "@neocord/react";

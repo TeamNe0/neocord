@@ -64,6 +64,7 @@ Event contexts have only what does not depend on an interaction:
 | `feature` | `string` | The feature's name. |
 | `route` | `string` | The event's name. |
 | `shards` | `ShardHelpers` | See [Sharding](/docs/sharding). |
+| `commands` | `readonly CommandInfo[]` | The bot's commands. See [Listing commands](/docs/handlers/context#listing-commands). |
 
 `execute` returns no UI. Middleware, layouts, `error.tsx` and `loading.tsx` do not apply to events. To send a message, use discord.js directly. `@neocord/react` still renders the payload, and `send` needs the flags replaced, because it does not accept the ephemeral flag:
 
