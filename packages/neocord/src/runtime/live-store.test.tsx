@@ -94,7 +94,7 @@ async function start(
     ...(options.hook === undefined ? {} : { hook: options.hook }),
   }) as Fake;
   await harness.dispatch(origin);
-  const id = customIds(origin.recording.replies[0])[0] ?? "";
+  const id = customIds(origin.recording.replies[0] ?? origin.recording.edits[0])[0] ?? "";
   return { harness, origin, id };
 }
 

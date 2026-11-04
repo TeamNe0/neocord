@@ -379,7 +379,7 @@ describe("startBot", () => {
       },
     });
     started.client?.emit("interactionCreate", interaction);
-    await sleep(15);
+    for (let waited = 0; replies.length === 0 && waited < 2000; waited += 10) await sleep(10);
     expect(replies).toHaveLength(1);
 
     let destroyed = false;
