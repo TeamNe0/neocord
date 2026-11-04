@@ -20,7 +20,7 @@ import type {
   OptionDefinition,
   TaskDefinition,
 } from "../types.ts";
-import { brandOf, describeHelper, enabledManifest, mergedIntents } from "./manifest.ts";
+import { brandOf, describeHelper, enabledManifest, groupDefinition, mergedIntents } from "./manifest.ts";
 
 export interface ManifestIssue {
   severity: "error" | "warning";
@@ -158,7 +158,16 @@ function checkOption(name: string, option: OptionDefinition, command: string, fi
   }
 }
 
-function checkCommand(route: ManifestRoute, issues: ManifestIssue[]): void {
+function rootGroupIsGuildOnly(manifest: Manifest, route: ManifestRoute): boolean {
+  return manifest.groups.some(
+    (group) =>
+      group.segments.length === 1 &&
+      group.segments[0] === route.segments[0] &&
+      groupDefinition(group.module)?.guildOnly === true,
+  );
+}
+
+function checkCommand(manifest: Manifest, route: ManifestRoute, issues: ManifestIssue[]): void {
   const { file, id, segments } = route;
   const definition = route.module.default as CommandDefinition;
 
@@ -195,7 +204,7 @@ function checkCommand(route: ManifestRoute, issues: ManifestIssue[]): void {
         message: `/${id} sets permissions on a subcommand. Discord only stores them on the top-level command, so they are enforced at runtime only. Use defineGroup({ permissions }) to hide it in the client.`,
       });
     }
-    if (definition.guildOnly === true) {
+    if (definition.guildOnly === true && !rootGroupIsGuildOnly(manifest, route)) {
       issues.push({
         severity: "warning",
         file,
@@ -472,7 +481,7 @@ export function validateManifest(manifest: Manifest, config?: NeocordConfig): Ma
   const invalid = new Set(issues.map((issue) => issue.file));
   const routes = enabled.routes.filter((route) => !invalid.has(route.file));
   const commands = routes.filter((route) => route.kind === "command");
-  for (const route of commands) checkCommand(route, issues);
+  for (const route of commands) checkCommand(enabled, route, issues);
   checkCommandTree(enabled, commands, issues);
   checkContextMenus(routes, "user-command", issues);
   checkContextMenus(routes, "message-command", issues);

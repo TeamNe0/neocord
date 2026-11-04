@@ -265,6 +265,22 @@ describe("validateManifest", () => {
     expect(found).toContain('Group "/mod x" is nested');
   });
 
+  test("subcommand guildOnly does not warn when the top-level group deploys it", () => {
+    const issues = validateManifest(
+      manifest({
+        groups: [
+          { feature: "core", segments: ["mod"], file: "g.ts", module: { default: defineGroup({ description: "d", guildOnly: true }) } },
+          { feature: "core", segments: ["mod", "case"], file: "c.ts", module: { default: defineGroup({ description: "d" }) } },
+        ],
+        routes: [
+          route("command", "mod warn", defineCommand({ description: "d", guildOnly: true, execute })),
+          route("command", "mod case view", defineCommand({ description: "d", guildOnly: true, execute })),
+        ],
+      }),
+    );
+    expect(warnings(issues).join("\n")).not.toContain("sets guildOnly on a subcommand");
+  });
+
   test("interaction route limits and conflicts", () => {
     const long = `core/${"x".repeat(100)}`;
     const issues = validateManifest(
