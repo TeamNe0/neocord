@@ -268,7 +268,7 @@ export function validateComponent(component: RenderedComponent, mode: RenderMode
     case ComponentType.File:
       assertString(component.file.url, "File src", 1, 2048);
       if (!component.file.url.startsWith("attachment://") || component.file.url.length === 13) {
-        throw new Error("File src must be a Buffer or an attachment://<filename> reference.");
+        throw new Error("File src must be a Buffer, a Uint8Array or an attachment://<filename> reference.");
       }
       break;
     case ComponentType.Container:

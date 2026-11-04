@@ -503,8 +503,8 @@ describe("layout components", () => {
       file: { url: "attachment://a.txt" },
       spoiler: true,
     });
-    expect(() => render(<File src="https://x/a.txt" />)).toThrow("File src must be a Buffer or an attachment://");
-    expect(() => render(<File src="attachment://" />)).toThrow("File src must be a Buffer or an attachment://");
+    expect(() => render(<File src="https://x/a.txt" />)).toThrow("File src must be a Buffer, a Uint8Array or an attachment://");
+    expect(() => render(<File src="attachment://" />)).toThrow("File src must be a Buffer, a Uint8Array or an attachment://");
   });
 });
 
