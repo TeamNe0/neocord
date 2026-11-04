@@ -1,0 +1,38 @@
+{
+  "name": "@neocord/routing",
+  "version": "0.1.0",
+  "description": "File-system routing conventions shared across the neocord framework.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["neocord", "discord", "routing"],
+  "sideEffects": false,
+  "files": ["dist"],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "bun check",
+    "test": "bun test",
+    "check:package": "publint && attw --pack . --profile esm-only"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "catalog:",
+    "@neocord/tsconfig": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "publint": "catalog:"
+  }
+}
