@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Note {
+  userId    String   @id @map("user_id")
+  content   String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notes")
+}

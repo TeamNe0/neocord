@@ -1,0 +1,5 @@
+node_modules
+.neocord
+dist
+.env*
+!.env.example

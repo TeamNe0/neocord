@@ -1,0 +1,10 @@
+node_modules
+.neocord
+.git
+dist
+.env*
+!.env.example
+*.db
+*.db-*
+Dockerfile
+.dockerignore
