@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#1a1c2e"/>
+  <path d="M1020 -20h120L900 650H780z" fill="#eb459e"/>
+  <text x="80" y="170" font-family="Segoe UI, sans-serif" font-size="44" font-weight="700" fill="#a5acff">neocord</text>
+  <text x="80" y="300" font-family="Segoe UI, sans-serif" font-size="84" font-weight="800" fill="#eceef8">Your file tree is</text>
+  <text x="80" y="400" font-family="Segoe UI, sans-serif" font-size="84" font-weight="800" fill="#eceef8">your Discord bot.</text>
+  <text x="80" y="490" font-family="Consolas, monospace" font-size="30" fill="#aeb2cf">commands/ping/command.tsx is /ping</text>
+  <text x="80" y="540" font-family="Consolas, monospace" font-size="30" fill="#aeb2cf">bun create neocord</text>
+</svg>
