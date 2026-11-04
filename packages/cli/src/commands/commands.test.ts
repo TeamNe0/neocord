@@ -456,6 +456,39 @@ describe("neocord deploy", () => {
   );
 
   test(
+    "--clear forgets the dev deploy state, whatever its format, and only when it really cleared",
+    async () => {
+      const devState = ".neocord/deploy.dev.json";
+      const keyedByApplication = JSON.stringify({
+        version: 1,
+        scopes: { "guild:123": { applicationId: "1111", hash: "stubhash", commandCount: 4, deployedAt: "2026-01-01T00:00:00.000Z" } },
+      });
+      const project = fixture({ files: { ...STANDARD_FILES, [devState]: keyedByApplication } });
+
+      expect((await cli(project, ["deploy"])).code).toBe(0);
+      expect(project.read(devState)).toBe(keyedByApplication);
+
+      const dryRun = await cli(project, ["deploy", "--clear", "--dry-run"]);
+      expect(dryRun.stdout).toContain("Dry run: would remove every command");
+      expect(project.read(devState)).toBe(keyedByApplication);
+
+      const failed = await cli(project, ["deploy", "--clear"], { STUB_DEPLOY_THROWS: "Discord said no" });
+      expect(failed.code).toBe(1);
+      expect(project.read(devState)).toBe(keyedByApplication);
+
+      const cleared = await cli(project, ["deploy", "--clear", "--guild", "123"]);
+      expect(cleared.code).toBe(0);
+      expect(cleared.stdout).toContain("Removed every command from guild 123.");
+      expect(project.exists(devState)).toBe(false);
+
+      const again = await cli(project, ["deploy", "--clear"]);
+      expect(again.code).toBe(0);
+      expect(again.stdout).toContain("Removed every command from global scope.");
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
     "--dry-run prints a command tree",
     async () => {
       const project = fixture();

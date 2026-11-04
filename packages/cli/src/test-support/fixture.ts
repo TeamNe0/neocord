@@ -76,17 +76,18 @@ export function validateManifest(manifest) {
   return process.env.STUB_VALIDATE_ISSUES ? JSON.parse(process.env.STUB_VALIDATE_ISSUES) : [];
 }
 
-export async function deployCommands({ manifest, guildId, force, dryRun, stateFile }) {
+export async function deployCommands({ manifest, guildId, force, dryRun, clear, stateFile }) {
   record("deployCommands", {
     guildId: guildId ?? null,
     force: force ?? false,
     dryRun: dryRun ?? false,
+    clear: clear ?? false,
     stateFile: stateFile ?? null,
   });
   if (process.env.STUB_DEPLOY_THROWS) throw new Error(process.env.STUB_DEPLOY_THROWS);
   const commands = serializeCommands(manifest);
   return {
-    status: dryRun ? "dry-run" : "deployed",
+    status: dryRun ? "dry-run" : clear ? "cleared" : "deployed",
     scope: guildId ? "guild" : "global",
     ...(guildId ? { guildId } : {}),
     commandCount: commands.length,
