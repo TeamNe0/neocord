@@ -1,0 +1,3 @@
+dist
+.ssr
+src/content/eslint/rules

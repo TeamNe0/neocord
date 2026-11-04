@@ -1,0 +1,38 @@
+```tsx title="src/features/moderation/commands/ban/command.tsx"
+import {
+  ActionRow,
+  Button,
+  Container,
+  escapeMarkdown,
+  Heading,
+  Section,
+  Subtext,
+  Thumbnail,
+} from "@neocord/react";
+import { defineCommand, option } from "neocord";
+
+export default defineCommand({
+  description: "Ban a member",
+  permissions: ["BanMembers"],
+  guildOnly: true,
+  ephemeral: true,
+  options: {
+    user: option.user({ description: "Who to ban", required: true }),
+    reason: option.string({ description: "Why", maxLength: 200 }),
+  },
+  execute(ctx) {
+    const { user, reason } = ctx.options;
+    return (
+      <Container accentColor="red">
+        <Section accessory={<Thumbnail src={user.displayAvatarURL()} description="Avatar" />}>
+          <Heading level={2}>Ban {user.username}?</Heading>
+          <Subtext>{escapeMarkdown(reason ?? "No reason given")}</Subtext>
+        </Section>
+        <ActionRow>
+          <Button style="danger" route="moderation/confirm-ban/[userId]" params={{ userId: user.id }} label="Ban" />
+        </ActionRow>
+      </Container>
+    );
+  },
+});
+```
