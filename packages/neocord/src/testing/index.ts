@@ -16,6 +16,7 @@ export type {
 } from "./fakes.ts";
 export {
   renderModalOf,
+  runAutocomplete,
   runButton,
   runCommand,
   runEvent,
@@ -26,8 +27,13 @@ export {
   runUserCommand,
 } from "./run.tsx";
 export type {
+  AutocompleteResult,
   BackgroundResult,
+  LiveEventOptions,
+  LiveSelectOptions,
+  LiveTestSession,
   RenderModalOptions,
+  RunAutocompleteOptions,
   RunBackgroundOptions,
   RunButtonOptions,
   RunCommandOptions,

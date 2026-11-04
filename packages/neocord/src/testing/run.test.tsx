@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, test } from "bun:test";
-import { ActionRow, Button, Label, TextDisplay, TextInput } from "@neocord/react";
+import { ActionRow, Button, Label, StringSelect, TextDisplay, TextInput } from "@neocord/react";
 import { ChannelType, MessageFlags, type Guild, type GuildMember, type Role, type TextChannel, type User } from "discord.js";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   defineButton,
   defineCommand,
@@ -24,6 +24,7 @@ import {
   mockRole,
   mockUser,
   renderModalOf,
+  runAutocomplete,
   runButton,
   runCommand,
   runEvent,
@@ -249,7 +250,135 @@ describe("runCommand", () => {
   });
 });
 
+describe("live sessions", () => {
+  function Counter(): ReactNode {
+    const [count, setCount] = useState(0);
+    const [clicker, setClicker] = useState("nobody");
+    return (
+      <>
+        <TextDisplay>{`count ${count} by ${clicker}`}</TextDisplay>
+        <ActionRow>
+          <Button
+            label="add"
+            onClick={(event) => {
+              setCount(count + 1);
+              setClicker(event.user.username);
+            }}
+          />
+        </ActionRow>
+        <ActionRow>
+          <StringSelect placeholder="pick" options={[{ label: "One", value: "1" }]} onSelect={(event) => setCount(Number(event.values[0]) * 10)} />
+        </ActionRow>
+      </>
+    );
+  }
+  const counter = defineCommand({ description: "d", execute: () => <Counter /> });
+
+  test("live is null unless requested", async () => {
+    expect((await runCommand(counter)).live).toBeNull();
+  });
+
+  test("clicks and selects drive the mounted tree", async () => {
+    const owner = mockUser({ username: "owner" });
+    const { live, text } = await runCommand(counter, { live: true, user: owner });
+    expect(text).toBe("count 0 by nobody");
+
+    const first = await live!.click("add");
+    expect(first.updates).toHaveLength(1);
+    expect(first.text).toBe("count 1 by owner");
+
+    const second = await live!.click("add", { user: mockUser({ username: "guest" }) });
+    expect(second.text).toBe("count 2 by guest");
+
+    expect((await live!.select(["3"], { placeholder: "pick" })).text).toBe("count 30 by guest");
+    await live!.close();
+  });
+
+  test("unknown targets name what is available", async () => {
+    const { live } = await runCommand(counter, { live: true });
+    await expect(live!.click("missing")).rejects.toThrow('No live button labelled "missing". The message has: "add".');
+    await expect(live!.select(["1"], { placeholder: "other" })).rejects.toThrow('placeholder "other"');
+    await live!.close();
+  });
+
+  test("handler errors surface on the click result", async () => {
+    const broken = defineCommand({
+      description: "d",
+      execute: () => (
+        <ActionRow>
+          <Button
+            label="boom"
+            onClick={() => {
+              throw new Error("live broke");
+            }}
+          />
+        </ActionRow>
+      ),
+    });
+    const { live } = await runCommand(broken, { live: true });
+    const clicked = await live!.click("boom");
+    expect((clicked.error as Error).message).toBe("live broke");
+    await live!.close();
+  });
+
+  test("a tree with no handlers has no session even when requested", async () => {
+    const plain = defineCommand({ description: "d", execute: () => <TextDisplay>x</TextDisplay> });
+    expect((await runCommand(plain, { live: true })).live).toBeNull();
+  });
+});
+
+describe("runAutocomplete", () => {
+  const search = defineCommand({
+    description: "d",
+    options: {
+      topic: option.string({
+        description: "t",
+        autocomplete: (ctx) => [{ name: `${ctx.optionName}:${ctx.focused}`, value: ctx.focused }],
+      }),
+      plain: option.string({ description: "p" }),
+    },
+    execute: () => "x",
+  });
+
+  test("returns the choices for the focused option", async () => {
+    const { choices, error } = await runAutocomplete(search, { option: "topic", value: "cats" });
+    expect(choices).toEqual([{ name: "topic:cats", value: "cats" }]);
+    expect(error).toBeNull();
+  });
+
+  test("an option without a handler gets no choices", async () => {
+    expect((await runAutocomplete(search, { option: "plain" })).choices).toEqual([]);
+  });
+
+  test("handler errors are captured", async () => {
+    const broken = defineCommand({
+      description: "d",
+      options: {
+        topic: option.string({
+          description: "t",
+          autocomplete: () => {
+            throw new Error("search broke");
+          },
+        }),
+      },
+      execute: () => "x",
+    });
+    const { choices, error } = await runAutocomplete(broken, { option: "topic" });
+    expect(choices).toEqual([]);
+    expect((error as Error).message).toBe("search broke");
+  });
+});
+
 describe("runUserCommand and runMessageCommand", () => {
+  test("mockMessage carries an author and content", async () => {
+    const author = mockUser({ username: "ada" });
+    const result = await runMessageCommand(
+      defineMessageCommand({ name: "Quote", execute: (ctx) => `${ctx.target.author.username}: ${ctx.target.content}` }),
+      { target: mockMessage({ author, content: "hello" }) },
+    );
+    expect(result.text).toBe("ada: hello");
+  });
+
   test("provide targets", async () => {
     const user = await runUserCommand(
       defineUserCommand({ name: "Report", execute: (ctx) => ctx.target.username }),

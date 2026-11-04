@@ -272,6 +272,8 @@ export function mockChannel<T extends ChannelType = ChannelType.GuildText>(
 
 export interface MockMessageOptions {
   id?: string;
+  author?: User;
+  content?: string;
   components?: readonly { toJSON(): unknown }[];
   hook?: ApiHook;
   recording?: Recording;
@@ -280,6 +282,8 @@ export interface MockMessageOptions {
 export function mockMessage(options: MockMessageOptions = {}): Message {
   const message = {
     id: options.id ?? nextId(),
+    author: options.author ?? mockUser(),
+    content: options.content ?? "",
     components: options.components ?? [],
     edit: async (payload: unknown) => {
       await options.hook?.("message.edit", payload);

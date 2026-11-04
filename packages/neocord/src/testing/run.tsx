@@ -38,6 +38,7 @@ import type {
   ModalDefinition,
   ModalSchema,
   ModuleNamespace,
+  OptionChoice,
   OptionsRecord,
   SelectDefinition,
   SelectType,
@@ -53,6 +54,7 @@ import {
   testClient,
   type ApiHook,
   type FakeInteractionOptions,
+  type FakeKind,
   type Recording,
 } from "./fakes.ts";
 
@@ -67,6 +69,22 @@ export interface TestResult {
   ephemeral: boolean;
   error: unknown;
   text: string;
+  live: LiveTestSession | null;
+}
+
+export interface LiveEventOptions {
+  user?: User;
+  member?: GuildMember | null;
+}
+
+export interface LiveSelectOptions extends LiveEventOptions {
+  placeholder?: string;
+}
+
+export interface LiveTestSession {
+  click(label: string, options?: LiveEventOptions): Promise<TestResult>;
+  select(values: readonly string[], options?: LiveSelectOptions): Promise<TestResult>;
+  close(): Promise<void>;
 }
 
 export interface TestMiddleware {
@@ -89,6 +107,7 @@ export interface RunOptions {
   logger?: Logger;
   autoDeferAfter?: number | false;
   hook?: ApiHook;
+  live?: boolean;
 }
 
 interface RouteSpec {
@@ -159,6 +178,90 @@ function resultFrom(recording: Recording, error: unknown): TestResult {
     ephemeral: recording.ephemeral,
     error,
     text: all.flatMap((payload) => collectText(payload.components)).join("\n"),
+    live: null,
+  };
+}
+
+interface JsonComponent {
+  type: number;
+  label?: string;
+  placeholder?: string;
+  custom_id?: string;
+  components?: readonly JsonComponent[];
+  accessory?: JsonComponent;
+}
+
+const LIVE_SELECT_KINDS = new Map<number, FakeKind>([
+  [ComponentType.StringSelect, "string-select"],
+  [ComponentType.UserSelect, "user-select"],
+  [ComponentType.RoleSelect, "role-select"],
+  [ComponentType.MentionableSelect, "mentionable-select"],
+  [ComponentType.ChannelSelect, "channel-select"],
+]);
+
+function flattenComponents(components: readonly unknown[]): JsonComponent[] {
+  return (components as readonly JsonComponent[]).flatMap((component) => [
+    component,
+    ...flattenComponents(component.components ?? []),
+    ...(component.accessory === undefined ? [] : [component.accessory]),
+  ]);
+}
+
+function latestPayload(recording: Recording): RenderResult | null {
+  return recording.updates.at(-1) ?? recording.edits.at(-1) ?? recording.replies.at(-1) ?? recording.followUps.at(-1) ?? null;
+}
+
+function createLiveTestSession(harness: Harness, first: RenderResult | null, origin: FakeInteractionOptions): LiveTestSession {
+  let current = first;
+
+  const fire = async (
+    kind: FakeKind,
+    customId: string,
+    values: readonly string[],
+    options: LiveEventOptions,
+  ): Promise<TestResult> => {
+    const recording = createRecording();
+    const seen = harness.errors.length;
+    const user = options.user ?? origin.user;
+    await harness.dispatch(
+      createFakeInteraction({
+        kind,
+        customId,
+        values,
+        recording,
+        ...(user === undefined ? {} : { user }),
+        guild: origin.guild ?? null,
+        member: options.member !== undefined ? options.member : options.user === undefined ? (origin.member ?? null) : null,
+      }),
+    );
+    current = latestPayload(recording) ?? current;
+    return resultFrom(recording, harness.errors[seen] ?? null);
+  };
+
+  const components = (): JsonComponent[] => flattenComponents(current?.components ?? []);
+
+  return {
+    click(label, options = {}) {
+      const buttons = components().filter((component) => component.type === ComponentType.Button);
+      const button = buttons.find((component) => component.label === label);
+      if (button?.custom_id === undefined) {
+        const labels = buttons.map((component) => JSON.stringify(component.label)).join(", ");
+        return Promise.reject(new Error(`No live button labelled "${label}". The message has: ${labels || "no buttons"}.`));
+      }
+      return fire("button", button.custom_id, [], options);
+    },
+    select(values, options = {}) {
+      const selects = components().filter((component) => LIVE_SELECT_KINDS.has(component.type));
+      const select = selects.find(
+        (component) => options.placeholder === undefined || component.placeholder === options.placeholder,
+      );
+      const kind = select === undefined ? undefined : LIVE_SELECT_KINDS.get(select.type);
+      if (select?.custom_id === undefined || kind === undefined) {
+        return Promise.reject(new Error(`No live select${options.placeholder === undefined ? "" : ` with placeholder "${options.placeholder}"`} in the message.`));
+      }
+      return fire(kind, select.custom_id, values, options);
+    },
+    close: () => harness.close(),
   };
 }
 
@@ -226,12 +329,15 @@ async function runInteraction(spec: RouteSpec, options: RunOptions, fake: FakeIn
     recording,
     ...(options.hook === undefined ? {} : { hook: options.hook }),
   });
+  let keepOpen = false;
   try {
     await harness.dispatch(interaction);
+    keepOpen = options.live === true && harness.dispatcher.live.size > 0;
   } finally {
-    await harness.close();
+    if (!keepOpen) await harness.close();
   }
-  return resultFrom(recording, harness.errors[0] ?? null);
+  const result = resultFrom(recording, harness.errors[0] ?? null);
+  return keepOpen ? { ...result, live: createLiveTestSession(harness, latestPayload(recording), fake) } : result;
 }
 
 function resolveScope(
@@ -268,6 +374,43 @@ export async function runCommand<O extends OptionsRecord, G extends boolean>(
     options,
     { kind: "command", commandName: "test", ...scope, options: (options.options ?? {}) as Record<string, unknown> },
   );
+}
+
+export interface RunAutocompleteOptions<O extends OptionsRecord = OptionsRecord> extends RunOptions {
+  option: Extract<keyof O, string>;
+  value?: string;
+}
+
+export interface AutocompleteResult {
+  choices: OptionChoice[];
+  error: unknown;
+}
+
+export async function runAutocomplete<O extends OptionsRecord, G extends boolean>(
+  definition: CommandDefinition<O, G>,
+  options: RunAutocompleteOptions<O>,
+): Promise<AutocompleteResult> {
+  const recording = createRecording();
+  const harness = createHarness({
+    manifest: manifestFor({ kind: "command", id: "test", segments: ["test"], module: { default: definition } }, options),
+    ...(options.app === undefined ? {} : { app: options.app }),
+    ...(options.logger === undefined ? {} : { logger: options.logger }),
+    ...(options.commands === undefined ? {} : { commands: options.commands }),
+  });
+  try {
+    await harness.dispatch(
+      createFakeInteraction({
+        kind: "autocomplete",
+        commandName: "test",
+        recording,
+        ...resolveScope(options, definition.guildOnly, undefined),
+        focused: { name: options.option, value: options.value ?? "" },
+      }),
+    );
+  } finally {
+    await harness.close();
+  }
+  return { choices: (recording.choices ?? []) as OptionChoice[], error: harness.errors[0] ?? null };
 }
 
 export interface RunUserCommandOptions extends RunOptions {
