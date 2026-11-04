@@ -40,6 +40,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "check:packages": "turbo run check:package",
+    "e2e": "turbo run build --filter=./packages/* && bun run scripts/e2e.ts",
     "format": "bun fmt",
     "changeset": "changeset",
     "version-packages": "changeset version && bun install",
