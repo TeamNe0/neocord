@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { slugify } from "../plugins/rehype-headings.ts";
+import { ESLINT_RULE_INDEX } from "../src/data/eslint-rule-index.ts";
 import { ESLINT_RULES } from "../src/data/eslint-rules.ts";
 import { ALL_PAGES, HOME_META, NAV } from "../src/data/nav.ts";
 
@@ -84,7 +85,12 @@ function checkEslintRules(): void {
   }
   for (const rule of ESLINT_RULES) {
     check(names.includes(rule.name), `src/data/eslint-rules.ts documents ${rule.name}, which is not a rule.`);
+    const summary = ESLINT_RULE_INDEX.find((entry) => entry.name === rule.name);
+    check(summary?.description === rule.description, `src/data/eslint-rule-index.ts is out of step with eslint-rules.ts for ${rule.name}.`);
+    const source = readFileSync(join(directory, `${rule.name}.ts`), "utf8");
+    check(source.includes(rule.description), `The description of ${rule.name} does not match its source.`);
   }
+  check(ESLINT_RULE_INDEX.length === ESLINT_RULES.length, "src/data/eslint-rule-index.ts and eslint-rules.ts list different rules.");
 }
 
 function checkCli(): void {

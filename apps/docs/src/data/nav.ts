@@ -1,4 +1,4 @@
-import { ESLINT_RULES } from "./eslint-rules.ts";
+import { ESLINT_RULE_INDEX } from "./eslint-rule-index.ts";
 
 export interface PageDef {
   path: string;
@@ -282,7 +282,7 @@ export const NAV: NavGroup[] = [
         title: "ESLint",
         description: "Set up @neocord/eslint-plugin, choose a config, and see what every rule checks.",
         file: "tooling/eslint",
-        children: ESLINT_RULES.map((rule) => ({
+        children: ESLINT_RULE_INDEX.map((rule) => ({
           path: `/docs/eslint/${rule.name}`,
           title: rule.name,
           description: rule.description,
