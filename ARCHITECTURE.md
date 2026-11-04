@@ -399,6 +399,8 @@ Env files load in Next.js order into the child process: `.env`, `.env.<mode>`, `
 
 `neocord dev` runs the bot with an IPC channel (`stdio: ["inherit", "inherit", "inherit", "ipc"]`). To stop or restart it, the CLI sends `{ neocord: "shutdown" }`, and falls back to `SIGTERM` if the channel is unavailable, unless the signal was SIGINT, which the terminal or console has already delivered to the bot. `GRACEFUL_STOP_TIMEOUT_MS` (20 seconds) in `project/spawn.ts` bounds the wait before a force kill, and must stay longer than the bot's own shutdown budget. A second Ctrl+C force kills at once. `neocord start` has no IPC channel: console Ctrl+C reaches the manager directly on Windows, and `forwardSignals` waits the same timeout before terminating it.
 
+`neocord build` records its start time and esbuild's metafile inputs in `.neocord/build/inputs.json`, leaving out `node_modules`. A build is stale when a recorded input changed or is gone, or when the source folder, the features folder, the config or `tsconfig.json` changed since then. If the file is missing or invalid, those four are compared against the artifact's time instead. `neocord deploy` rebuilds a stale build. `neocord start` only warns and still starts, because file times often differ after a checkout or deploy.
+
 ## `@neocord/eslint-plugin`
 
 Flat config only, with `configs.recommended` and `configs.strict`. Rules read the AST only, so they do not need type information and work with any parser. See the docs site for the full rule list.

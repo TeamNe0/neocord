@@ -18,6 +18,7 @@ export interface ProjectPaths {
   types: string;
   entriesDir: string;
   buildDir: string;
+  buildInputs: string;
   devDir: string;
   cacheDir: string;
   deployState: string;
@@ -39,6 +40,7 @@ export function projectPaths(root: string): ProjectPaths {
     types: join(neocordDir, "types.d.ts"),
     entriesDir: join(neocordDir, "entries"),
     buildDir: join(neocordDir, "build"),
+    buildInputs: join(neocordDir, "build", "inputs.json"),
     devDir: join(neocordDir, "dev"),
     cacheDir: join(neocordDir, "cache"),
     deployState: join(neocordDir, "deploy.json"),

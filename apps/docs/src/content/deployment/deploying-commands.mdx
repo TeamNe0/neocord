@@ -18,7 +18,7 @@ x neocord deploy
 The command does the following:
 
 1. Loads env files in `production` mode, and validates the environment unless you pass `--dry-run`.
-2. Builds first if `.neocord/build/deploy.js` is missing, or is older than your source, config or `tsconfig.json`. That build runs validation.
+2. Builds first if `.neocord/build/deploy.js` is missing, or if your source, config, `tsconfig.json` or any other project file in the bundle changed since the build. That build runs validation.
 3. Runs `deploy.js`, which validates the manifest, serializes the commands and hashes them.
 4. Skips the request if the hash and the application match `.neocord/deploy.json`, and otherwise replaces the whole command list for that scope.
 5. Records the application, the hash, the command count and the time in `.neocord/deploy.json`.

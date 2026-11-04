@@ -62,7 +62,7 @@ Bundling uses esbuild with `packages: "external"`, so `node_modules` must be pre
 
 ### `neocord start`
 
-Launches `.neocord/build/manager.js`. It fails with `Run neocord build first.` if the file does not exist.
+Launches `.neocord/build/manager.js`. It fails with `Run neocord build first.` if the file does not exist. If project files look newer than the build, it prints a warning and starts anyway, because file times can also differ after a checkout or deploy.
 
 | Flag | Effect |
 | --- | --- |
@@ -75,7 +75,7 @@ On Windows, Ctrl+C reaches the manager directly through the console. The CLI wai
 
 ### `neocord deploy`
 
-Registers commands with Discord, skipping when the hash in `.neocord/deploy.json` is unchanged. If `.neocord/build/deploy.js` is missing or older than the source folder, the features folder, the config or `tsconfig.json`, it builds first, with validation.
+Registers commands with Discord, skipping when the hash in `.neocord/deploy.json` is unchanged. It builds first, with validation, if `.neocord/build/deploy.js` is missing or the build is out of date. A build is out of date when any project file it bundled changed or was removed since, including files outside the source folder, or when the source folder, the features folder, the config or `tsconfig.json` changed. The bundled files are listed in `.neocord/build/inputs.json`, and files in `node_modules` are not checked.
 
 | Flag | Effect |
 | --- | --- |
@@ -193,7 +193,7 @@ Everything in `.neocord` is generated, so keep it out of version control. The sc
 | `.neocord/entries/manager.ts` | Calls `startManager({ config, shardFile })`, reading the shard count from `NEOCORD_SHARD_COUNT`. |
 | `.neocord/entries/deploy.ts` | Calls `deployCommands` with options from `NEOCORD_DEPLOY_OPTIONS`. |
 | `.neocord/entries/validate.ts` | Calls `validateManifest` and `serializeCommands`, and prints the issues as JSON. |
-| `.neocord/build` | The production bundle from `neocord build`. |
+| `.neocord/build` | The production bundle from `neocord build`, and `inputs.json`, which records the build time and bundled project files for staleness checks. |
 | `.neocord/dev` | The development bundle from `neocord dev`. |
 | `.neocord/cache` | The bundled config and the bundled validation entry. |
 | `.neocord/deploy.json` | The last deployed command hash for each scope, used by `neocord deploy`. |

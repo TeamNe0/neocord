@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { CliError } from "../errors.ts";
 import { findProjectRoot, projectPaths } from "../project/paths.ts";
-import { deployArtifact, hasArtifact, openProject } from "../project/pipeline.ts";
+import { deployArtifact, hasArtifact, isBuildStale, openProject } from "../project/pipeline.ts";
 import { runProcess } from "../project/spawn.ts";
 import type { Ui } from "../ui.ts";
 import { executeDeploy } from "./deploy.ts";
@@ -20,6 +20,12 @@ export async function runStart(options: StartCommandOptions, ui: Ui): Promise<nu
   }
 
   const project = await openProject({ cwd: root, mode: "production" });
+
+  if (await isBuildStale(project, manager)) {
+    ui.warn(
+      "The production bundle looks out of date: project files changed after it was built, so this may run old code. Run neocord build to update it. Starting anyway, because file times can also differ after a checkout or deploy.",
+    );
+  }
 
   if (options.deploy || project.config.deploy.mode === "auto") {
     if (!hasArtifact(deployArtifact(project.paths))) {

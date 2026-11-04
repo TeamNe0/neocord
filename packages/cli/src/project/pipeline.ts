@@ -1,9 +1,9 @@
 import { existsSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { CliError } from "../errors.ts";
 import type { Ui } from "../ui.ts";
-import { bundleEntries, type BundleOutput } from "./bundle.ts";
+import { bundleEntries, readBuildInputs, type BundleOutput } from "./bundle.ts";
 import { generate, type GenerateResult } from "./codegen.ts";
 import { loadConfig, type CliConfig } from "./config.ts";
 import { applyEnv, loadEnvFiles, type EnvMode } from "./env.ts";
@@ -148,6 +148,7 @@ export async function buildProject(project: Project, ui: Ui, options: BuildProje
     root: project.root,
     entries: PRODUCTION_ENTRIES,
     outDir: project.paths.buildDir,
+    inputsFile: project.paths.buildInputs,
   });
   for (const warning of bundle.warnings) ui.warn(warning);
   const validation = options.validate ? await runValidation(project, ui) : null;
@@ -175,15 +176,25 @@ async function newestMtimeIn(directory: string): Promise<number> {
 }
 
 export async function isBuildStale(project: Pick<Project, "root" | "configFile" | "config" | "paths">, artifact: string): Promise<boolean> {
-  const built = await stat(artifact).then((info) => info.mtimeMs, () => null);
-  if (built === null) return true;
-  const inputs = await Promise.all([
+  const artifactTime = await stat(artifact).then((info) => info.mtimeMs, () => null);
+  if (artifactTime === null) return true;
+  const recorded = await readBuildInputs(project.paths.buildInputs);
+  const builtAt = recorded?.builtAt ?? artifactTime;
+  const isNewer = (mtime: number): boolean => Math.floor(mtime) > builtAt;
+
+  const scanned = await Promise.all([
     newestMtimeIn(join(project.root, project.config.sourceDir)),
     newestMtimeIn(join(project.root, project.config.featuresDir)),
     stat(project.configFile).then((info) => info.mtimeMs, () => 0),
     stat(project.paths.tsconfig).then((info) => info.mtimeMs, () => 0),
   ]);
-  return inputs.some((mtime) => mtime > built);
+  if (scanned.some(isNewer)) return true;
+  if (recorded === null) return false;
+
+  const inputs = await Promise.all(
+    recorded.inputs.map((input) => stat(resolve(project.root, input)).then((info) => info.mtimeMs, () => null)),
+  );
+  return inputs.some((mtime) => mtime === null || isNewer(mtime));
 }
 
 export function deployArtifact(paths: ProjectPaths): string {

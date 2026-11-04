@@ -10,6 +10,10 @@ import {
   type CliResult,
   type Fixture,
 } from "../test-support/fixture.ts";
+import { bundleEntries } from "../project/bundle.ts";
+import type { CliConfig } from "../project/config.ts";
+import { projectPaths } from "../project/paths.ts";
+import { deployArtifact, isBuildStale } from "../project/pipeline.ts";
 import { commandTree } from "./deploy.ts";
 import { runnerCommand, selectTestRunner } from "./test.ts";
 
@@ -503,6 +507,199 @@ describe("neocord deploy", () => {
       { label: "Quote (message)" },
     ]);
   });
+});
+
+describe("build staleness", () => {
+  const SHARED_FILES = {
+    ...STANDARD_FILES,
+    "lib/shared.ts": 'export const shared = "old-shared-value";\n',
+    "node_modules/local-dep/index.js": 'export const dep = "dep-value";\n',
+    "src/features/general/commands/ping/command.tsx": [
+      'import { shared } from "../../../../../lib/shared";',
+      'import { dep } from "../../../../../node_modules/local-dep/index.js";',
+      'export default { __neocord: "command", shared, dep };',
+      "",
+    ].join("\n"),
+  };
+
+  const STALE_WARNING = "looks out of date";
+
+  async function built(options: Parameters<typeof createFixture>[0] = {}): Promise<Fixture> {
+    const project = fixture({ files: SHARED_FILES, ...options });
+    expect((await cli(project, ["build", "--no-validate"])).code).toBe(0);
+    return project;
+  }
+
+  function isStale(project: Fixture, featuresDir = "src/features"): Promise<boolean> {
+    const paths = projectPaths(project.root);
+    return isBuildStale(
+      {
+        root: project.root,
+        configFile: join(project.root, "neocord.config.ts"),
+        config: { sourceDir: "src", featuresDir } as CliConfig,
+        paths,
+      },
+      deployArtifact(paths),
+    );
+  }
+
+  test(
+    "the build records its project inputs and leaves out node_modules and external packages",
+    async () => {
+      const project = await built();
+      const recorded = JSON.parse(project.read(".neocord/build/inputs.json")) as { builtAt: number; inputs: string[] };
+      expect(recorded.builtAt).toBeNumber();
+      expect(recorded.inputs).toContain("lib/shared.ts");
+      expect(recorded.inputs).toContain("neocord.config.ts");
+      expect(recorded.inputs).toContain("src/features/general/commands/ping/command.tsx");
+      expect(recorded.inputs.filter((input) => input.includes("node_modules"))).toEqual([]);
+      expect(recorded.inputs.filter((input) => input.includes("neocord/runtime") || input.includes("jsx-runtime"))).toEqual([]);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "a dev bundle does not overwrite the inputs of the production build",
+    async () => {
+      const project = await built();
+      const before = project.read(".neocord/build/inputs.json");
+      await bundleEntries({ root: project.root, entries: ["shard"], outDir: projectPaths(project.root).devDir });
+      expect(project.read(".neocord/build/inputs.json")).toBe(before);
+      expect(project.exists(".neocord/dev/inputs.json")).toBe(false);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "a fresh build is not stale",
+    async () => {
+      expect(await isStale(await built())).toBe(false);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "editing a bundled file outside the source folder makes it stale",
+    async () => {
+      const project = await built();
+      project.write("lib/shared.ts", 'export const shared = "new-shared-value";\n');
+      expect(await isStale(project)).toBe(true);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "deleting a bundled file makes it stale",
+    async () => {
+      const project = await built();
+      project.remove("lib/shared.ts");
+      expect(await isStale(project)).toBe(true);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "a file added under the source folder makes it stale, even with an old modified time",
+    async () => {
+      const project = await built();
+      project.write("src/lib/added.ts", "export {};\n");
+      const old = new Date(Date.now() - 3_600_000);
+      utimesSync(join(project.root, "src/lib/added.ts"), old, old);
+      expect(await isStale(project)).toBe(true);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "a file added under a features folder outside the source folder makes it stale",
+    async () => {
+      const project = await built({ files: { ...SHARED_FILES, "modules/.keep": "" } });
+      expect(await isStale(project, "modules")).toBe(false);
+      project.write("modules/added/feature.ts", "export {};\n");
+      expect(await isStale(project, "modules")).toBe(true);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "editing tsconfig.json makes it stale, because esbuild does not list it as an input",
+    async () => {
+      const project = await built({ files: { ...SHARED_FILES, "tsconfig.json": "{}\n" } });
+      expect(await isStale(project)).toBe(false);
+      project.write("tsconfig.json", '{ "compilerOptions": {} }\n');
+      expect(await isStale(project)).toBe(true);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "a file inside node_modules never makes it stale",
+    async () => {
+      const project = await built();
+      project.write("node_modules/local-dep/index.js", 'export const dep = "changed";\n');
+      expect(await isStale(project)).toBe(false);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test.each([
+    ["missing", null],
+    ["corrupt", "{ not json"],
+    ["the wrong shape", JSON.stringify({ builtAt: "yesterday", inputs: "lib/shared.ts" })],
+  ] as const)(
+    "falls back to the folder check when the inputs file is %s",
+    async (_name, content) => {
+      const project = await built();
+      if (content === null) project.remove(".neocord/build/inputs.json");
+      else project.write(".neocord/build/inputs.json", content);
+
+      project.write("lib/shared.ts", 'export const shared = "new-shared-value";\n');
+      expect(await isStale(project)).toBe(false);
+
+      project.write("src/lib/ignored.ts", "export const ignored = false;\n");
+      expect(await isStale(project)).toBe(true);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "deploy rebuilds when a bundled file outside the source folder changed",
+    async () => {
+      const project = await built();
+      expect(project.read(".neocord/build/deploy.js")).toContain("old-shared-value");
+
+      const fresh = await cli(project, ["deploy", "--dry-run"]);
+      expect(fresh.stdout).not.toContain("Building first");
+
+      project.write("lib/shared.ts", 'export const shared = "new-shared-value";\n');
+      const rebuilt = await cli(project, ["deploy", "--dry-run"]);
+      expect(rebuilt.code).toBe(0);
+      expect(rebuilt.stdout).toContain("Building first");
+      expect(project.read(".neocord/build/deploy.js")).toContain("new-shared-value");
+    },
+    LONG_TIMEOUT,
+  );
+
+  test(
+    "start warns about a stale build and still starts it",
+    async () => {
+      const project = await built();
+      project.clearCalls();
+      const fresh = await cli(project, ["start"]);
+      expect(fresh.code).toBe(0);
+      expect(fresh.stderr).not.toContain(STALE_WARNING);
+
+      project.write("lib/shared.ts", 'export const shared = "new-shared-value";\n');
+      project.clearCalls();
+      const stale = await cli(project, ["start"], { STUB_EXIT_CODE: "0" });
+      expect(stale.code).toBe(0);
+      expect(stale.stderr).toContain(STALE_WARNING);
+      expect(stale.stderr).toContain("neocord build");
+      expect(project.calls().map((call) => call.call)).toEqual(["startManager"]);
+      expect(project.read(".neocord/build/manager.js")).not.toContain("new-shared-value");
+    },
+    LONG_TIMEOUT,
+  );
 });
 
 describe("neocord test", () => {
