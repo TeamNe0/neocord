@@ -65,7 +65,7 @@ async function isPublished({ name, version }: PackageManifest): Promise<boolean>
 }
 
 function run(command: string[], cwd: string): void {
-  const result = Bun.spawnSync(command, { cwd, stdout: "inherit", stderr: "inherit" });
+  const result = Bun.spawnSync(command, { cwd, stdin: "inherit", stdout: "inherit", stderr: "inherit" });
   if (result.exitCode !== 0) {
     throw new Error(`"${command.join(" ")}" failed with exit code ${result.exitCode}.`);
   }
