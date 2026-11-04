@@ -1,0 +1,314 @@
+[Drizzle ORM](https://orm.drizzle.team) works in a neocord bot through the [app context](/docs/handlers/app-context): you create the client in `src/context.ts`, and handlers read it from `ctx.app.db`. neocord has no database layer of its own. These files are exactly what the scaffolder generates.
+
+## Scaffold it
+
+```pm
+create neocord my-bot --db drizzle --dialect sqlite
+```
+
+`--dialect` is `sqlite`, `postgres` or `mysql`. The result includes the files below, a `/remember` command, and these scripts.
+
+| Script | Command | Purpose |
+| --- | --- | --- |
+| `db:push` | `drizzle-kit push` | Apply the schema directly, which suits development. |
+| `db:generate` | `drizzle-kit generate` | Generate a SQL migration from the schema. |
+| `db:migrate` | `drizzle-kit migrate` | Apply pending migrations. |
+| `db:studio` | `drizzle-kit studio` | Browse the data in a local UI. |
+
+After scaffolding, set `DATABASE_URL` in `.env` and create the tables:
+
+```pm
+run db:push
+```
+
+Then try `/remember note:hello`, and `/remember` to read it back.
+
+## Add it by hand
+
+Install the ORM, the driver for your database, and the kit:
+
+| Dialect | Driver |
+| --- | --- |
+| SQLite | `@libsql/client` |
+| PostgreSQL | `postgres` |
+| MySQL | `mysql2` |
+
+```pm
+add drizzle-orm @libsql/client
+add -d drizzle-kit dotenv
+```
+
+Add the scripts to `package.json`:
+
+```json title="package.json"
+{
+  "scripts": {
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  }
+}
+```
+
+The imports below use `~/`, which comes from `paths` in the template's `tsconfig.json`:
+
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  }
+}
+```
+
+## Shared files
+
+These two files are the same for every dialect.
+
+```ts title="src/context.ts"
+import { defineContext } from "neocord";
+import { createDatabase } from "~/db";
+
+export default defineContext(async () => {
+  const { db, close } = createDatabase();
+  return { value: { db }, dispose: close };
+});
+```
+
+`dispose` closes the connection when the process stops.
+
+`drizzle-kit` does not use the CLI's env handling, so each `drizzle.config.ts` imports `dotenv/config`. That reads `.env` only, so `.env.local` is not used by these commands.
+
+## SQLite
+
+SQLite uses libsql, so no native builds are needed and the project runs on Bun and on Node.
+
+```env title=".env.example"
+DISCORD_TOKEN=
+DEV_GUILD_ID=
+DATABASE_URL=file:./local.db
+```
+
+```ts title="src/env.ts"
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    DISCORD_TOKEN: z.string().min(1),
+    DEV_GUILD_ID: z.string().min(1).optional(),
+    DATABASE_URL: z.string().min(1),
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  },
+  runtimeEnv: process.env,
+  emptyStringAsUndefined: true,
+  skipValidation: process.env.SKIP_ENV_VALIDATION === "true",
+});
+```
+
+`DATABASE_URL` uses `z.string()` here because a `file:` path is not a full URL.
+
+```ts title="drizzle.config.ts"
+import "dotenv/config";
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "turso",
+  schema: "./src/db/schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url: process.env.DATABASE_URL ?? "" },
+});
+```
+
+```ts title="src/db/index.ts"
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { env } from "~/env";
+import * as schema from "./schema";
+
+export function createDatabase() {
+  const client = createClient({ url: env.DATABASE_URL });
+  const db = drizzle({ client, schema });
+  return { db, close: () => client.close() };
+}
+```
+
+```ts title="src/db/schema.ts"
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const notes = sqliteTable("notes", {
+  userId: text("user_id").primaryKey(),
+  content: text("content").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+```
+
+The scaffolder adds `*.db` and `*.db-*` to `.gitignore`. Those patterns are also in the template's `.dockerignore`.
+
+## PostgreSQL
+
+```env title=".env.example"
+DISCORD_TOKEN=
+DEV_GUILD_ID=
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/neocord
+```
+
+```ts title="src/env.ts"
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    DISCORD_TOKEN: z.string().min(1),
+    DEV_GUILD_ID: z.string().min(1).optional(),
+    DATABASE_URL: z.url(),
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  },
+  runtimeEnv: process.env,
+  emptyStringAsUndefined: true,
+  skipValidation: process.env.SKIP_ENV_VALIDATION === "true",
+});
+```
+
+```ts title="drizzle.config.ts"
+import "dotenv/config";
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "postgresql",
+  schema: "./src/db/schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url: process.env.DATABASE_URL ?? "" },
+});
+```
+
+```ts title="src/db/index.ts"
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import { env } from "~/env";
+import * as schema from "./schema";
+
+export function createDatabase() {
+  const client = postgres(env.DATABASE_URL);
+  const db = drizzle({ client, schema });
+  return { db, close: () => client.end() };
+}
+```
+
+```ts title="src/db/schema.ts"
+import { pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
+
+export const notes = pgTable("notes", {
+  userId: varchar("user_id", { length: 32 }).primaryKey(),
+  content: varchar("content", { length: 500 }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+```
+
+## MySQL
+
+```env title=".env.example"
+DISCORD_TOKEN=
+DEV_GUILD_ID=
+DATABASE_URL=mysql://root:password@localhost:3306/neocord
+```
+
+`src/env.ts` is the same as the PostgreSQL one, with `DATABASE_URL: z.url()`.
+
+```ts title="drizzle.config.ts"
+import "dotenv/config";
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "mysql",
+  schema: "./src/db/schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url: process.env.DATABASE_URL ?? "" },
+});
+```
+
+```ts title="src/db/index.ts"
+import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
+import { env } from "~/env";
+import * as schema from "./schema";
+
+export function createDatabase() {
+  const client = mysql.createPool(env.DATABASE_URL);
+  const db = drizzle({ client, schema, mode: "default" });
+  return { db, close: () => client.end() };
+}
+```
+
+```ts title="src/db/schema.ts"
+import { mysqlTable, timestamp, varchar } from "drizzle-orm/mysql-core";
+
+export const notes = mysqlTable("notes", {
+  userId: varchar("user_id", { length: 32 }).primaryKey(),
+  content: varchar("content", { length: 500 }).notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+```
+
+## Using it in a handler
+
+This is the template's `/remember` command for SQLite and PostgreSQL. `ctx.app.db` is typed through the [generated types](/docs/type-safety#registeredapp), so run `neocord typegen` after creating `src/context.ts`.
+
+```tsx title="src/features/general/commands/remember/command.tsx"
+import { Container, Heading, Subtext, TextDisplay } from "@neocord/react";
+import { eq } from "drizzle-orm";
+import { defineCommand, option } from "neocord";
+import { notes } from "~/db/schema";
+
+export default defineCommand({
+  description: "Save a note, or read the one you saved",
+  ephemeral: true,
+  options: {
+    note: option.string({ description: "What to remember", maxLength: 500 }),
+  },
+  async execute(ctx) {
+    const { db } = ctx.app;
+    const userId = ctx.user.id;
+    const content = ctx.options.note;
+
+    if (content) {
+      await db
+        .insert(notes)
+        .values({ userId, content })
+        .onConflictDoUpdate({ target: notes.userId, set: { content, updatedAt: new Date() } });
+    }
+
+    const [saved] = await db.select().from(notes).where(eq(notes.userId, userId)).limit(1);
+
+    return (
+      <Container accentColor="#5865f2">
+        <Heading>Your note</Heading>
+        {saved ? (
+          <TextDisplay>{saved.content}</TextDisplay>
+        ) : (
+          <Subtext>You have not saved a note yet. Use the note option to save one.</Subtext>
+        )}
+      </Container>
+    );
+  },
+});
+```
+
+MySQL has no `onConflictDoUpdate`, so that version uses `onDuplicateKeyUpdate`:
+
+```tsx
+await db
+  .insert(notes)
+  .values({ userId, content })
+  .onDuplicateKeyUpdate({ set: { content, updatedAt: new Date() } });
+```
+
+## Production
+
+`db:push` suits development. For production, generate migrations with `db:generate`, commit the `drizzle` folder, and run `db:migrate` before starting the bot. The `DATABASE_URL` must be set for that step, and `drizzle-kit` is a dev dependency, so the migrate step needs dev dependencies installed.
+
+Each shard process creates its own client, so size connection pools for your [shard count](/docs/sharding). In [tests](/docs/testing), pass a fake or a test database with the `app` option.

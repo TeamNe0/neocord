@@ -1,0 +1,104 @@
+When a handler throws, neocord logs the error and shows an ephemeral message. An `error.tsx` file lets you decide what that message says. The scaffolder creates one at `src/error.tsx`.
+
+```tsx title="src/error.tsx"
+import { Container, Heading, Subtext } from "@neocord/react";
+
+export default function ErrorView() {
+  return (
+    <Container accentColor="#ed4245">
+      <Heading>Something went wrong</Heading>
+      <Subtext>The error was logged. Please try again in a moment.</Subtext>
+    </Container>
+  );
+}
+```
+
+## Props
+
+The component receives `ErrorProps`.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `error` | `unknown` | The value that was thrown. |
+| `ctx` | `AnyContext` | The context of the route that failed. |
+
+```tsx title="src/features/moderation/error.tsx"
+import { Code, Container, Heading, TextDisplay, escapeMarkdown } from "@neocord/react";
+import type { ErrorProps } from "neocord";
+
+export default function ModerationError({ error, ctx }: ErrorProps) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    <Container accentColor="red">
+      <Heading level={2}>That did not work</Heading>
+      <TextDisplay>
+        <Code>{ctx.route}</Code> failed: {escapeMarkdown(message)}
+      </TextDisplay>
+    </Container>
+  );
+}
+```
+
+Error messages can hold details you do not want to show to users. Show them only in views meant for staff, or show generic text and read the logs.
+
+## Which view is used
+
+Unlike middleware and layouts, the closest `error` file wins and the others are ignored. With `src/error.tsx` and `src/features/moderation/error.tsx`, routes in `moderation` use the feature's view and all other routes use the root view.
+
+If no view applies, the built-in message is "Something went wrong while handling this interaction."
+
+The [`require-error-boundary`](/docs/eslint/require-error-boundary) rule, which is on in the `strict` config, asks each feature to have its own `error.tsx`.
+
+## What is caught
+
+Each of these reaches the error view:
+
+- A throw in a handler, including `submit` on a modal.
+- A throw in middleware.
+- A render error in the node a handler returned or sent.
+- A limit error from `@neocord/react`, such as more than 40 components.
+- A throw in a live component's `onClick` or `onSelect`.
+
+These do not:
+
+| Failure | What happens |
+| --- | --- |
+| A required option that cannot be resolved | An ephemeral notice with the reason. Logged at debug level. |
+| A failed modal schema | An ephemeral list of the issues. `submit` does not run. |
+| A throw before the context exists | The built-in message, because the view needs `ctx`. |
+| A throw after `showModal` succeeded | Logged only, because the modal is already the response. |
+| A throw in an event or task | Logged only. It never crashes the process. |
+| A throw in `autocomplete` | Logged, and Discord receives an empty list of choices. |
+
+## How it is delivered
+
+The view is sent with `ephemeral: true`, through the same [state machine](/docs/handlers/replying#the-state-machine) as other replies:
+
+- If nothing was acknowledged, it is the reply.
+- If the interaction was deferred publicly, the deferral is deleted and the view is an ephemeral follow-up.
+- If a reply was already sent, the view is an ephemeral follow-up.
+
+[Layouts](/docs/handlers/layouts) do not apply to error views. Every error is logged with the route kind, id and file, whether or not a view runs.
+
+## When the view fails
+
+If the view itself throws, neocord logs that error too and sends the built-in message. Keep views simple.
+
+Error views are rendered once and are not live, so `onClick` and `onSelect` do not work in them. A button in an error view has to use `route` or `customId`.
+
+## React error boundaries
+
+`error.tsx` is not a React error boundary. It runs after the render or handler has failed. A class component with `componentDidCatch` inside your tree also works, because `@neocord/react` is a real React renderer. It catches render errors below it, so the rest of the message can still be sent.
+
+## Testing
+
+Pass the view with the `error` option, and read the thrown value from the result:
+
+```tsx
+const result = await runCommand(command, { error: ErrorView });
+result.error;
+result.ephemeral;
+result.text;
+```
+
+See [Testing](/docs/testing).

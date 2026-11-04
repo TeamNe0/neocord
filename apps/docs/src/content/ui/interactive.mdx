@@ -1,0 +1,178 @@
+Buttons and selects go inside an [`ActionRow`](/docs/ui/layout#actionrow). A button can also be a [`Section`](/docs/ui/layout#section) accessory, and selects can also go inside a modal [`Label`](/docs/ui/modal#label).
+
+## Addressing a handler
+
+Every interactive component needs to say what handles it. There are three ways, and the types keep them mutually exclusive.
+
+| Props | Meaning |
+| --- | --- |
+| `route` and `params` | Addresses a [route file](/docs/routing/dynamic-routes). `route` is checked against your files, and `params` is required exactly when the route has params. This is the preferred form. |
+| `customId` | A raw custom id, as an escape hatch. It must be 1 to 100 characters and cannot start with `~`. |
+| `onClick` or `onSelect` | Runs a function and makes the message a [live session](/docs/ui/live-sessions). |
+
+```tsx
+<Button style="danger" route="moderation/confirm-ban/[userId]" params={{ userId }} label="Ban" />
+<Button customId="raw-custom-id" label="Escape hatch" />
+<Button onClick={() => setCount(count + 1)}>Count: {count}</Button>
+```
+
+Using none or more than one throws, and so does `params` without `route`. The [`prefer-route-prop`](/docs/eslint/prefer-route-prop) rule warns about literal `customId` values.
+
+The custom id built from `route` and `params` must fit in 100 characters, or it throws a `CustomIdError`. Custom ids in one message must be unique. Two buttons with the same route and params throw "has a duplicate customId".
+
+## Buttons
+
+### `Button`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `style` | `"primary" \| "secondary" \| "success" \| "danger" \| "link" \| "premium"` | Defaults to `secondary`. |
+| `label` | `string` | Text, up to 80 characters. Use this or `children`. |
+| `children` | `ReactNode` | Text only. Components inside throw. |
+| `emoji` | `EmojiInput` | See [emoji values](#emoji-values). |
+| `disabled` | `boolean` | Disables the button. |
+| `route`, `params` | `ButtonRoute`, route params | Addresses a button file. |
+| `customId` | `string` | A raw custom id. |
+| `onClick` | `(event: ButtonInteraction) => unknown` | Makes a live session. |
+| `url` | `string` | Only with `style="link"`. Required there, up to 512 characters. |
+| `skuId` | `string` | Only with `style="premium"`. Required there, up to 20 characters. |
+| `id` | `number` | Component id. |
+
+Each style accepts different props:
+
+| Style | Address | Content |
+| --- | --- | --- |
+| `primary`, `secondary`, `success`, `danger` | `route`, `customId` or `onClick` | A label, children or emoji is required. |
+| `link` | `url`. No `route`, `customId` or `onClick`. | A label, children or emoji is required. |
+| `premium` | `skuId`. No `route`, `customId`, `onClick` or `url`. | No label, children or emoji. |
+
+```tsx
+<ActionRow>
+  <Button style="success" route="tickets/close/[id]" params={{ id }} emoji="✅" label="Close" />
+  <Button style="link" url="https://example.com" label="Website" />
+  <Button style="premium" skuId="1234567890123456789" />
+</ActionRow>
+```
+
+<DiscordPreview label="Buttons in Discord">
+  <DiscordRow>
+    <DiscordButton variant="success">Close</DiscordButton>
+    <DiscordButton>Website</DiscordButton>
+  </DiscordRow>
+</DiscordPreview>
+
+## Emoji values
+
+`EmojiInput` is a string or an object, and the same forms work on `Button` and `Option`.
+
+| Value | Meaning |
+| --- | --- |
+| `"🌙"` | A Unicode emoji. |
+| `"<:party:123>"`, `"<a:party:123>"` | A custom or animated emoji in Discord's format. |
+| A string of 17 to 20 digits | A custom emoji id. |
+| `{ id, name, animated }` | A custom emoji as an object. It needs an `id` or a `name`. |
+
+## Selects
+
+All five selects share these props.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `placeholder` | `string` | Up to 150 characters. |
+| `minValues` | `number` | From 0 to 25. Defaults to 1. |
+| `maxValues` | `number` | From 1 to 25. Defaults to 1. Must not be below `minValues`. |
+| `disabled` | `boolean` | Disables the select. Not allowed inside a modal. |
+| `required` | `boolean` | For selects in a modal. With `required` not set to `false`, `minValues` must be at least 1 there. |
+| `route`, `params` | `SelectRoute`, route params | Addresses a select file. |
+| `customId` | `string` | A raw custom id. |
+| `onSelect` | `(event) => unknown` | Makes a live session. `event` is typed for the select. |
+| `id` | `number` | Component id. |
+
+Inside a modal, a select uses `customId` as its field name, and `onSelect` is not available.
+
+### `StringSelect`
+
+Choices you define. Provide them with `Option` children or an `options` array, not both.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `options` | `readonly OptionProps[]` | The choices as data. |
+| `children` | `ReactNode` | `Option` elements. |
+
+Limits: 1 to 25 options with unique values, and `maxValues` cannot exceed the number of options.
+
+```tsx
+<ActionRow>
+  <StringSelect route="settings/theme" placeholder="Theme" minValues={1} maxValues={1}>
+    <Option label="Dark" value="dark" emoji="🌙" default />
+    <Option label="Light" value="light" description="Bright" />
+  </StringSelect>
+</ActionRow>
+```
+
+<DiscordPreview label="A string select in Discord">
+  <DiscordRow>
+    <DiscordSelect placeholder="Theme" />
+  </DiscordRow>
+</DiscordPreview>
+
+### `Option`
+
+One choice in a `StringSelect`, `RadioGroup` or `CheckboxGroup`. It throws anywhere else.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `label` | `string`, required | 1 to 100 characters. |
+| `value` | `string`, required | 1 to 100 characters. Must be unique in its parent. |
+| `description` | `string` | Up to 100 characters. |
+| `emoji` | `EmojiInput` | `StringSelect` only. Radio and checkbox groups throw on it. |
+| `default` | `boolean` | Selected initially. |
+
+It takes no children.
+
+### `UserSelect`
+
+Picks users. The handler reads `ctx.users` and `ctx.members`.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `defaultValues` | `readonly (string \| { id: string; type: "user" })[]` | Preselected users. A string is an id. |
+
+### `RoleSelect`
+
+Picks roles. The handler reads `ctx.roles`.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `defaultValues` | `readonly (string \| { id: string; type: "role" })[]` | Preselected roles. A string is an id. |
+
+### `MentionableSelect`
+
+Picks users and roles. The handler reads `ctx.users`, `ctx.members` and `ctx.roles`.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `defaultValues` | `readonly { id: string; type: "user" \| "role" }[]` | Preselected users and roles. Plain strings throw, because the type cannot be inferred. |
+
+### `ChannelSelect`
+
+Picks channels. The handler reads `ctx.channels`.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `defaultValues` | `readonly (string \| { id: string; type: "channel" })[]` | Preselected channels. A string is an id. |
+| `channelTypes` | `readonly ChannelType[]` | Limits which channels can be picked. |
+
+```tsx
+import { ChannelType } from "discord.js";
+
+<ActionRow>
+  <ChannelSelect route="settings/log-channel" channelTypes={[ChannelType.GuildText]} defaultValues={[channelId]} />
+</ActionRow>;
+```
+
+Limits on `defaultValues`, for all of the above: the count must be between `minValues` and `maxValues`, ids must be 1 to 20 characters, and each value must be unique. These selects take no children.
+
+## Handling the result
+
+Write a [button file](/docs/routing/buttons) or [select file](/docs/routing/selects) for routes. The select's `type` must match the component, because a `RoleSelect` sent to a route without `type: "role"` is rejected at dispatch as an unknown route.

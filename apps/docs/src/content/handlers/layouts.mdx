@@ -1,0 +1,114 @@
+A layout is a plain React component that wraps the output of the handlers beneath it. Put a `layout.tsx` in a folder and default-export the component. It receives `children` and returns host components.
+
+```tsx title="src/features/moderation/layout.tsx"
+import { Subtext } from "@neocord/react";
+import type { LayoutProps } from "neocord";
+
+export default function ModerationLayout({ children }: LayoutProps) {
+  return (
+    <>
+      {children}
+      <Subtext>Moderation actions are logged.</Subtext>
+    </>
+  );
+}
+```
+
+A handler that returns `<TextDisplay>Banned.</TextDisplay>` now sends that text with the subtext below it.
+
+<DiscordPreview command="/ban" label="A reply wrapped in a layout">
+  <DiscordText>Banned.</DiscordText>
+  <DiscordSubtext>Moderation actions are logged.</DiscordSubtext>
+</DiscordPreview>
+
+## Composition
+
+Layouts compose from root to leaf. The first layout in the chain is the outermost, so for a route under `src/features/moderation`:
+
+```tsx
+<RootLayout>
+  <ModerationLayout>
+    <NodeFromHandler />
+  </ModerationLayout>
+</RootLayout>
+```
+
+Unlike `error` and `loading`, all layouts in the chain apply. Only one layout is allowed per folder.
+
+## What layouts wrap
+
+Layouts wrap every node that goes through `ctx.reply`, `ctx.editReply`, `ctx.followUp`, `ctx.update` or a return value, as well as `loading.tsx`. They also wrap [live sessions](/docs/ui/live-sessions), so hooks inside a layout stay mounted with the session.
+
+They do not apply to:
+
+- Modals.
+- [Error views](/docs/handlers/error-boundaries).
+- Cooldown, permission and validation notices from neocord.
+- Events and tasks.
+
+## Opting out
+
+Set `layout: false` on the route, or pass it per call. A value in the call wins over the route.
+
+```tsx
+export default defineCommand({
+  description: "Reply without the layout",
+  layout: false,
+  execute() {
+    return <TextDisplay>Plain.</TextDisplay>;
+  },
+});
+```
+
+```tsx
+await ctx.reply(<TextDisplay>Plain.</TextDisplay>, { layout: false });
+```
+
+## Layouts and Message
+
+When a handler returns a `<Message>` element, neocord keeps it at the root and applies layouts inside it. `ephemeral` and `allowedMentions` are preserved:
+
+```tsx
+return (
+  <Message ephemeral>
+    <TextDisplay>Only you can see this.</TextDisplay>
+  </Message>
+);
+```
+
+neocord only looks at the returned element itself. If your own component renders `<Message>` and a layout applies, the `Message` ends up inside the layout and the render throws "Message must be the root of the tree." Return `<Message>` directly from the handler, or set `ephemeral` on the route.
+
+## Watch the nesting
+
+A layout's output has to be valid once the handler's node is inside it. A `Container` cannot hold another `Container`, so a layout that wraps `children` in a `Container` fails on any handler that also returns one:
+
+```tsx
+export default function CardLayout({ children }: LayoutProps) {
+  return <Container accentColor="blurple">{children}</Container>;
+}
+```
+
+The error is "Container is not allowed inside Container." Fragments avoid this, as in the first example. The [layout components](/docs/ui/layout) page lists what each component can hold.
+
+## Reading the context
+
+Layouts are rendered with the context available, so `useContext()` from `neocord` works:
+
+```tsx title="src/layout.tsx"
+import { Subtext } from "@neocord/react";
+import { useContext, type LayoutProps } from "neocord";
+
+export default function RootLayout({ children }: LayoutProps) {
+  const ctx = useContext();
+  return (
+    <>
+      {children}
+      <Subtext>Requested by {ctx.user.username}</Subtext>
+    </>
+  );
+}
+```
+
+## Requirements
+
+The default export must be a function. `validateManifest` reports anything else as "must default export a React component to be used as a layout", and the [`require-default-export`](/docs/eslint/require-default-export) rule catches it in your editor.

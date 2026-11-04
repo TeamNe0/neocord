@@ -1,0 +1,194 @@
+Every handler receives a `ctx` object as its first argument. Its type depends on the route kind, so `ctx.options` only exists on slash commands and `ctx.update` only exists on buttons and selects.
+
+```tsx title="src/features/general/commands/whoami/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineCommand } from "neocord";
+
+export default defineCommand({
+  description: "Show who you are",
+  guildOnly: true,
+  execute(ctx) {
+    ctx.logger.info(`Called in ${ctx.guild.name}`);
+    return <TextDisplay>You are {ctx.member.displayName}.</TextDisplay>;
+  },
+});
+```
+
+## Which context each handler gets
+
+| Handler | Context type | Adds to the interaction context |
+| --- | --- | --- |
+| `defineCommand` `execute` | `CommandContext` | `options` |
+| `defineUserCommand` `execute` | `UserCommandContext` | `target`, `targetMember` |
+| `defineMessageCommand` `execute` | `MessageCommandContext` | `target` |
+| `defineButton` `execute` | `ButtonContext` | `params`, `message`, `update`, `deferUpdate` |
+| `defineSelect` `execute` | `SelectContext` | `params`, `values`, `message`, `update`, `deferUpdate`, plus resolved values for the select type |
+| `defineModal` `submit` | `ModalContext` | `params`, `values`, `fields`, `update`, `deferUpdate`. It has no `showModal`. |
+| Option `autocomplete` | `AutocompleteContext` | Extends the base context only. See [Autocomplete context](#autocomplete-context). |
+| `defineEvent` `execute`, `defineTask` `execute` | `EventContext`, `TaskContext` | Nothing. Both are the base context. |
+
+## Base context
+
+Events, tasks and every interaction handler share these fields.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `client` | `Client<true>` | The discord.js client. |
+| `app` | `AppContext` | The value from [`src/context.ts`](/docs/handlers/app-context). |
+| `logger` | `Logger` | A logger scoped to this route's id. |
+| `feature` | `string` | The feature folder name. |
+| `route` | `string` | The route id, such as `mod warn` or `general/refresh`. |
+| `shards` | `ShardHelpers` | `id`, `ids`, `count`, `fetchClientValues` and `broadcastEval`. See [Sharding](/docs/sharding). |
+| `commands` | `readonly CommandInfo[]` | The enabled slash and context menu commands, sorted by name. See [Listing commands](#listing-commands). |
+
+`Logger` has `level`, `debug`, `info`, `warn`, `error` and `child(scope)`. Every log method takes a message and any number of details. Tokens are redacted from the output.
+
+### Listing commands
+
+`ctx.commands` lists the commands this bot registers, so a `/help` command does not need its own list. Commands in a disabled [feature](/docs/routing/features) are left out.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `kind` | `"command"`, `"user-command"` or `"message-command"` | The command type. |
+| `name` | `string` | The full name, such as `mod warn`. Context menu commands use their `name`. |
+| `description` | `string \| null` | `null` for context menu commands. |
+| `feature` | `string` | The feature folder name. |
+| `guildOnly` | `boolean` | Whether it is limited to servers. |
+| `permissions` | `readonly PermissionsString[]` | The required permissions. |
+
+```tsx title="src/features/utility/commands/help/command.tsx"
+import { Container, Heading, TextDisplay } from "@neocord/react";
+import { defineCommand } from "neocord";
+
+export default defineCommand({
+  description: "List the bot's commands",
+  execute(ctx) {
+    const commands = ctx.commands.filter((command) => command.kind === "command");
+    return (
+      <Container>
+        <Heading level={2}>Commands</Heading>
+        {commands.map((command) => (
+          <TextDisplay key={command.name}>
+            /{command.name}: {command.description}
+          </TextDisplay>
+        ))}
+      </Container>
+    );
+  },
+});
+```
+
+## Interaction context
+
+Commands, context menus, buttons, selects and modals add these fields.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `kind` | `InteractionKind` | `"command"`, `"user-command"`, `"message-command"`, `"button"`, `"select"` or `"modal"`. |
+| `interaction` | discord.js interaction | The raw interaction, typed for the route. |
+| `guild` | `Guild \| null` | Non-null in the types when `guildOnly: true`. |
+| `member` | `GuildMember \| null` | Non-null in the types when `guildOnly: true`. |
+| `user` | `User` | The user who triggered the interaction. |
+| `state` | `Record<string, unknown>` | A fresh object for each interaction, shared along the middleware chain and with the handler. |
+| `reply(node, options?)` | `Promise<void>` | Replies, edits after a defer, or follows up. See [Replying](/docs/handlers/replying). |
+| `editReply(node, options?)` | `Promise<void>` | Edits the reply. |
+| `followUp(node, options?)` | `Promise<void>` | Sends another message. |
+| `defer(options?)` | `Promise<void>` | Acknowledges now. `options` is `{ ephemeral?: boolean }`. A no-op if already acknowledged. |
+| `deleteReply()` | `Promise<void>` | Deletes the reply. |
+| `showModal(route, params?)` | `Promise<void>` | Opens a modal route. It must be the first response. Not on modal contexts. |
+
+`ReplyOptions` is `{ ephemeral?: boolean; layout?: boolean }`.
+
+Do not call `ctx.interaction.reply` or its siblings yourself, because that bypasses layouts. The [`no-direct-interaction-reply`](/docs/eslint/no-direct-interaction-reply) rule reports it. Reading from `ctx.interaction` is fine.
+
+## Guild and member
+
+With `guildOnly: true`, the type of `ctx.guild` and `ctx.member` loses `null`. At runtime, neocord fetches them if the interaction did not include them, and replies ephemerally with "This can only be used in a server." when they cannot be resolved. The handler does not run in that case.
+
+The literal `true` is what narrows the type, because the helper captures it as a const type parameter. `guildOnly: isGuild` with a `boolean` variable keeps the nullable types.
+
+## Command context
+
+`ctx.options` holds the resolved values, typed from the `options` object. See [Options](/docs/routing/options).
+
+## Context menu context
+
+`UserCommandContext` has `target: User` and `targetMember`. `targetMember` is `GuildMember` with `guildOnly: true`, and `GuildMember | null` otherwise. `MessageCommandContext` has `target: Message`. See [Context menus](/docs/routing/context-menus).
+
+## Component context
+
+Buttons and selects add these fields.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `params` | `RouteParams<R>` | Params from the route literal. `[id]` is a `string`, and `[...rest]` is a `string[]`. |
+| `message` | `Message` | The message the component is on. |
+| `update(node, options?)` | `Promise<void>` | Updates that message. |
+| `deferUpdate()` | `Promise<void>` | Acknowledges without a visible loading state. |
+
+## Select context
+
+`ctx.values` is a `string[]`. The other fields depend on the `type` in `defineSelect`.
+
+| `type` | Extra fields |
+| --- | --- |
+| `"string"` (default) | None |
+| `"user"` | `users`, `members` |
+| `"role"` | `roles` |
+| `"channel"` | `channels` |
+| `"mentionable"` | `users`, `members`, `roles` |
+
+## Modal context
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `params` | `RouteParams<R>` | Params from the route literal. |
+| `values` | Schema output, or `Record<string, string \| string[] \| boolean>` | Parsed values. See [Modals](/docs/routing/modals). |
+| `fields` | `ModalSubmitFields` | The raw discord.js fields, for example `ctx.fields.getUploadedFiles(name)`. |
+| `update(node, options?)` | `Promise<void>` | Updates the message the modal was opened from. Replies when it was opened from a command. |
+| `deferUpdate()` | `Promise<void>` | Acknowledges without changing that message. Defers a reply when it was opened from a command. |
+
+## Autocomplete context
+
+An `autocomplete` handler receives the base context plus these fields. It cannot reply, and it returns choices instead. Middleware does not run for autocomplete.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `kind` | `"autocomplete"` | Always this literal. |
+| `interaction` | `AutocompleteInteraction` | The raw interaction. |
+| `guild` | `Guild \| null` | The guild, if any. |
+| `member` | `GuildMember \| null` | The member, if any. |
+| `user` | `User` | The user typing. |
+| `focused` | `string` | The current value of the focused option. |
+| `optionName` | `string` | The focused option's name. |
+
+## Reading the context from a component
+
+`useContext()` from `neocord` returns the current interaction context from any component rendered by neocord. It throws when used elsewhere. The default return type is `AnyContext`, and you can name a narrower one.
+
+```tsx title="src/features/general/_components/Greeting.tsx"
+import { TextDisplay } from "@neocord/react";
+import { useContext } from "neocord";
+
+export function Greeting() {
+  const ctx = useContext();
+  return <TextDisplay>Hello {ctx.user.username}.</TextDisplay>;
+}
+```
+
+This is `useContext` from `neocord`, not the one from `react`. React's still works for your own React contexts. See [Custom components](/docs/ui/custom-components).
+
+## Checks before the handler
+
+neocord runs these steps in order for commands, context menus, buttons, selects and modals:
+
+1. Resolve `guild` and `member`, and enforce `guildOnly`.
+2. Enforce `permissions` against `interaction.memberPermissions`. A missing permission gets an ephemeral list of what is missing.
+3. Start the `autoDefer` timer.
+4. Build the context. This resolves options and parses the modal schema.
+5. Run [middleware](/docs/handlers/middleware), root to leaf.
+6. Apply `cooldown`. It is per user and route, kept in memory, so middleware denials do not consume it.
+7. Send [`loading.tsx`](/docs/handlers/loading), for commands only.
+8. Run the handler and deliver what it returns.
+
+A required option that cannot be resolved stops at step 4 with an ephemeral notice. A required `member` option whose user has left the server replies "The user given for "name" is not a member of this server."

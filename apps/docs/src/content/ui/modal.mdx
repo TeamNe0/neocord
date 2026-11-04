@@ -1,0 +1,175 @@
+These components build a modal, usually in the `render` function of a [modal route](/docs/routing/modals). A modal holds one to five `Label` or `TextDisplay` children, and each `Label` wraps one form control.
+
+```tsx title="src/features/moderation/modals/ban-reason/[userId]/modal.tsx"
+import { Label, TextInput } from "@neocord/react";
+import { defineModal } from "neocord";
+import { z } from "zod";
+
+export default defineModal("moderation/ban-reason/[userId]", {
+  title: "Ban reason",
+  schema: z.object({ reason: z.string().min(3) }),
+  render({ field }) {
+    return (
+      <Label label="Reason" description="Shown in the audit log">
+        <TextInput customId={field("reason")} style="paragraph" maxLength={500} placeholder="Spam" />
+      </Label>
+    );
+  },
+  submit(ctx) {
+    return <>Banned for: {ctx.values.reason}</>;
+  },
+});
+```
+
+<DiscordModal title="Ban reason">
+  <DiscordField label="Reason" description="Shown in the audit log" value="Spam" />
+</DiscordModal>
+
+## Structure
+
+### `Modal`
+
+The root of a modal. In a `defineModal` route you do not need it, because the route provides the custom id and title. Use it with [`renderModal`](/docs/ui/standalone) directly.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `title` | `string`, required | 1 to 45 characters. |
+| `route`, `params` | `ModalRoute`, route params | Addresses a modal route. Use this or `customId`. |
+| `customId` | `string` | A raw custom id, 1 to 100 characters. Cannot start with `~`. |
+| `children` | `ReactNode` | `Label`, `TextDisplay`, text and inline components. |
+
+Limits: 1 to 5 top-level children. It must be the only element at the root.
+
+Modals cannot use `onClick` or `onSelect`, and `renderModal` is synchronous, so nothing inside may suspend.
+
+### `Label`
+
+A title and description around one form control.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `label` | `string`, required | 1 to 45 characters. |
+| `description` | `string` | Up to 100 characters. |
+| `id` | `number` | Component id. |
+| `children` | `ReactNode` | Exactly one of `TextInput`, a select, `FileUpload`, `RadioGroup`, `CheckboxGroup` or `Checkbox`. |
+
+## Field names
+
+`customId` on a control is the field's name, and it becomes the key in `ctx.values`. With a schema, use `field("name")` from the `render` argument, which only accepts the schema's keys.
+
+| Control | Value in `ctx.values` |
+| --- | --- |
+| `TextInput` | `string`, omitted when left blank |
+| Selects, `CheckboxGroup` | `string[]` |
+| `FileUpload` | `string[]` of attachment ids. Read the files with `ctx.fields.getUploadedFiles(name)`. |
+| `RadioGroup` | `string`, omitted when nothing is chosen |
+| `Checkbox` | `boolean` |
+
+## Controls
+
+Control custom ids must be 1 to 100 characters, cannot start with `~`, and must be unique in the modal.
+
+### `TextInput`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `customId` | `string`, required | Field name. |
+| `style` | `"short" \| "paragraph"` | Defaults to `short`. |
+| `placeholder` | `string` | Up to 100 characters. |
+| `required` | `boolean` | Whether the field must be filled in. |
+| `minLength` | `number` | From 0 to 4000. |
+| `maxLength` | `number` | From 1 to 4000. Must not be below `minLength`. |
+| `value` | `string` | Initial value, up to 4000 characters. Use this or `children`. |
+| `children` | `ReactNode` | Initial value as text. Components inside throw. |
+| `id` | `number` | Component id. |
+
+### `FileUpload`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `customId` | `string`, required | Field name. |
+| `minValues` | `number` | From 0 to 10. Defaults to 1. |
+| `maxValues` | `number` | From 1 to 10. Defaults to 1. Must not be below `minValues`. |
+| `fileTypes` | `string[]` | 1 to 10 entries: `image`, `video`, `audio`, or an extension with a leading dot such as `.pdf`. |
+| `required` | `boolean` | With `required` not set to `false`, `minValues` must be at least 1. |
+| `id` | `number` | Component id. |
+
+It takes no children.
+
+### `RadioGroup`
+
+Picks one option. Provide `Option` children or an `options` array, not both.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `customId` | `string`, required | Field name. |
+| `options` | `readonly ModalOptionProps[]` | The options as data. |
+| `children` | `ReactNode` | `Option` elements. |
+| `required` | `boolean` | Whether an option must be chosen. |
+| `id` | `number` | Component id. |
+
+Limits: 2 to 10 options with unique values, and at most one with `default`. Options cannot have an emoji.
+
+### `CheckboxGroup`
+
+Picks several options. Provide `Option` children or an `options` array, not both.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `customId` | `string`, required | Field name. |
+| `options` | `readonly ModalOptionProps[]` | The options as data. |
+| `children` | `ReactNode` | `Option` elements. |
+| `minValues` | `number` | From 0 to the number of options. Defaults to 1. |
+| `maxValues` | `number` | From 1 to the number of options. Defaults to the number of options. |
+| `required` | `boolean` | With `required` not set to `false`, `minValues` must be at least 1. |
+| `id` | `number` | Component id. |
+
+Limits: 1 to 10 options with unique values. Options cannot have an emoji.
+
+### `Checkbox`
+
+A single on or off value.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `customId` | `string`, required | Field name. |
+| `default` | `boolean` | Whether it starts checked. |
+| `id` | `number` | Component id. |
+
+It takes no children.
+
+## Option props in modals
+
+`ModalOptionProps` is `label`, `value`, `description` and `default`, with the limits listed on [`Option`](/docs/ui/interactive#option).
+
+```tsx
+<Label label="Priority">
+  <RadioGroup customId={field("priority")}>
+    <Option label="Low" value="low" default />
+    <Option label="High" value="high" />
+  </RadioGroup>
+</Label>
+```
+
+## Selects in modals
+
+Any select works in a `Label`, with `customId` as the field name. `disabled` throws in a modal, and `minValues` must be at least 1 unless `required` is `false`. The [prefer-route-prop](/docs/eslint/prefer-route-prop) rule does not report these, because modal fields need a `customId`.
+
+```tsx
+<Label label="Who to notify">
+  <UserSelect customId={field("users")} maxValues={3} />
+</Label>
+```
+
+## Text in modals
+
+Text and inline components can sit directly in a modal. They collapse into a `TextDisplay` that counts towards the limit of five.
+
+```tsx
+<>
+  Tell us what happened.
+  <Label label="Reason">
+    <TextInput customId={field("reason")} />
+  </Label>
+</>
+```

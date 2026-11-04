@@ -1,0 +1,189 @@
+These components build the structure of a message. Most of them take an optional `id`, which is Discord's numeric component id. It must be an integer from 0 to 4294967295, and non-zero ids must be unique in the message.
+
+## Message structure
+
+### `Message`
+
+Sets options for the whole message. It must be the only element at the root of the tree, and you only need it when you use one of its props.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `ephemeral` | `boolean` | Sets the ephemeral flag. Only you see the message. |
+| `allowedMentions` | `MessageMentionOptions` | Mention rules for this message. neocord's client default is `{ parse: [] }`. |
+| `children` | `ReactNode` | Top-level components, text and inline components. |
+
+```tsx
+<Message ephemeral allowedMentions={{ users: [user.id] }}>
+  <UserMention id={user.id} /> this is private.
+</Message>
+```
+
+Limits: at least one component, and at most 40 in total, counting nested ones. Inside another component, it throws "Message must be the root of the tree."
+
+### `Container`
+
+A box with an optional accent colour, which replaces the role of an embed.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `accentColor` | `number \| "#rrggbb" \| NamedColor` | Accent colour. A number must be from 0 to 16777215 (0xffffff). |
+| `spoiler` | `boolean` | Hides the contents behind a spoiler. Defaults to `false`. |
+| `id` | `number` | Component id. |
+| `children` | `ReactNode` | `Section`, `TextDisplay`, `Separator`, `ActionRow`, `MediaGallery`, `File`, text and inline components. |
+
+`NamedColor` is one of these:
+
+| Name | Value |
+| --- | --- |
+| `blurple` | `#5865f2` |
+| `green` | `#57f287` |
+| `yellow` | `#fee75c` |
+| `fuchsia` | `#eb459e` |
+| `red` | `#ed4245` |
+| `white` | `#ffffff` |
+| `black` | `#000000` |
+
+Limits: 1 to 40 children. A `Container` cannot hold a `Container`.
+
+```tsx
+<Container accentColor="red">
+  <Heading level={2}>Banned</Heading>
+  Reason: spam
+</Container>
+```
+
+<DiscordPreview label="A container with a red accent in Discord">
+  <DiscordContainer accent="red">
+    <DiscordHeading level={2}>Banned</DiscordHeading>
+    <DiscordText>Reason: spam</DiscordText>
+  </DiscordContainer>
+</DiscordPreview>
+
+### `Section`
+
+Text with an accessory next to it.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `accessory` | `ReactNode`, required | Exactly one `Button` or `Thumbnail`. |
+| `id` | `number` | Component id. |
+| `children` | `ReactNode` | Text blocks. Only `TextDisplay`, text and inline components. |
+
+Limits: 1 to 3 text blocks, and exactly one accessory. Adjacent text and inline elements collapse into one block.
+
+```tsx
+<Section accessory={<Thumbnail src={user.displayAvatarURL()} description="Avatar" />}>
+  <Heading level={3}>{user.username}</Heading>
+  <Subtext>Joined last week</Subtext>
+</Section>
+```
+
+<DiscordPreview label="A section with a thumbnail in Discord">
+  <DiscordSection accessory={<DiscordThumbnail label="A" />}>
+    <DiscordHeading level={3}>ada</DiscordHeading>
+    <DiscordSubtext>Joined last week</DiscordSubtext>
+  </DiscordSection>
+</DiscordPreview>
+
+### `TextDisplay`
+
+A block of markdown text. You only need it explicitly to keep two blocks apart or to set an `id`, because text collapses into one automatically.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `id` | `number` | Component id. |
+| `children` | `ReactNode` | Text and [inline components](/docs/ui/inline). |
+
+Limits: the rendered content must be 1 to 4000 characters. An empty `TextDisplay` throws, while empty collapsed text just produces nothing.
+
+### `Separator`
+
+A gap between components, with an optional line.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `divider` | `boolean` | Draws a line. Defaults to `true`. |
+| `spacing` | `"small" \| "large"` | Size of the gap. Defaults to `small`. |
+| `id` | `number` | Component id. |
+
+It takes no children.
+
+```tsx
+<Separator divider={false} spacing="large" />
+```
+
+### `ActionRow`
+
+Holds buttons or a select.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `id` | `number` | Component id. |
+| `children` | `ReactNode` | [Interactive components](/docs/ui/interactive). |
+
+Limits: up to five buttons, or a single select. They cannot be mixed. Text inside it throws, and [`no-text-in-action-row`](/docs/eslint/no-text-in-action-row) reports it.
+
+## Media
+
+The `src` prop on `MediaItem`, `Thumbnail` and `File` is explained on the [Attachments](/docs/ui/attachments) page. A string is a URL or an `attachment://` reference, and a `Buffer` or `Uint8Array` needs a `name`.
+
+### `MediaGallery`
+
+A grid of images and videos.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `items` | `readonly MediaItemProps[]` | The items as data. Use this or children, not both. |
+| `id` | `number` | Component id. |
+| `children` | `ReactNode` | `MediaItem` elements. |
+
+Limits: 1 to 10 items. Anything other than `MediaItem` in its children throws.
+
+```tsx
+<MediaGallery>
+  <MediaItem src="https://example.com/a.png" description="First" />
+  <MediaItem src={buffer} name="b.png" spoiler />
+</MediaGallery>
+```
+
+### `MediaItem`
+
+One item in a `MediaGallery`. It must be inside one, and it does not count towards the 40 component limit.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `src` | `string \| Buffer \| Uint8Array`, required | URL, `attachment://` reference, or bytes. A URL can be up to 2048 characters. |
+| `name` | `string` | Attachment file name. Required when `src` is binary. |
+| `description` | `string` | Alt text, up to 1024 characters. |
+| `spoiler` | `boolean` | Hides it behind a spoiler. |
+
+### `Thumbnail`
+
+An image used as a `Section` accessory. It is not valid anywhere else.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `src` | `string \| Buffer \| Uint8Array`, required | URL, `attachment://` reference, or bytes. A URL can be up to 2048 characters. |
+| `name` | `string` | Attachment file name. Required when `src` is binary. |
+| `description` | `string` | Alt text, up to 1024 characters. |
+| `spoiler` | `boolean` | Hides it behind a spoiler. |
+| `id` | `number` | Component id. |
+
+### `File`
+
+An attached file shown as a download. This is the only media component that cannot take a plain URL.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `src` | `string \| Buffer \| Uint8Array`, required | Bytes or an `attachment://` reference. |
+| `name` | `string` | Attachment file name. Required when `src` is binary. |
+| `spoiler` | `boolean` | Hides it behind a spoiler. |
+| `id` | `number` | Component id. |
+
+Limits: a URL throws "File src must be a Buffer or an attachment://filename reference."
+
+`File` shadows the global `File` type in any module that imports it.
+
+```tsx
+<File src={Buffer.from(report)} name="report.txt" />
+```

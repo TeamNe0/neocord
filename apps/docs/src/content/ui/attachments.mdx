@@ -1,0 +1,108 @@
+`Thumbnail`, `MediaItem` and `File` take their content through `src`. Binary data is collected into the message's `files` automatically, so you do not need to build attachments yourself.
+
+```tsx title="src/features/general/commands/export/command.tsx"
+import { Container, File, Heading, MediaGallery, MediaItem } from "@neocord/react";
+import { defineCommand } from "neocord";
+
+export default defineCommand({
+  description: "Export your data",
+  ephemeral: true,
+  async execute(ctx) {
+    const report = await buildReport(ctx.user.id);
+    return (
+      <Container>
+        <Heading level={2}>Your export</Heading>
+        <MediaGallery>
+          <MediaItem src={report.chart} name="chart.png" description="Activity chart" />
+        </MediaGallery>
+        <File src={Buffer.from(report.csv)} name="report.csv" />
+      </Container>
+    );
+  },
+});
+```
+
+## What src accepts
+
+| Value | `Thumbnail`, `MediaItem` | `File` |
+| --- | --- | --- |
+| `https://` URL | Yes, up to 2048 characters | No. It throws. |
+| `attachment://name` | Yes | Yes |
+| `Buffer` | Yes, with `name` | Yes, with `name` |
+| `Uint8Array` | Yes, with `name` | Yes, with `name` |
+
+The types require `name` when `src` is binary. On a string `src`, `name` is ignored.
+
+```tsx
+<Thumbnail src="https://example.com/avatar.png" description="Avatar" />
+<Thumbnail src={pngBuffer} name="avatar.png" description="Avatar" />
+<File src={new Uint8Array(bytes)} name="data.bin" />
+```
+
+## How bytes become attachments
+
+For a binary `src`, the serialiser stores the bytes under `name` and writes `attachment://name` into the component. The result has them in `files`, which neocord passes to Discord with the message:
+
+```ts
+{
+  flags: MessageFlags.IsComponentsV2,
+  components: [
+    { type: ComponentType.File, file: { url: "attachment://report.csv" } },
+  ],
+  files: [{ attachment: buffer, name: "report.csv" }],
+}
+```
+
+Attachments work on every send path, including `ctx.update` and `ctx.editReply`.
+
+## Names
+
+| Rule | Error when broken |
+| --- | --- |
+| A binary `src` needs a `name`. | `File requires a name when src is a Buffer or Uint8Array.` |
+| A name can only contain letters, numbers, underscores, dashes and dots. | `File name "my file.txt" may only contain letters, numbers, underscores, dashes and dots.` |
+| One name holds one set of bytes per message. | `File name "a.png" is already used by a different attachment.` |
+
+The same name with identical bytes is fine, and only one attachment is uploaded. Use that, or a string reference, to show one image in two places:
+
+```tsx
+<MediaGallery>
+  <MediaItem src={chart} name="chart.png" />
+</MediaGallery>
+<Section accessory={<Thumbnail src="attachment://chart.png" description="Chart" />}>
+  Same image, uploaded once.
+</Section>
+```
+
+A string `attachment://` reference is not checked against `files`. It must name an attachment that another component in the message provides, or one you pass yourself when [rendering standalone](/docs/ui/standalone).
+
+## Using a user's upload
+
+An `option.attachment` value is a discord.js `Attachment`, so its `url` works as a string `src`:
+
+```tsx
+import { MediaGallery, MediaItem } from "@neocord/react";
+import { defineCommand, option } from "neocord";
+
+export default defineCommand({
+  description: "Repost an image",
+  options: {
+    image: option.attachment({ description: "The image", required: true }),
+  },
+  execute(ctx) {
+    return (
+      <MediaGallery>
+        <MediaItem src={ctx.options.image.url} description={ctx.options.image.name} />
+      </MediaGallery>
+    );
+  },
+});
+```
+
+Discord's CDN links expire, so fetch the file and pass its bytes if you need the message to last. Modal uploads use [`FileUpload`](/docs/ui/modal#fileupload) and `ctx.fields.getUploadedFiles(name)`.
+
+## Limits
+
+`@neocord/react` checks URL lengths (2048), description lengths (1024), and gallery size (1 to 10 items). It does not check file sizes. Discord rejects uploads above the limit for the guild, and that error reaches your [error view](/docs/handlers/error-boundaries).
+
+Descriptions are alt text. Set them on images so screen reader users on Discord know what they show.

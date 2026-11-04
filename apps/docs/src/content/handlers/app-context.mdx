@@ -1,0 +1,91 @@
+`src/context.ts` creates the services your handlers share, such as a database client. Its value is available as `ctx.app` in every handler, event and task, with its type generated from the file.
+
+```ts title="src/context.ts"
+import { defineContext } from "neocord";
+import { createDatabase } from "~/db";
+
+export default defineContext(async () => {
+  const { db, close } = createDatabase();
+  return { value: { db }, dispose: close };
+});
+```
+
+```tsx title="src/features/general/commands/count/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineCommand } from "neocord";
+
+export default defineCommand({
+  description: "Count the saved notes",
+  async execute(ctx) {
+    const total = await countNotes(ctx.app.db);
+    return <TextDisplay>{total} notes.</TextDisplay>;
+  },
+});
+```
+
+## defineContext
+
+`defineContext(factory)` takes a function that may be async. The factory receives `ContextFactoryArgs` and returns a `ContextResult`.
+
+| Argument | Type | Meaning |
+| --- | --- | --- |
+| `client` | `Client<true>` | The discord.js client. It has not logged in yet when the factory runs. |
+| `logger` | `Logger` | A logger scoped to `context`. |
+
+| Result field | Type | Meaning |
+| --- | --- | --- |
+| `value` | `T` | The object handlers read as `ctx.app`. |
+| `dispose` | `() => unknown`, optional | Called on shutdown. It may be async. |
+
+## Lifecycle
+
+`startBot` handles the context in this order:
+
+1. Validates the manifest and creates the client.
+2. Runs the factory, and waits for it.
+3. Creates the dispatcher and wires events and tasks.
+4. Logs in.
+
+If the factory throws, the bot stops with "src/context.ts failed to create the app context: reason".
+
+On SIGINT, SIGTERM or a shutdown request from the sharding manager, `startBot` stops tasks, expires live sessions, calls `dispose`, and then destroys the client. An error from `dispose` is logged and does not stop the rest of the shutdown.
+
+## One per process
+
+The factory runs once in each shard process. With four shards you have four database pools, so size pools for that. The manager process does not create the context. See [Sharding](/docs/sharding).
+
+## Keep setup in the factory
+
+`neocord deploy`, `neocord build` and `neocord test` import your route modules and `src/context.ts` to read command definitions, but they do not call the factory. Those commands can run with no real secrets, because they may set `SKIP_ENV_VALIDATION`.
+
+So open connections inside the factory and not at the top level of the module, as the template does with `createDatabase()`.
+
+## Types
+
+The CLI writes this into `.neocord/types.d.ts` when the file exists:
+
+```ts title=".neocord/types.d.ts"
+declare module "neocord" {
+  interface RegisteredApp {
+    context: import("neocord").InferAppContext<typeof import("../src/context.ts").default>;
+  }
+}
+```
+
+That makes `ctx.app.db` typed everywhere. Without a `src/context.ts`, `AppContext` is `Record<string, never>`. Run `neocord typegen` after creating the file, or let `neocord dev` do it. See [How type safety works](/docs/type-safety).
+
+## Reading it elsewhere
+
+- In a component, read it through `useContext().app` from `neocord`.
+- In a `broadcastEval` function, `ctx.app` is not available, because the function runs in another process's scope with only the client and the context you pass.
+- From `startBot`, the returned `Bot` has `app`.
+
+## Testing
+
+The test helpers do not run `src/context.ts`. Pass a fake with the `app` option:
+
+```tsx
+const result = await runCommand(command, { app: { db: fakeDb } });
+```
+
+See [Testing](/docs/testing). The [Drizzle](/docs/database/drizzle) and [Prisma](/docs/database/prisma) pages show complete contexts.

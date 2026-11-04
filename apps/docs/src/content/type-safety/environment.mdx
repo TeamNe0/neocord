@@ -1,0 +1,131 @@
+A neocord project declares its environment variables once, in `src/env.ts`, using [T3 Env](https://env.t3.gg) and zod. Everything else imports the validated `env` object, so a missing token fails with a clear message at startup and `env.DISCORD_TOKEN` is typed.
+
+```ts title="src/env.ts"
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    DISCORD_TOKEN: z.string().min(1),
+    DEV_GUILD_ID: z.string().min(1).optional(),
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  },
+  runtimeEnv: process.env,
+  emptyStringAsUndefined: true,
+  skipValidation: process.env.SKIP_ENV_VALIDATION === "true",
+});
+```
+
+The scaffolder always includes this file. For a manual setup, add the packages:
+
+```pm
+add @t3-oss/env-core zod
+```
+
+| Option | Why it is set |
+| --- | --- |
+| `server` | The schema for each variable. A bot has no client bundle, so everything goes here. |
+| `runtimeEnv` | Where values come from. `process.env` already has your env files applied by the CLI. |
+| `emptyStringAsUndefined` | `DEV_GUILD_ID=` in `.env` counts as unset, which is how `.env.example` ships. |
+| `skipValidation` | Lets tooling run with no secrets. See [SKIP_ENV_VALIDATION](#skip_env_validation). |
+
+## Using env
+
+The config imports it first, so validation runs as soon as the CLI loads the config:
+
+```ts title="neocord.config.ts"
+import { defineConfig } from "neocord";
+import { env } from "./src/env";
+
+export default defineConfig({
+  intents: ["Guilds"],
+  token: env.DISCORD_TOKEN,
+  dev: { guildId: env.DEV_GUILD_ID, shards: 1 },
+});
+```
+
+Handlers import it from anywhere:
+
+```ts
+import { env } from "~/env";
+
+const url = env.DATABASE_URL;
+```
+
+The [`no-process-env`](/docs/eslint/no-process-env) rule warns about `process.env` outside `src/env.ts` and root config files such as `neocord.config.ts`, `drizzle.config.ts` and `prisma.config.ts`.
+
+## Adding a variable
+
+1. Add it to `server` in `src/env.ts`. Use `.optional()` or `.default()` if it is not required.
+2. Add it to `.env.example`, so that others know about it.
+3. Set it in `.env`.
+
+```ts
+server: {
+  DISCORD_TOKEN: z.string().min(1),
+  LOG_CHANNEL_ID: z.string().min(1),
+  ENABLE_FUN: z.stringbool().default(false),
+},
+```
+
+`neocord dev` watches env files and restarts when they change.
+
+## When validation fails
+
+`neocord dev`, `neocord start` and a real `neocord deploy` report invalid variables and stop:
+
+```text
+Environment validation failed.
+  DISCORD_TOKEN: Invalid input: expected string, received undefined
+Set the missing variables in the environment or a .env file.
+```
+
+In `neocord dev`, the session then waits for changes, so fixing `.env` starts the bot.
+
+## Env file order
+
+The CLI loads files into the child process in this order. Later files override earlier ones, and the real environment always wins.
+
+1. `.env`
+2. `.env.<mode>`
+3. `.env.local`, skipped in test mode so tests stay reproducible
+4. `.env.<mode>.local`
+
+The mode comes from the command, and `NODE_ENV` is set to match.
+
+| Mode | Commands |
+| --- | --- |
+| `development` | `dev`, `typegen`, `routes`, `lint`, `info` |
+| `production` | `build`, `start`, `deploy` |
+| `test` | `test` |
+
+## SKIP_ENV_VALIDATION
+
+With `SKIP_ENV_VALIDATION=true`, `skipValidation` in `src/env.ts` turns validation off. These commands set it unless you already did, so they work in a fresh clone with no secrets:
+
+| Sets it | Never sets it |
+| --- | --- |
+| `typegen`, `routes`, `build`, `info`, `lint`, `test`, `deploy --dry-run` | `dev`, `start`, `deploy` |
+
+The check is in your file, so a `src/env.ts` without the `skipValidation` line fails on those commands. With validation off, `env` values can be `undefined` at runtime whatever their types say, so do not read them at the top level of a module in a way that throws.
+
+Set it yourself for any other step that loads `src/env.ts` without real secrets. The template's `Dockerfile` does this in its build stage:
+
+```docker
+RUN SKIP_ENV_VALIDATION=true bun --bun run build
+```
+
+## Other tools
+
+`drizzle-kit` and `prisma` run outside the CLI and do not get its env handling. Their config files import `dotenv/config`, which reads `.env` only and does not read `.env.local`. See [Drizzle](/docs/database/drizzle) and [Prisma](/docs/database/prisma).
+
+## Framework variables
+
+neocord reads these directly, so they do not need to be in `src/env.ts` unless you use them yourself.
+
+| Variable | Meaning |
+| --- | --- |
+| `DISCORD_TOKEN` | The token, if `token` is not set in the config. Always redacted from logs. |
+| `NEOCORD_LOG_LEVEL` | Overrides `logLevel`. One of `debug`, `info`, `warn`, `error`, `silent`. |
+| `NEOCORD_SHARD_COUNT` | Overrides `sharding.totalShards`. Must be a positive integer. |
+| `SKIP_ENV_VALIDATION` | See above. Read by your `src/env.ts`. |

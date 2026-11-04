@@ -1,0 +1,326 @@
+[Prisma](https://www.prisma.io/docs) works in a neocord bot through the [app context](/docs/handlers/app-context): you create the client in `src/context.ts`, and handlers read it from `ctx.app.db`. The template uses Prisma 7 with a driver adapter. These files are exactly what the scaffolder generates.
+
+## Scaffold it
+
+```pm
+create neocord my-bot --db prisma --dialect sqlite
+```
+
+`--dialect` is `sqlite`, `postgres` or `mysql`. The result includes the files below, a `/remember` command, and these scripts.
+
+| Script | Command | Purpose |
+| --- | --- | --- |
+| `db:push` | `prisma db push` | Apply the schema directly, which suits development. |
+| `db:generate` | `prisma generate` | Generate the Prisma client. |
+| `db:migrate` | `prisma migrate dev` | Create and apply a migration. |
+| `db:studio` | `prisma studio` | Browse the data in a local UI. |
+| `postinstall` | `prisma generate` | Generates the client after install. |
+
+After scaffolding, set `DATABASE_URL` in `.env` and create the tables:
+
+```pm
+run db:push
+```
+
+Then try `/remember note:hello`, and `/remember` to read it back.
+
+## Add it by hand
+
+Install the client, the adapter for your database, and the CLI:
+
+| Dialect | Adapter | Class |
+| --- | --- | --- |
+| SQLite | `@prisma/adapter-libsql` | `PrismaLibSql` |
+| PostgreSQL | `@prisma/adapter-pg` | `PrismaPg` |
+| MySQL | `@prisma/adapter-mariadb` | `PrismaMariaDb` |
+
+```pm
+add @prisma/client @prisma/adapter-libsql
+add -d prisma dotenv
+```
+
+Add the scripts to `package.json`:
+
+```json title="package.json"
+{
+  "scripts": {
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
+  }
+}
+```
+
+The client is generated into `src/generated/prisma`, so add `src/generated` to `.gitignore`. The imports below use `~/`, which comes from `paths` in the template's `tsconfig.json`:
+
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  }
+}
+```
+
+## Shared files
+
+These files are the same for every dialect.
+
+```ts title="src/context.ts"
+import { defineContext } from "neocord";
+import { createDatabase } from "~/db";
+
+export default defineContext(async () => {
+  const { db, close } = createDatabase();
+  return { value: { db }, dispose: close };
+});
+```
+
+`dispose` disconnects when the process stops.
+
+```ts title="prisma.config.ts"
+import "dotenv/config";
+import { defineConfig } from "prisma/config";
+
+export default defineConfig({
+  schema: "prisma/schema.prisma",
+  migrations: { path: "prisma/migrations" },
+  datasource: { url: process.env.DATABASE_URL },
+});
+```
+
+The `prisma` CLI does not use neocord's env handling. `dotenv/config` reads `.env` only, so `.env.local` is not used by these commands.
+
+## SQLite
+
+SQLite uses libsql, so no native builds are needed and the project runs on Bun and on Node.
+
+```env title=".env.example"
+DISCORD_TOKEN=
+DEV_GUILD_ID=
+DATABASE_URL=file:./local.db
+```
+
+```ts title="src/env.ts"
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    DISCORD_TOKEN: z.string().min(1),
+    DEV_GUILD_ID: z.string().min(1).optional(),
+    DATABASE_URL: z.string().min(1),
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  },
+  runtimeEnv: process.env,
+  emptyStringAsUndefined: true,
+  skipValidation: process.env.SKIP_ENV_VALIDATION === "true",
+});
+```
+
+`DATABASE_URL` uses `z.string()` here because a `file:` path is not a full URL.
+
+```prisma title="prisma/schema.prisma"
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Note {
+  userId    String   @id @map("user_id")
+  content   String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notes")
+}
+```
+
+```ts title="src/db/index.ts"
+import { PrismaLibSql } from "@prisma/adapter-libsql";
+import { env } from "~/env";
+import { PrismaClient } from "~/generated/prisma/client";
+
+export function createDatabase() {
+  const adapter = new PrismaLibSql({ url: env.DATABASE_URL });
+  const db = new PrismaClient({ adapter });
+  return { db, close: () => db.$disconnect() };
+}
+```
+
+The scaffolder adds `*.db` and `*.db-*` to `.gitignore`. Those patterns are also in the template's `.dockerignore`.
+
+## PostgreSQL
+
+```env title=".env.example"
+DISCORD_TOKEN=
+DEV_GUILD_ID=
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/neocord
+```
+
+```ts title="src/env.ts"
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    DISCORD_TOKEN: z.string().min(1),
+    DEV_GUILD_ID: z.string().min(1).optional(),
+    DATABASE_URL: z.url(),
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  },
+  runtimeEnv: process.env,
+  emptyStringAsUndefined: true,
+  skipValidation: process.env.SKIP_ENV_VALIDATION === "true",
+});
+```
+
+```prisma title="prisma/schema.prisma"
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Note {
+  userId    String   @id @map("user_id") @db.VarChar(32)
+  content   String   @db.VarChar(500)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notes")
+}
+```
+
+```ts title="src/db/index.ts"
+import { PrismaPg } from "@prisma/adapter-pg";
+import { env } from "~/env";
+import { PrismaClient } from "~/generated/prisma/client";
+
+export function createDatabase() {
+  const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+  const db = new PrismaClient({ adapter });
+  return { db, close: () => db.$disconnect() };
+}
+```
+
+## MySQL
+
+```env title=".env.example"
+DISCORD_TOKEN=
+DEV_GUILD_ID=
+DATABASE_URL=mysql://root:password@localhost:3306/neocord
+```
+
+`src/env.ts` is the same as the PostgreSQL one, with `DATABASE_URL: z.url()`.
+
+```prisma title="prisma/schema.prisma"
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Note {
+  userId    String   @id @map("user_id") @db.VarChar(32)
+  content   String   @db.VarChar(500)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notes")
+}
+```
+
+```ts title="src/db/index.ts"
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import { env } from "~/env";
+import { PrismaClient } from "~/generated/prisma/client";
+
+export function createDatabase() {
+  const adapter = new PrismaMariaDb(env.DATABASE_URL);
+  const db = new PrismaClient({ adapter });
+  return { db, close: () => db.$disconnect() };
+}
+```
+
+<Callout kind="warn">
+
+MySQL 8 servers without TLS also need `?allowPublicKeyRetrieval=true` at the end of `DATABASE_URL`, because `@prisma/adapter-mariadb` connects through the MariaDB driver.
+
+</Callout>
+
+## Using it in a handler
+
+This is the template's `/remember` command, the same for every dialect. `ctx.app.db` is typed through the [generated types](/docs/type-safety#registeredapp), so run `neocord typegen` after creating `src/context.ts`.
+
+```tsx title="src/features/general/commands/remember/command.tsx"
+import { Container, Heading, Subtext, TextDisplay } from "@neocord/react";
+import { defineCommand, option } from "neocord";
+
+export default defineCommand({
+  description: "Save a note, or read the one you saved",
+  ephemeral: true,
+  options: {
+    note: option.string({ description: "What to remember", maxLength: 500 }),
+  },
+  async execute(ctx) {
+    const { db } = ctx.app;
+    const userId = ctx.user.id;
+    const content = ctx.options.note;
+
+    if (content) {
+      await db.note.upsert({
+        where: { userId },
+        create: { userId, content },
+        update: { content },
+      });
+    }
+
+    const saved = await db.note.findUnique({ where: { userId } });
+
+    return (
+      <Container accentColor="#5865f2">
+        <Heading>Your note</Heading>
+        {saved ? (
+          <TextDisplay>{saved.content}</TextDisplay>
+        ) : (
+          <Subtext>You have not saved a note yet. Use the note option to save one.</Subtext>
+        )}
+      </Container>
+    );
+  },
+});
+```
+
+## The generated client
+
+`~/generated/prisma/client` must exist before the bot builds or type checks. The `postinstall` script normally creates it. If it is missing, for example after installing with `--ignore-scripts`, generate it yourself:
+
+```pm
+run db:generate
+```
+
+The template's `Dockerfile` installs with `--ignore-scripts`, so the scaffolder adds this step before the build for Prisma projects:
+
+```docker
+RUN bun run db:generate
+RUN SKIP_ENV_VALIDATION=true bun --bun run build
+```
+
+See [Docker](/docs/deployment/docker).
+
+## Production
+
+`db:push` suits development. `db:migrate` runs `prisma migrate dev`, which creates migrations during development, and those belong in version control. Run the Prisma CLI's deploy command for your migrations before starting the bot. `prisma` is a dev dependency, so that step needs dev dependencies installed.
+
+Each shard process creates its own client, so size connection pools for your [shard count](/docs/sharding). In [tests](/docs/testing), pass a fake or a test database with the `app` option.

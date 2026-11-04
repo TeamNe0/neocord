@@ -1,0 +1,176 @@
+Inline components serialise to Discord markdown and nest freely. They work wherever text does: inside `TextDisplay`, or directly in `Message`, `Container`, `Section` and `Modal`. A function component that returns them works there too.
+
+```tsx
+<TextDisplay>
+  <Bold>
+    Hello <Italic>{name}</Italic>
+  </Bold>
+  , your next reminder is <Timestamp date={next} style="R" />.
+</TextDisplay>
+```
+
+<DiscordPreview label="Inline text in Discord">
+  <DiscordText><strong>Hello <em>Ada</em></strong>, your next reminder is in 5 minutes.</DiscordText>
+</DiscordPreview>
+
+All of these take no `id`, because they are text and not Discord components. They add to the 4000 character limit of the `TextDisplay` that holds them.
+
+An empty `Bold`, `Italic`, `Underline`, `Strikethrough`, `Spoiler`, `Code`, `Quote`, `Heading` or `Subtext` produces nothing.
+
+## Text styles
+
+### `Bold`
+
+`<Bold>x</Bold>` renders as `**x**`. It takes `children`.
+
+### `Italic`
+
+`<Italic>x</Italic>` renders as `*x*`. It takes `children`.
+
+### `Underline`
+
+`<Underline>x</Underline>` renders as `__x__`. It takes `children`.
+
+### `Strikethrough`
+
+`<Strikethrough>x</Strikethrough>` renders as `~~x~~`. It takes `children`.
+
+### `Spoiler`
+
+`<Spoiler>x</Spoiler>` renders as `||x||`. It takes `children`.
+
+### `Code`
+
+`<Code>x</Code>` renders as `` `x` ``. If the content contains a backtick, it uses double backticks. It takes `children`.
+
+## Blocks
+
+`CodeBlock`, `Quote`, `Heading`, `Subtext` and `List` always start on their own line, so a line break is added around them where needed.
+
+### `CodeBlock`
+
+A fenced code block.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `language` | `string` | Language for syntax highlighting in Discord. |
+| `children` | `ReactNode` | The code. |
+
+```tsx
+<CodeBlock language="ts">{"const answer = 42;"}</CodeBlock>
+```
+
+### `Quote`
+
+Adds `> ` to every line. It takes `children`.
+
+### `Heading`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `level` | `1 \| 2 \| 3` | Renders `#`, `##` or `###`. Defaults to 1. Other values throw. |
+| `children` | `ReactNode` | Heading text. Line breaks become spaces. |
+
+### `Subtext`
+
+Adds `-# ` to every line, which Discord shows as small muted text. It takes `children`.
+
+### `List`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `ordered` | `boolean` | Numbered when true, otherwise bullets. |
+| `children` | `ReactNode` | `ListItem` elements only. Anything else throws. |
+
+### `ListItem`
+
+One item in a `List`, rendered as `- item` or `1. item`. It throws outside a `List`. It takes `children`, and a nested `List` is indented under it.
+
+```tsx
+<List ordered>
+  <ListItem>First</ListItem>
+  <ListItem>
+    Second
+    <List>
+      <ListItem>Nested</ListItem>
+    </List>
+  </ListItem>
+</List>
+```
+
+## Links and mentions
+
+### `Link`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `href` | `string`, required | 1 to 2048 characters. |
+| `children` | `ReactNode` | The link text. With no children, the bare URL is used. |
+
+It renders as `[text](url)`.
+
+### `UserMention`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `id` | `string`, required | User id, 1 to 20 characters. |
+
+It renders as `<@id>`. Whether it pings depends on `allowedMentions`, and neocord's default is no pings.
+
+### `RoleMention`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `id` | `string`, required | Role id, 1 to 20 characters. |
+
+It renders as `<@&id>`.
+
+### `ChannelMention`
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `id` | `string`, required | Channel id, 1 to 20 characters. |
+
+It renders as `<#id>`.
+
+## Other
+
+### `Timestamp`
+
+A time shown in each reader's timezone.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `date` | `Date \| number \| string`, required | A `Date`, milliseconds, or a date string. An invalid date throws. |
+| `style` | `"t" \| "T" \| "d" \| "D" \| "f" \| "F" \| "s" \| "S" \| "R"` | Discord's timestamp style. `R` is relative. Other values throw. |
+
+It renders as `<t:seconds>` or `<t:seconds:R>`.
+
+### `Emoji`
+
+Takes either `emoji`, or `name` with optional `id` and `animated`.
+
+| Prop | Type | Meaning |
+| --- | --- | --- |
+| `emoji` | `EmojiInput` | A Unicode emoji, `<:name:id>`, `<a:name:id>`, or an object. See [emoji values](/docs/ui/interactive#emoji-values). |
+| `name` | `string` | The emoji's name, or the Unicode emoji itself. |
+| `id` | `string` | A custom emoji's id. |
+| `animated` | `boolean` | Whether the custom emoji is animated. |
+
+```tsx
+<Emoji name="😀" />
+<Emoji name="party" id="123456789012345678" animated />
+<Emoji emoji="<:party:123456789012345678>" />
+```
+
+### `LineBreak`
+
+A newline in the text. It takes no props or children.
+
+## Escaping
+
+Plain strings are not escaped, so `**` in user input makes text bold. `escapeMarkdown(text)` escapes Discord's markdown, including headings, bullet and numbered lists, masked links, quotes and subtext.
+
+```tsx
+<TextDisplay>Reason: {escapeMarkdown(ctx.options.reason ?? "none")}</TextDisplay>
+```

@@ -1,0 +1,113 @@
+`@neocord/react` is a React renderer built on `react-reconciler`, in the same way `react-dom` renders to the browser. Your components render to a tree of host elements, and that tree is serialised to Discord's Components V2 JSON and checked against Discord's limits.
+
+```tsx
+import { ActionRow, Bold, Button, Container, Heading } from "@neocord/react";
+
+function Welcome({ name }: { name: string }) {
+  return (
+    <Container accentColor="blurple">
+      <Heading level={2}>Welcome</Heading>
+      Hello <Bold>{name}</Bold>, glad you are here.
+      <ActionRow>
+        <Button style="primary" route="welcome/start" label="Get started" />
+        <Button style="link" url="https://example.com/docs" label="Docs" />
+      </ActionRow>
+    </Container>
+  );
+}
+```
+
+<DiscordPreview command="/welcome" label="The welcome message in Discord">
+  <DiscordContainer accent="blurple">
+    <DiscordHeading level={2}>Welcome</DiscordHeading>
+    <DiscordText>Hello <strong>Ada</strong>, glad you are here.</DiscordText>
+    <DiscordRow>
+      <DiscordButton variant="primary">Get started</DiscordButton>
+      <DiscordButton>Docs</DiscordButton>
+    </DiscordRow>
+  </DiscordContainer>
+</DiscordPreview>
+
+## How the renderer works
+
+1. React renders your function components. Hooks, context and `<Suspense>` work as they do anywhere else.
+2. The committed tree contains only host elements, which the components from `@neocord/react` produce.
+3. The serialiser walks that tree. It collapses text, resolves custom ids, collects binary attachments, and validates each component.
+4. The result is a `RenderResult` that discord.js accepts directly.
+
+```ts
+interface RenderResult {
+  flags: MessageFlags.IsComponentsV2 | (MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral);
+  components: APIMessageTopLevelComponent[];
+  files?: AttachmentPayload[];
+  allowedMentions?: MessageMentionOptions;
+}
+```
+
+In a neocord handler you do not touch `RenderResult`. You return a node, and the runtime renders it. Outside neocord, see [using it standalone](/docs/ui/standalone).
+
+## Why there are no embeds
+
+Every message is sent with the `IsComponentsV2` flag. Discord does not allow `content` or `embeds` on those messages, and in exchange the whole message is made of components. A `Container` with an accent colour takes the place of an embed, and it can hold text, images, files, sections and buttons in any order.
+
+`@neocord/react` has no embed component. The [`no-embed-builders`](/docs/eslint/no-embed-builders) rule warns when a project uses `EmbedBuilder` or other discord.js builders.
+
+## Component groups
+
+| Group | Components |
+| --- | --- |
+| [Layout](/docs/ui/layout) | `Message`, `Container`, `Section`, `TextDisplay`, `Separator`, `ActionRow`, `MediaGallery`, `MediaItem`, `Thumbnail`, `File` |
+| [Interactive](/docs/ui/interactive) | `Button`, `StringSelect`, `Option`, `UserSelect`, `RoleSelect`, `MentionableSelect`, `ChannelSelect` |
+| [Modal](/docs/ui/modal) | `Modal`, `Label`, `TextInput`, `FileUpload`, `RadioGroup`, `CheckboxGroup`, `Checkbox` |
+| [Inline text](/docs/ui/inline) | `Bold`, `Italic`, `Underline`, `Strikethrough`, `Spoiler`, `Code`, `CodeBlock`, `Quote`, `Heading`, `Subtext`, `Link`, `List`, `ListItem`, `UserMention`, `RoleMention`, `ChannelMention`, `Timestamp`, `Emoji`, `LineBreak` |
+
+## What can go where
+
+| Parent | Allowed children |
+| --- | --- |
+| Root or `Message` | `Container`, `Section`, `TextDisplay`, `Separator`, `ActionRow`, `MediaGallery`, `File`, text and inline components |
+| `Container` | `Section`, `TextDisplay`, `Separator`, `ActionRow`, `MediaGallery`, `File`, text and inline components |
+| `Section` | One to three text blocks. Its `accessory` prop is one `Button` or `Thumbnail`. |
+| `ActionRow` | Up to five `Button`s, or one select |
+| `TextDisplay`, inline components | Text and inline components |
+| `MediaGallery` | `MediaItem`, or the `items` prop |
+
+Anything else throws with a message that names both components, such as "Button is not allowed inside Message." The [`valid-component-nesting`](/docs/eslint/valid-component-nesting) rule finds the same mistakes in static JSX before you run the bot.
+
+## Text
+
+Text can sit directly in `Message`, `Container` or `Section`. Adjacent strings, numbers and inline elements collapse into one `TextDisplay`, and whitespace between block elements produces nothing.
+
+```tsx
+<Container>
+  You have <Bold>{count}</Bold> messages.
+  <Separator />
+  <TextDisplay>An explicit text display</TextDisplay>
+</Container>
+```
+
+That `Container` holds a text display, a separator and a second text display.
+
+<Callout kind="warn">
+
+Plain strings are not escaped. Wrap user input in `escapeMarkdown` so a username cannot inject formatting or a masked link.
+
+</Callout>
+
+```tsx
+import { escapeMarkdown, TextDisplay } from "@neocord/react";
+
+<TextDisplay>Hello {escapeMarkdown(user.globalName ?? user.username)}</TextDisplay>;
+```
+
+## Limits
+
+Each limit is enforced at render time, and the error names the component. A message can hold 40 components in total. Every `TextDisplay`, button, select, section, thumbnail and row counts, including ones nested in a `Container`, and also including text displays created by collapsed text. `MediaItem` and `Option` do not count.
+
+The `id` and `customId` values in a message must be unique. Each component page lists its own limits.
+
+Mentions are off by default in a bot: neocord sets `allowedMentions: { parse: [] }` on the client, so user input cannot ping anyone. Change it per message with [`Message`](/docs/ui/layout#message), or for the whole bot through `client` in `neocord.config.ts`.
+
+## Rendering in neocord
+
+neocord always renders through a live root and waits for suspended content before it sends, so `<Suspense>` and `use()` work in handlers. If the tree has no `onClick` or `onSelect`, it is unmounted as soon as the payload is ready. Otherwise it stays mounted as a [live session](/docs/ui/live-sessions).

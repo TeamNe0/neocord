@@ -1,0 +1,67 @@
+A `loading.tsx` file gives a slow command a visible placeholder. Its UI is sent as the reply right away, and the handler's result replaces it.
+
+```tsx title="src/features/reports/loading.tsx"
+import { Subtext } from "@neocord/react";
+
+export default function Loading() {
+  return <Subtext>Working on it.</Subtext>;
+}
+```
+
+```tsx title="src/features/reports/commands/report/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineCommand } from "neocord";
+
+export default defineCommand({
+  description: "Build the weekly report",
+  async execute() {
+    const report = await buildReport();
+    return <TextDisplay>{report.summary}</TextDisplay>;
+  },
+});
+```
+
+## What it applies to
+
+`loading` applies to slash commands and context menu commands. Buttons, selects and modals ignore it.
+
+The closest `loading` file wins, as with `error`. The component takes no props. `useContext()` works inside it, and [layouts](/docs/handlers/layouts) wrap it unless the route sets `layout: false`.
+
+## How it works
+
+The order for a command is: middleware, cooldown, loading, then your handler. So middleware that denies a request sends no placeholder.
+
+The loading message counts as a reply that can still be replaced:
+
+| The handler then | Result |
+| --- | --- |
+| Returns a node or calls `ctx.reply` | The placeholder is edited to show the node. |
+| Calls `ctx.editReply` | The placeholder is edited. |
+| Calls `ctx.followUp` | A new message is sent, and the placeholder stays. |
+| Returns nothing | The placeholder stays as the final message. |
+| Throws | The placeholder is replaced by the ephemeral [error view](/docs/handlers/error-boundaries). The public placeholder is deleted, and the view is sent as a follow-up. |
+
+## Ephemeral results
+
+The placeholder uses the route's `ephemeral` setting, or `<Message ephemeral>` if the loading component returns one. Discord fixes visibility at the first response, so keep them consistent:
+
+- A public placeholder with an ephemeral result: neocord deletes the placeholder and sends the result as an ephemeral follow-up.
+- An ephemeral placeholder with a public result: the result stays ephemeral.
+
+Setting `ephemeral: true` on the route covers both the placeholder and the result.
+
+## Modals
+
+`ctx.showModal` cannot follow a loading message, because a modal must be the first response. It throws "showModal() must be the first response to an interaction, but it has already been replied. Remove loading.tsx from this route or show the modal before any reply or slow work."
+
+If one command in a folder opens a modal, move its `loading.tsx` to a narrower folder that does not contain that command. A `src/loading.tsx` at the root applies to every command in the bot, so it rules out any command that opens a modal. Modals opened from a button are not affected, because buttons ignore `loading`.
+
+## loading compared to autoDefer
+
+[`autoDefer`](/docs/handlers/replying#autodefer) acknowledges a slow interaction after two seconds by default, and Discord shows its own "thinking" state. `loading.tsx` sends your own UI straight away, even for a fast handler. With a loading file, the interaction is already acknowledged, so `autoDefer` does nothing.
+
+Use `autoDefer` alone unless you want control over what the placeholder says.
+
+## Requirements
+
+The default export must be a function. The [`require-default-export`](/docs/eslint/require-default-export) rule checks it. Pass the component with the `loading` option in [`runCommand`](/docs/api/testing) to test it.

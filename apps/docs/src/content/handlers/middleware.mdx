@@ -1,0 +1,95 @@
+Middleware runs before a handler and can stop it. Put a `middleware.ts` next to the routes it should cover, and default-export `defineMiddleware`.
+
+```tsx title="src/features/moderation/middleware.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineMiddleware } from "neocord";
+
+export default defineMiddleware(async (ctx, next) => {
+  if (ctx.guild === null) return <TextDisplay>Use this in a server.</TextDisplay>;
+  ctx.state.startedAt = Date.now();
+  await next();
+  ctx.logger.debug(`Finished in ${Date.now() - (ctx.state.startedAt as number)} ms`);
+});
+```
+
+## Where it applies
+
+A `middleware` file applies to everything beneath the folder it is in. Chains compose from root to leaf, so for `src/features/moderation/commands/ban/command.tsx` the order can be:
+
+1. `src/middleware.ts`
+2. `src/features/moderation/middleware.ts`
+3. `src/features/moderation/commands/middleware.ts`
+4. `src/features/moderation/commands/ban/middleware.ts`
+
+Each file can use `.ts` or `.tsx`. Only one middleware file is allowed per folder.
+
+Middleware runs for commands, context menus, buttons, selects and modals. It does not run for these:
+
+- Autocomplete handlers.
+- Events and tasks. A file named `middleware.ts` directly in `events` or `tasks` is an event or task with that name, not middleware.
+- Clicks on [live components](/docs/ui/live-sessions), which go straight to the session.
+
+## The handler signature
+
+`defineMiddleware(handler, options?)` takes `(ctx, next)`. What the handler does decides what happens next.
+
+| The handler | Result |
+| --- | --- |
+| Calls `await next()` | The next middleware runs, and finally the route handler. |
+| Returns a node | neocord calls `ctx.reply(node)`. Without `next()`, the route handler never runs. |
+| Calls `ctx.reply` and does not call `next()` | The route handler never runs. |
+| Returns nothing and does not call `next()` | The route handler never runs and nothing is acknowledged, so Discord shows the interaction as failed. |
+| Calls `next()` twice | The second call throws `next() was called more than once in middleware "file"`. |
+| Throws | The closest [error view](/docs/handlers/error-boundaries) is shown. |
+
+A returned node uses `ctx.reply` on every route kind. On a button, it sends a new message and does not update the one the button is on.
+
+```tsx title="src/features/moderation/buttons/middleware.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineMiddleware } from "neocord";
+
+export default defineMiddleware(async (ctx, next) => {
+  if (!ctx.member?.permissions.has("ModerateMembers")) {
+    return <TextDisplay>You cannot use this.</TextDisplay>;
+  }
+  await next();
+});
+```
+
+## Narrowing by kind
+
+Pass `kinds` to run only on some route kinds. `ctx` narrows to match, so `ctx.options` is available when `kinds` is `["command"]`.
+
+```ts title="src/middleware.ts"
+import { defineMiddleware } from "neocord";
+
+export default defineMiddleware(
+  async (ctx, next) => {
+    ctx.logger.info(`/${ctx.route} from ${ctx.user.id}`, ctx.options);
+    await next();
+  },
+  { kinds: ["command"] },
+);
+```
+
+The available kinds are `"command"`, `"user-command"`, `"message-command"`, `"button"`, `"select"` and `"modal"`.
+
+## Sharing values
+
+`ctx.state` is a new object for each interaction. Middleware can write to it and later middleware or the handler can read it. Values are `unknown`, so cast or check them when you read them.
+
+Use [`src/context.ts`](/docs/handlers/app-context) for services that live as long as the process.
+
+## Ordering with other checks
+
+`guildOnly` and `permissions` run before middleware. `cooldown` and `loading.tsx` run after it, so a request denied by middleware does not consume a cooldown and does not send a loading message. The full order is on the [handler context](/docs/handlers/context#checks-before-the-handler) page.
+
+## Testing
+
+`neocord/testing` runs middleware through the real pipeline. Pass it with the `middleware` option:
+
+```tsx
+const { text, replies } = await runCommand(command, { middleware: [auth] });
+```
+
+See [Testing](/docs/testing).

@@ -1,0 +1,155 @@
+A handler can return a node or call a method on `ctx`. Returning a node is the idiomatic form, because the runtime then picks the right Discord call. The `ctx` methods exist for when you need more than one message, or need to do work after responding.
+
+```tsx title="src/features/general/commands/stats/command.tsx"
+import { TextDisplay } from "@neocord/react";
+import { defineCommand } from "neocord";
+
+export default defineCommand({
+  description: "Show statistics",
+  async execute(ctx) {
+    await ctx.defer({ ephemeral: true });
+    const total = await countThings();
+    await ctx.followUp(<TextDisplay>Counted {total} things.</TextDisplay>);
+    return <TextDisplay>Done.</TextDisplay>;
+  },
+});
+```
+
+## What a return value does
+
+| Handler | Returns a node | Returns nothing, not acknowledged |
+| --- | --- | --- |
+| Slash command, context menu | `ctx.reply(node)` | Logs a warning. Discord shows the interaction as failed. |
+| Button, select | `ctx.update(node)`, or `ctx.reply(node)` with `respond: "reply"` | `deferUpdate()`, so nothing changes visibly. |
+| Modal submit | `ctx.reply(node)`, or `ctx.update(node)` with `respond: "update"` | If the modal came from a message, `deferUpdate()`. Otherwise it acknowledges silently and deletes the reply. |
+
+`undefined`, `null` and booleans count as returning nothing. Anything else is rendered. A node that renders no components throws "The returned node rendered no components, so there is nothing to send to Discord."
+
+If a command was deferred by `autoDefer` and then returns nothing, neocord logs a warning and deletes the placeholder.
+
+## The methods
+
+| Call | Behaviour |
+| --- | --- |
+| `ctx.reply(node, options)` | Replies first, edits after a defer, follows up after that. |
+| `ctx.editReply(node, options)` | Edits the reply. On an unacknowledged component it updates the message, and on an unacknowledged command it replies. |
+| `ctx.followUp(node, options)` | Sends another message. |
+| `ctx.update(node, options)` | Buttons, selects and modals. Updates the message the component is on. On a modal opened from a command there is no message to update, so it replies. |
+| `ctx.defer({ ephemeral })` | Acknowledges with a "thinking" state. A no-op if already acknowledged. |
+| `ctx.deferUpdate()` | Buttons, selects and modals. Acknowledges without changing anything. A no-op if already acknowledged. On a modal opened from a command it defers the reply instead. |
+| `ctx.deleteReply()` | Deletes the reply. If nothing has been acknowledged, it logs a warning and does nothing. |
+| `ctx.showModal(route, params)` | Opens a modal. It must be the first response. |
+
+## The state machine
+
+Every response goes through one queue per interaction, so calls run in order and the `autoDefer` timer cannot race a reply in flight. Each interaction is in one of four states.
+
+| State | Meaning |
+| --- | --- |
+| `unacknowledged` | Nothing has been sent yet. |
+| `deferred` | `deferReply` was sent, and the "thinking" message is showing. |
+| `replied` | A reply was sent or a deferred reply was filled in. |
+| `updated` | A component's message was updated, or `deferUpdate` was sent. |
+
+This table shows the Discord call each method makes in each state.
+
+| Method | `unacknowledged` | `deferred` | `replied` or `updated` |
+| --- | --- | --- | --- |
+| `reply` | `reply`, becomes `replied` | `editReply`, becomes `replied` | `followUp` |
+| `followUp` | `reply`, becomes `replied` | `editReply`, becomes `replied` | `followUp` |
+| `editReply` | `update` on a component, otherwise `reply` | `editReply`, becomes `replied` | `editReply` |
+| `update` | `update`, becomes `updated`. `reply` if there is no message to update. | `editReply`, becomes `replied` | `editReply` |
+| `defer` | `deferReply`, becomes `deferred` | No-op | No-op |
+| `deferUpdate` | `deferUpdate`, becomes `updated`. `deferReply` if there is no message to update. | No-op | No-op |
+| `deleteReply` | Logs a warning | `deleteReply` | `deleteReply` |
+| `showModal` | `showModal`, becomes `replied` | Throws | Throws |
+
+A modal submit counts as having a message to update only when the modal was opened from a message component. Slash commands never do.
+
+The state also follows the raw interaction. If you responded through `ctx.interaction` first, neocord sees `interaction.replied` or `interaction.deferred` and picks up from there.
+
+## Ephemeral messages
+
+An ephemeral message is resolved in this order:
+
+1. An explicit `ephemeral` in the call: `ctx.reply(node, { ephemeral: true })`. `ephemeral: false` also counts as explicit.
+2. `ephemeral: true` on the route definition.
+3. `<Message ephemeral>` at the root of the node.
+
+Discord fixes visibility at the first acknowledgement, which leads to two special cases after a defer:
+
+- After a public defer, an ephemeral reply deletes the deferral and sends the content as an ephemeral follow-up.
+- After an ephemeral defer, a public reply stays ephemeral.
+
+Edits and updates never carry the ephemeral flag, because Discord only accepts it when a message is created.
+
+```tsx
+export default defineCommand({
+  description: "Show your balance",
+  ephemeral: true,
+  execute(ctx) {
+    return <TextDisplay>Only you can see this.</TextDisplay>;
+  },
+});
+```
+
+## autoDefer
+
+Discord fails an interaction that is not acknowledged within three seconds. `autoDefer` starts a timer when the handler is about to run, and defers if nothing has acknowledged the interaction by then. The default is `{ after: 2000 }`.
+
+```ts title="neocord.config.ts"
+export default defineConfig({
+  autoDefer: { after: 1500 },
+});
+```
+
+Set `autoDefer: false` to turn it off. The automatic defer matches the route:
+
+| Route | Automatic defer |
+| --- | --- |
+| Slash command, context menu, modal | `deferReply`, ephemeral if the route has `ephemeral: true` |
+| Modal with `respond: "update"`, opened from a message | `deferUpdate` |
+| Button, select | `deferUpdate` |
+| Button, select with `respond: "reply"` | `deferReply`, ephemeral if the route has `ephemeral: true` |
+
+The timer does nothing while another response is in flight. If it fires before you call `ctx.showModal`, that call throws, because a modal must be the first response. Call `showModal` before any slow work.
+
+## followUp and update
+
+`ctx.followUp` always creates a new message once the interaction is acknowledged. Use it for extra messages, or to send something private from a public handler:
+
+```tsx
+await ctx.reply(<TextDisplay>Ban recorded.</TextDisplay>);
+await ctx.followUp(<TextDisplay>Check the audit log.</TextDisplay>, { ephemeral: true });
+```
+
+`ctx.update` changes the message that holds the component. Calling it after an acknowledgement edits the same message, so these are equivalent ways to finish a slow button:
+
+```tsx
+export default defineButton("general/slow", {
+  async execute(ctx) {
+    await ctx.deferUpdate();
+    const value = await slowWork();
+    await ctx.update(<TextDisplay>Result: {value}</TextDisplay>);
+  },
+});
+```
+
+## Skipping layouts
+
+Pass `layout: false` to send a node without [layouts](/docs/handlers/layouts), or set it on the route:
+
+```tsx
+await ctx.reply(<TextDisplay>Plain.</TextDisplay>, { layout: false });
+```
+
+## Discord errors
+
+Two Discord errors are handled for you. Neither crashes the handler.
+
+| Code | Meaning | What neocord does |
+| --- | --- | --- |
+| `10062` | Unknown interaction. The interaction expired before neocord responded. | Logs a warning and skips later responses to that interaction. |
+| `40060` | Already acknowledged. | Logs a warning and marks the interaction as acknowledged. A first reply is retried as an edit. |
+
+Other errors reach your [error view](/docs/handlers/error-boundaries). See [Troubleshooting](/docs/troubleshooting) for the usual causes of an unknown interaction.

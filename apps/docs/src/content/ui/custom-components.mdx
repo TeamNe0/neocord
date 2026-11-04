@@ -1,0 +1,163 @@
+Any function component works, because `@neocord/react` is a real React renderer. Split messages into components the way you would in a web app, and keep them in a private folder that starts with `_`.
+
+```tsx title="src/features/general/_components/Stat.tsx"
+import { Bold, TextDisplay } from "@neocord/react";
+
+export interface StatProps {
+  label: string;
+  value: string | number;
+}
+
+export function Stat({ label, value }: StatProps) {
+  return (
+    <TextDisplay>
+      <Bold>{label}:</Bold> {value}
+    </TextDisplay>
+  );
+}
+```
+
+```tsx title="src/features/general/commands/about/command.tsx"
+import { ActionRow, Button, Container, Heading } from "@neocord/react";
+import { defineCommand } from "neocord";
+import { Stat } from "../../_components/Stat";
+
+export default defineCommand({
+  description: "Show information about this bot",
+  execute(ctx) {
+    return (
+      <Container accentColor="#5865f2">
+        <Heading>About {ctx.client.user.username}</Heading>
+        <Stat label="Servers" value={ctx.client.guilds.cache.size} />
+        <Stat label="Latency" value={`${ctx.client.ws.ping} ms`} />
+        <ActionRow>
+          <Button route="general/refresh" style="secondary">
+            Refresh
+          </Button>
+        </ActionRow>
+      </Container>
+    );
+  },
+});
+```
+
+Files in folders that start with `_` are never treated as routes. A helper component anywhere else in a feature folder is reported by [`no-unknown-route-file`](/docs/eslint/no-unknown-route-file). Files in `src` outside `features` are also free to hold anything.
+
+## Lists and conditions
+
+Use normal React patterns. `null`, `false` and empty arrays render nothing.
+
+```tsx
+<Container>
+  {warnings.length === 0 ? (
+    <Subtext>No warnings.</Subtext>
+  ) : (
+    <List>
+      {warnings.map((warning) => (
+        <ListItem key={warning.id}>{escapeMarkdown(warning.reason)}</ListItem>
+      ))}
+    </List>
+  )}
+</Container>
+```
+
+The nesting rules apply to what a component renders, not to where you write it. A component that returns a `Button` must be rendered inside an `ActionRow`. The [`valid-component-nesting`](/docs/eslint/valid-component-nesting) rule skips custom components, so these mistakes appear at render time.
+
+## Reading the handler context
+
+`useContext()` from `neocord` returns the current interaction context in any component rendered by neocord. Use it to avoid passing `ctx` down through props.
+
+```tsx
+import { Subtext } from "@neocord/react";
+import { useContext } from "neocord";
+
+export function RequestedBy() {
+  const ctx = useContext();
+  return <Subtext>Requested by {ctx.user.username}</Subtext>;
+}
+```
+
+It throws "useContext() must be used inside a component rendered by neocord." when rendered outside neocord, for example with a plain `render()` in a test. Name a narrower type to read route-specific fields:
+
+```tsx
+import type { CommandContext } from "neocord";
+
+const ctx = useContext<CommandContext>();
+```
+
+## React context
+
+React's own context works too. Rename one of the imports if you need both hooks in a file.
+
+```tsx
+import { Container } from "@neocord/react";
+import { createContext, use, type ReactNode } from "react";
+
+const AccentContext = createContext<"blurple" | "red">("blurple");
+
+export function Card({ children }: { children: ReactNode }) {
+  return <Container accentColor={use(AccentContext)}>{children}</Container>;
+}
+
+export function DangerCard({ children }: { children: ReactNode }) {
+  return (
+    <AccentContext.Provider value="red">
+      <Card>{children}</Card>
+    </AccentContext.Provider>
+  );
+}
+```
+
+## Hooks
+
+`useMemo`, `useId`, `useContext` and custom hooks work the same in every render. `useState` and `useEffect` only make sense in a message that stays mounted:
+
+- With `onClick` or `onSelect` in the tree, the message is a [live session](/docs/ui/live-sessions). State updates and effects work as normal, and effect cleanups run when the session ends.
+- With no handlers, neocord unmounts the tree as soon as the payload is ready. Effects do run, and their cleanups run right after, but a later `setState` has no effect on the sent message.
+
+## Suspense
+
+Handlers can return a tree that suspends. neocord waits until everything has resolved before it sends the message, so the `fallback` of a `<Suspense>` boundary is not what the user sees. Use [`loading.tsx`](/docs/handlers/loading) for a visible placeholder.
+
+```tsx
+import { TextDisplay } from "@neocord/react";
+import { Suspense, use } from "react";
+
+function Profile({ user }: { user: Promise<{ name: string }> }) {
+  return <TextDisplay>{use(user).name}</TextDisplay>;
+}
+
+export function ProfileCard({ id }: { id: string }) {
+  return (
+    <Suspense fallback={<TextDisplay>Loading</TextDisplay>}>
+      <Profile user={fetchUser(id)} />
+    </Suspense>
+  );
+}
+```
+
+The usual rule for `use()` applies: create the promise outside the suspending component, as above.
+
+While a tree is suspended, the three second limit keeps running. [`autoDefer`](/docs/handlers/replying#autodefer) covers this, because rendering happens inside the handler's response.
+
+Where Suspense does not apply:
+
+| Function | Behaviour |
+| --- | --- |
+| Handler return, `ctx.reply` and siblings | Waits for suspended content. |
+| `render()` | Synchronous. Throws if anything suspends. Use `renderAsync()`. |
+| `renderModal()`, modal `render` | Synchronous. Throws if anything suspends. |
+
+## Error boundaries in your tree
+
+A class component with `componentDidCatch` or `getDerivedStateFromError` catches render errors below it, so the rest of the message can still be sent. Uncaught render errors reach the route's [`error.tsx`](/docs/handlers/error-boundaries).
+
+## Testing components
+
+Test a component with the `layouts` option of the [test helpers](/docs/testing), or render it directly with `render` from `@neocord/react` if it does not call `useContext` from `neocord`:
+
+```tsx
+import { render } from "@neocord/react";
+
+const result = render(<Stat label="Servers" value={3} />);
+```

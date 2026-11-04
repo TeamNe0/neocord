@@ -1,0 +1,208 @@
+`@neocord/react` does not depend on the `neocord` runtime, so you can use it in any discord.js bot. You keep your own client and event handling, and use JSX for messages.
+
+## Install
+
+```pm
+add @neocord/react react discord.js
+```
+
+It requires React 19.3 or later, discord.js 14.28 or later, and Bun or Node 22.12 or later. Enable JSX in `tsconfig.json`:
+
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  }
+}
+```
+
+## Rendering a message
+
+`render` returns a `RenderResult`, which `interaction.reply` accepts directly.
+
+```tsx title="src/index.tsx"
+import { ActionRow, Bold, Button, Container, Heading, Message, render } from "@neocord/react";
+import { Client, GatewayIntentBits } from "discord.js";
+
+function Welcome({ name }: { name: string }) {
+  return (
+    <Container accentColor="blurple">
+      <Heading level={2}>Welcome</Heading>
+      Hello <Bold>{name}</Bold>, glad you are here.
+      <ActionRow>
+        <Button style="primary" customId="welcome/start" label="Get started" />
+        <Button style="link" url="https://example.com/docs" label="Docs" />
+      </ActionRow>
+    </Container>
+  );
+}
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds], allowedMentions: { parse: [] } });
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+  await interaction.reply(
+    render(
+      <Message ephemeral>
+        <Welcome name={interaction.user.username} />
+      </Message>,
+    ),
+  );
+});
+
+await client.login(process.env.DISCORD_TOKEN);
+```
+
+`allowedMentions: { parse: [] }` is something the neocord runtime sets for you. Standalone, set it on your client or on `<Message allowedMentions>`.
+
+## Render functions
+
+| Function | Behaviour |
+| --- | --- |
+| `render(node)` | Synchronous. Returns `RenderResult`. Throws if anything suspends. |
+| `renderAsync(node)` | Returns `Promise<RenderResult>`. Waits for `<Suspense>` and `use()` to resolve. |
+| `renderModal(node, options?)` | Synchronous. Returns `ModalRenderResult`, a value for `interaction.showModal`. Throws if anything suspends. |
+| `createLiveRoot(options)` | Creates a [live root](#live-roots) that stays mounted. |
+
+Errors thrown while rendering are rethrown to the caller unchanged, unless an error boundary in your tree catches them. React logs nothing to the console. `render`, `renderAsync` and `renderModal` throw if called while React is rendering.
+
+```tsx
+function Profile({ user }: { user: Promise<User> }) {
+  return <TextDisplay>{use(user).name}</TextDisplay>;
+}
+
+const result = await renderAsync(<Profile user={fetchUser(id)} />);
+```
+
+## Editing and sending
+
+`flags` covers the ephemeral case, but discord.js only accepts `Ephemeral` on `interaction.reply`. For `editReply`, `update`, `send` and `edit`, replace the flags first:
+
+```ts
+import { MessageFlags } from "discord.js";
+import type { RenderResult } from "@neocord/react";
+
+function forEdit({ flags, ...rest }: RenderResult) {
+  return { ...rest, flags: MessageFlags.IsComponentsV2 as const };
+}
+
+await interaction.editReply(forEdit(render(node)));
+await channel.send(forEdit(render(node)));
+```
+
+## Modals
+
+```tsx
+import { Label, Modal, renderModal, TextInput } from "@neocord/react";
+
+await interaction.showModal(
+  renderModal(
+    <Modal customId="ban-reason" title="Ban reason">
+      Tell us what happened.
+      <Label label="Reason" description="Shown in the audit log">
+        <TextInput customId="reason" style="paragraph" maxLength={500} placeholder="Spam" />
+      </Label>
+    </Modal>,
+  ),
+);
+```
+
+`renderModal(node, { customId, title })` also works without the `Modal` wrapper. Values on a root `Modal` win over the options.
+
+## Custom ids and routes
+
+With no CLI, `route` is a plain `string` and `params` is an optional record. Use `buildCustomId` for the same id format, and `@neocord/routing` for matching:
+
+```ts
+import { buildCustomId } from "@neocord/react";
+import { createRouter } from "@neocord/routing";
+
+buildCustomId("tickets/close/[id]", { id: 42 });
+
+const router = createRouter<string>();
+router.add("tickets/close/[id]", "closeTicket");
+router.match("tickets/close/42");
+```
+
+`router.match` returns `{ route: "closeTicket", params: { id: "42" } }`. See [`@neocord/routing`](/docs/api/routing).
+
+For typed routes, write the same augmentation that the CLI generates:
+
+```ts title="src/routes.d.ts"
+declare module "@neocord/react" {
+  interface RegisteredRoutes {
+    buttons: "tickets/close/[id]";
+    selects: never;
+    modals: "ban-reason";
+  }
+}
+export {};
+```
+
+## Live roots
+
+`onClick` and `onSelect` need a root that stays mounted, because a handler can only run while its tree exists. One-shot `render` throws if it meets one. In a neocord bot this is handled for you, and standalone you drive it yourself.
+
+```tsx
+import { ActionRow, Button, createLiveRoot, TextDisplay } from "@neocord/react";
+import { useState } from "react";
+
+function Counter() {
+  const [count, setCount] = useState(0);
+  return (
+    <>
+      <TextDisplay>Count: {count}</TextDisplay>
+      <ActionRow>
+        <Button style="primary" label="Add" onClick={() => setCount(count + 1)} />
+      </ActionRow>
+    </>
+  );
+}
+
+const root = createLiveRoot({
+  sessionId: interaction.id,
+  onUpdate: (result) => interaction.editReply(forEdit(result)),
+  onError: (error) => console.error(error),
+});
+
+root.render(<Counter />);
+await interaction.reply(root.payload);
+
+client.on("interactionCreate", async (event) => {
+  if (!event.isMessageComponent()) return;
+  if (await root.dispatch(event.customId, event)) {
+    await event.update(forEdit(root.payload));
+  }
+});
+```
+
+`createLiveRoot` takes these options.
+
+| Option | Type | Meaning |
+| --- | --- | --- |
+| `sessionId` | `string`, required | Used in custom ids: `~<sessionId>:<n>`. Must not be empty. |
+| `onUpdate` | `(result: RenderResult) => unknown` | Fires for commits outside `dispatch` and `render`, such as a timer calling `setState`. |
+| `onError` | `(error: unknown) => unknown` | Receives errors from background commits and from `onUpdate`. |
+
+The returned `LiveRoot` has these members.
+
+| Member | Behaviour |
+| --- | --- |
+| `render(node)` | Commits synchronously. Component and validation errors throw here. |
+| `payload` | The latest `RenderResult`. |
+| `hasHandlers` | Whether the committed tree has any `onClick` or `onSelect`. |
+| `dispatch(customId, event)` | Runs the handler in a batch and flushes. It waits for async handlers and resolves to `false` for unknown ids. |
+| `flush()` | Applies pending updates and effects. |
+| `settle()` | Waits until the tree is no longer suspended, without firing `onUpdate`. |
+| `disableInteractive()` | Returns the payload with every button and select disabled. The tree is not changed. |
+| `unmount()` | Unmounts the tree and runs effect cleanups. Later dispatches return `false`, and `payload` keeps its last value. |
+
+After a dispatch, read `payload` yourself. `onUpdate` does not fire for it.
+
+Without `onError`, background errors are rethrown by the next `flush` or `dispatch`. After an uncaught component error the tree is gone: `payload` keeps the last good value, dispatches return `false`, and calling `render` starts over.
+
+`useLiveInteraction()` returns the current event for components that render during a dispatch, and `null` otherwise. Unlike the neocord runtime, a standalone root has no idle timeout, so unmount it yourself. See [Live sessions](/docs/ui/live-sessions) for the behaviour the runtime adds.
+
+## Exports
+
+The full list is on the [`@neocord/react` API page](/docs/api/react).

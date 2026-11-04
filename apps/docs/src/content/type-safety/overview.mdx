@@ -1,0 +1,132 @@
+neocord's types come from two places. Some are inferred from literals you write, with no code generation. Others come from a declaration file that the CLI generates from your folders, which connects a `<Button route>` in one file to the route defined by another.
+
+## What is checked
+
+| You write | What the types do | Source |
+| --- | --- | --- |
+| `defineButton("mod/ban/[userId]", ...)` | `ctx.params.userId` is a `string`. | Literal inference |
+| `option.string({ required: true })` | `ctx.options.name` is `string`, not `string \| undefined`. | Literal inference |
+| `choices: [{ name: "One", value: 1 }]` | `ctx.options.days` is `1 \| undefined`, without `as const`. | Literal inference |
+| `guildOnly: true` | `ctx.guild` and `ctx.member` are non-null. | Literal inference |
+| `defineSelect(route, { type: "role" })` | `ctx.roles` exists. | Literal inference |
+| `schema: z.object({ reason: z.string() })` | `ctx.values.reason` is a `string`, and `field()` only accepts `"reason"`. | Literal inference |
+| `defineEvent("guildMemberAdd", ...)` | The handler receives `(ctx, member)`. | discord.js `ClientEvents` |
+| `<Button route="mod/ban/[userId]" />` | The route must exist, and `params` is required. | Generated types |
+| `ctx.showModal("mod/reason/[userId]", params)` | The route must exist, and `params` is required. | Generated types |
+| `ctx.app.db` | Typed from `src/context.ts`. | Generated types |
+
+## Generated types
+
+`neocord typegen` writes `.neocord/types.d.ts`. `neocord dev`, `neocord build` and `neocord test` also write it. For a project with one button, one modal and a context file, it looks like this:
+
+```ts title=".neocord/types.d.ts"
+declare module "@neocord/react" {
+  interface RegisteredRoutes {
+    buttons: "moderation/confirm-ban/[userId]";
+    selects: never;
+    modals: "moderation/ban-reason/[userId]";
+  }
+}
+declare module "neocord" {
+  interface RegisteredApp {
+    context: import("neocord").InferAppContext<typeof import("../src/context.ts").default>;
+  }
+}
+export {};
+```
+
+TypeScript only sees it if `tsconfig.json` includes it:
+
+```json title="tsconfig.json"
+{
+  "include": ["src", "neocord.config.ts", ".neocord/types.d.ts"]
+}
+```
+
+The `.neocord` folder is generated and ignored by git. In a fresh clone or in CI, run typegen before `tsc`. The template's `typecheck` script does both:
+
+```json title="package.json"
+{
+  "scripts": {
+    "typecheck": "neocord typegen && tsc --noEmit"
+  }
+}
+```
+
+`neocord build --typecheck` also generates first and then runs `tsc --noEmit`. See the [CLI reference](/docs/cli).
+
+## RegisteredRoutes
+
+`@neocord/react` exports an empty interface, and the types of `route` read from it:
+
+```ts
+export interface RegisteredRoutes {}
+
+export type ButtonRoute = RegisteredRoutes extends { buttons: infer R extends string } ? R : string;
+export type SelectRoute = RegisteredRoutes extends { selects: infer R extends string } ? R : string;
+export type ModalRoute = RegisteredRoutes extends { modals: infer R extends string } ? R : string;
+```
+
+With nothing registered, `route` is a `string` and `params` is an optional record. Once the file exists, `route` is a union of your route ids, and `params` follows the route:
+
+```tsx
+<Button route="general/refresh" label="Refresh" />
+<Button route="moderation/confirm-ban/[userId]" params={{ userId: user.id }} label="Ban" />
+```
+
+| Mistake | Result |
+| --- | --- |
+| `<Button route="general/refesh" />` | Compile error: not a known route. |
+| `<Button route="moderation/confirm-ban/[userId]" />` | Compile error: `params` is missing. |
+| `<Button route="general/refresh" params={{ id: "1" }} />` | Compile error: this route takes no params. |
+| `<Button route="general/refresh" customId="x" />` | Compile error: the address props are mutually exclusive. |
+
+A kind with no routes is `never`, so `route` accepts nothing on that kind until you add a file.
+
+Param values can be `string`, `number` or `bigint`, and a `[...rest]` param takes a readonly array of those. In the handler, they are always strings, or `string[]` for `[...rest]`.
+
+`customId` is a raw `string` and is never checked against your routes. The [`prefer-route-prop`](/docs/eslint/prefer-route-prop) rule points it out.
+
+## RegisteredApp
+
+`neocord` exports another empty interface, which sets the type of `ctx.app`:
+
+```ts
+export interface RegisteredApp {}
+
+export type AppContext = RegisteredApp extends { context: infer C } ? C : Record<string, never>;
+```
+
+`InferAppContext` extracts the value type from your `defineContext` call. Without a `src/context.ts`, the generated file has no `RegisteredApp` block. See [App context](/docs/handlers/app-context).
+
+## Route literals
+
+The route argument of `defineButton`, `defineSelect` and `defineModal` drives params without any generated types:
+
+```tsx
+export default defineButton("moderation/page/[id]/[...rest]", {
+  execute(ctx) {
+    ctx.params.id;
+    ctx.params.rest;
+  },
+});
+```
+
+Here `ctx.params.id` is a `string` and `ctx.params.rest` is a `string[]`.
+
+The literal has to match the path. The [`route-matches-path`](/docs/eslint/route-matches-path) ESLint rule keeps it correct and has an autofix, and `validateManifest` rejects a mismatch at startup. The `RouteParams` type from `@neocord/react` and `@neocord/routing` gives you the same inference in your own code:
+
+```ts
+import type { RouteParams } from "@neocord/react";
+
+type Params = RouteParams<"mod/[id]/[...rest]">;
+```
+
+## Runtime checks
+
+Types do not reach everything, so these are also checked at runtime:
+
+- `validateManifest` runs in `neocord build`, `neocord test` and at startup. It checks brands, route literals, names, descriptions and intent requirements.
+- `@neocord/react` validates every message against Discord's limits when it renders.
+- `buildCustomId` throws a `CustomIdError` if a filled-in route exceeds Discord's 100 characters.
+- [`src/env.ts`](/docs/type-safety/environment) validates environment variables when it loads.

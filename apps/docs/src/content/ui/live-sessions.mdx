@@ -1,0 +1,174 @@
+Put `onClick` on a button or `onSelect` on a select and the message becomes a live session. The React tree stays mounted in memory, so `useState` and effects work as they do on the web, and you do not need a route file for the component.
+
+```tsx title="src/features/general/commands/counter/command.tsx"
+import { ActionRow, Button, TextDisplay } from "@neocord/react";
+import { defineCommand } from "neocord";
+import { useState } from "react";
+
+function Counter() {
+  const [count, setCount] = useState(0);
+  return (
+    <>
+      <TextDisplay>Count: {count}</TextDisplay>
+      <ActionRow>
+        <Button style="primary" label="Add" onClick={() => setCount(count + 1)} />
+        <Button label="Reset" onClick={() => setCount(0)} />
+      </ActionRow>
+    </>
+  );
+}
+
+export default defineCommand({
+  description: "A counter that keeps its state",
+  execute() {
+    return <Counter />;
+  },
+});
+```
+
+<DiscordPreview command="/counter" label="The counter in Discord">
+  <DiscordText>Count: 3</DiscordText>
+  <DiscordRow>
+    <DiscordButton variant="primary">Add</DiscordButton>
+    <DiscordButton>Reset</DiscordButton>
+  </DiscordRow>
+</DiscordPreview>
+
+## When to use one
+
+| Use a live session for | Use a [route file](/docs/routing/buttons) for |
+| --- | --- |
+| Short-lived UI: pagination, wizards, confirmations, games. | Buttons that must keep working after a restart or days later. |
+| State that does not need to survive. | Anything that needs middleware, `permissions` or `cooldown`. |
+
+You can mix them. A tree can hold `onClick` buttons and `route` buttons at once.
+
+## How a click is handled
+
+1. neocord renders your node through a live root. If the committed tree has any handler, the session is stored.
+2. Each live component gets a custom id of the form `~<sessionId>:<index>`. The `~` prefix is reserved, so your own custom ids cannot start with it.
+3. A click dispatches to the handler for that id. It waits for an async handler to finish.
+4. If the handler did not acknowledge the interaction, neocord updates the message with the latest render.
+
+Ids follow React's identity rules: a component keeps its id across re-renders for as long as its position and key stay the same. So a click on the current message always reaches the newest closure.
+
+The [`autoDefer`](/docs/handlers/replying#autodefer) timer also runs during a click, and defers the update if your handler is slow.
+
+## The handler argument
+
+The handler receives the discord.js interaction. You can read from it, or respond through it, and neocord then edits the message without responding again.
+
+```tsx
+<Button
+  label="Claim"
+  onClick={async (event) => {
+    if (event.user.id !== ownerId) {
+      await event.reply({ content: "This is not yours.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    setClaimed(true);
+  }}
+/>
+```
+
+`useLiveInteraction()` returns the current event in components that render during a dispatch, and `null` otherwise.
+
+```tsx
+const interaction = useLiveInteraction();
+return <TextDisplay>Last clicked by {interaction?.user.username ?? "nobody"}</TextDisplay>;
+```
+
+`ctx.showModal` cannot open a modal from a click, because `ctx` is bound to the interaction that created the session, which has already been answered. Use the event: `event.showModal(renderModal(...))`.
+
+<Callout kind="warn">
+
+Anyone who can see the message can click. Clicks skip `guildOnly`, `permissions`, `cooldown` and middleware, because they go straight to the session. Check `event.user.id` or `event.memberPermissions` yourself when it matters, or make the message ephemeral.
+
+</Callout>
+
+## Updates outside a click
+
+A state change from anything else also edits the message, such as a timer or a promise.
+
+```tsx
+function Countdown() {
+  const [left, setLeft] = useState(30);
+  useEffect(() => {
+    const timer = setInterval(() => setLeft((value) => Math.max(value - 1, 0)), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <>
+      <TextDisplay>{left} seconds left</TextDisplay>
+      <ActionRow>
+        <Button label="Stop" onClick={() => setLeft(0)} />
+      </ActionRow>
+    </>
+  );
+}
+```
+
+Edits are coalesced: one edit runs at a time, and only the newest pending payload is sent. Intermediate states can be skipped under load. Discord rate limits still apply, so do not update more often than you need. A tree needs at least one handler for a session to exist, and without one it is unmounted right after sending.
+
+## TTL
+
+A session has an idle timeout, set by `live.ttl`.
+
+```ts title="neocord.config.ts"
+export default defineConfig({
+  live: { ttl: "5m" },
+});
+```
+
+| Fact | Detail |
+| --- | --- |
+| Default | `14m` |
+| Accepted values | A [duration](/docs/api/neocord) string, such as `"5m"` or `"1h30m"`, or a number of milliseconds. |
+| What resets it | Each click on the session. A timer calling `setState` does not. |
+| When it passes | The message is edited one last time with every button and select disabled, then the tree unmounts and effect cleanups run. |
+
+The default sits under Discord's 15 minute lifetime for interaction tokens, which is what neocord edits through. The initial token is replaced by each click's. With a longer `ttl`, edits on an idle session can fail once the token expires. After at least one click, neocord falls back to editing through the message. Otherwise it logs a warning, and the components stay enabled on the message.
+
+## Per-process limits
+
+Sessions live in a `Map` in the process that created them.
+
+- They are not persisted or shared. There is no database or Redis option.
+- With [sharding](/docs/sharding), each shard has its own store. Discord sends a guild's interactions to the shard that owns the guild, so clicks reach the shard holding the session, as long as the shard count does not change.
+- Each open session keeps a React tree and its closures in memory until it expires. neocord sets no limit on the number of sessions, so a command that many people run all day can hold many trees. Lower `live.ttl` if that matters.
+
+## Restart behaviour
+
+| Event | Result |
+| --- | --- |
+| Graceful stop (SIGINT, SIGTERM, manager shutdown) | neocord tries to expire every session, so their components are disabled. It waits up to two seconds for those edits, then unmounts the rest. |
+| Crash or kill | Nothing runs, so messages keep their enabled buttons. |
+| A click after either | The session is gone, so neocord removes the components from the message and sends an ephemeral "This message has expired." notice. If that would leave the message empty, only the notice is sent. |
+
+The handler code does not run again. If users need a button to work after a deploy, use a route file and put the state in its params or your database.
+
+`neocord dev` restarts the bot on every change, so live messages expire often in development.
+
+## Errors
+
+A throw in a handler is logged, and the route's [error view](/docs/handlers/error-boundaries) is sent as an ephemeral message. The session stays open and a later click can succeed. A render error from a background update is logged as "A live session failed while updating."
+
+## What cannot be live
+
+`onClick` and `onSelect` throw outside a live root, with a message that names the fix. That covers:
+
+- Modals.
+- [Error views](/docs/handlers/error-boundaries) and other one-shot renders from `render` or `renderAsync`.
+
+## Testing
+
+Pass `live: true` to a run helper to keep the session open. The result then has a `live` object with `click(label)` and `select(values)`, and each resolves to a result with the updated text. Call `live.close()` when the test is done. See [Testing live sessions](/docs/testing#testing-live-sessions).
+
+```tsx
+const { live } = await runCommand(counter, { live: true });
+
+const clicked = await live!.click("Add");
+
+expect(clicked.text).toContain("Count: 1");
+await live!.close();
+```
