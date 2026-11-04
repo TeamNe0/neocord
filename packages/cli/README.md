@@ -12,9 +12,9 @@ bun add -d @neocord/cli
 | --- | --- |
 | `neocord dev [--shards n] [--no-deploy]` | Generates, bundles and runs the bot, restarts on change, and syncs commands to `dev.guildId` when they change. |
 | `neocord build [--no-validate] [--typecheck]` | Writes the production bundle to `.neocord/build`: `shard.js`, `manager.js` and `deploy.js`. |
-| `neocord start [--shards n] [--deploy]` | Launches `manager.js` from the production bundle. |
-| `neocord deploy [--guild id] [--force] [--dry-run]` | Registers commands with Discord, skipping when the hash in `.neocord/deploy.json` is unchanged. Builds first if the bundle is missing or older than the source. |
-| `neocord test [files...] [--watch] [--coverage] [--no-validate] [--validate-only]` | Validates all routes and command payloads, then runs tests with vitest if it is a project dependency, otherwise `bun test`. |
+| `neocord start [--shards n] [--deploy]` | Launches `manager.js` from the production bundle. Warns if project files changed after the build, and starts anyway. |
+| `neocord deploy [--guild id] [--force] [--dry-run] [--clear]` | Registers commands with Discord, skipping when the hash in `.neocord/deploy.json` is unchanged. `--clear` removes every command from the guild or global scope. Builds first if the bundle is missing or out of date, including bundled files outside the source folder. |
+| `neocord test [files...] [--watch] [--coverage] [--no-validate] [--validate-only]` | Validates all routes and command payloads, then runs tests with vitest if it is a project dependency, otherwise `bun test`. Under vitest, fails first if a test file imports `node:test` or `bun:test`, because vitest would not collect it. |
 | `neocord typegen` | Writes `.neocord/manifest.ts`, `.neocord/types.d.ts` and the entry files. |
 | `neocord routes [--json]` | Prints the route table. |
 | `neocord lint [--fix]` | Runs the project's ESLint. |

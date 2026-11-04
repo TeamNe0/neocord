@@ -23,6 +23,7 @@ export type TestRunner =
 
 export interface SelectRunnerContext {
   findBun?: () => string | null;
+  resolveBin?: (root: string, packageName: string) => string | null;
 }
 
 const TEST_FILE = /[._](test|spec)\.[cm]?[jt]sx?$/;
@@ -42,7 +43,7 @@ const KEEP_IMPORTS_EXTERNAL: Plugin = {
 
 export function selectTestRunner(root: string, context: SelectRunnerContext = {}): TestRunner {
   if (projectDependsOn(root, "vitest")) {
-    const bin = resolvePackageBin(root, "vitest");
+    const bin = (context.resolveBin ?? resolvePackageBin)(root, "vitest");
     if (bin === null) {
       throw new CliError("vitest is listed in package.json but is not installed.", {
         hint: "Install your dependencies, then run neocord test again.",

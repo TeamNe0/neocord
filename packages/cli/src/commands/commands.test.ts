@@ -1034,7 +1034,7 @@ describe("neocord test", () => {
     expect(selectTestRunner(withVitest.root, { findBun: () => "bun" }).kind).toBe("vitest");
 
     const declaredOnly = fixture({ stubs: false, packageJson: { devDependencies: { vitest: "3.0.0" } }, files: {} });
-    expect(() => selectTestRunner(declaredOnly.root, { findBun: () => "bun" })).toThrow("not installed");
+    expect(() => selectTestRunner(declaredOnly.root, { findBun: () => "bun", resolveBin: () => null })).toThrow("not installed");
 
     const plain = fixture({ stubs: false, files: {} });
     expect(selectTestRunner(plain.root, { findBun: () => "/bin/bun" })).toEqual({ kind: "bun", command: "/bin/bun" });
