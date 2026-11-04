@@ -92,10 +92,16 @@ export function groupDefinition(module: ModuleNamespace): GroupDefinition | null
   return brandOf(module) === "group" ? (module.default as GroupDefinition) : null;
 }
 
+const DISABLED_STRINGS = new Set(["false", "0", "no", "off", "n", "disabled"]);
+
+function isDisabledFlag(value: unknown): boolean {
+  return value === false || (typeof value === "string" && DISABLED_STRINGS.has(value.trim().toLowerCase()));
+}
+
 export function disabledFeatures(manifest: Manifest): Set<string> {
   const disabled = new Set<string>();
   for (const { name, module } of manifest.features) {
-    if (featureDefinition(module)?.enabled === false) disabled.add(name);
+    if (isDisabledFlag(featureDefinition(module)?.enabled)) disabled.add(name);
   }
   return disabled;
 }

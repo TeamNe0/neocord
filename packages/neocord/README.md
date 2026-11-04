@@ -87,12 +87,12 @@ Return a node, which is the idiomatic form, or call the context.
 | `ctx.reply(node, options)` | Replies first, edits after a defer, follows up after that. |
 | `ctx.editReply(node)` | Edits the reply. |
 | `ctx.followUp(node)` | Sends another message. |
-| `ctx.update(node)` | Components only. Updates the message. |
+| `ctx.update(node)` | Components, and modals opened from a component. Updates the message. |
 | `ctx.defer()` / `ctx.deferUpdate()` | Acknowledges now, and is a no-op if already acknowledged. |
 | `ctx.deleteReply()` | Deletes the reply. |
 | `ctx.showModal(route, params)` | Must be the first response. `params` is required exactly when the route has params. |
 
-A node returned from a button or select updates the message unless `respond: "reply"` is set. If a component handler returns nothing and has not acknowledged, neocord defers the update. If a modal does, it acknowledges silently. If a command does, neocord logs a warning.
+A node returned from a button or select updates the message unless `respond: "reply"` is set. A modal opened from a component can do the same with `respond: "update"`. `ctx.commands` lists the commands the bot registers, which is useful for a `/help` command. If a component handler returns nothing and has not acknowledged, neocord defers the update. If a modal does, it acknowledges silently. If a command does, neocord logs a warning.
 
 `ReplyOptions` is `{ ephemeral?, layout? }`. An explicit `ephemeral` wins, then the route's `ephemeral` or `<Message ephemeral>`. After a public defer, an ephemeral reply deletes the deferral and follows up, because Discord fixes visibility at the first acknowledgement.
 
@@ -212,6 +212,9 @@ await runButton(button, { params: { userId: "1" } });
 | --- | --- |
 | `runCommand`, `runUserCommand`, `runMessageCommand` | Run a command. |
 | `runButton`, `runSelect`, `runModal` | Run a component or modal, by `params` or `customId`. |
+| `runAutocomplete` | Run an option's `autocomplete` and read its choices. |
+| `live: true` option | Keeps a live session open on the result, so a test can call `live.click()` and `live.select()`. |
+| `commands` option | Sets what `ctx.commands` returns. |
 | `runEvent(definition, args)`, `runTask(definition)` | Run one, resolving to `{ error }`. |
 | `renderModalOf(definition, { params })` | Render a modal to its payload. |
 | `mockUser`, `mockMember`, `mockGuild`, `mockChannel`, `mockRole`, `mockMessage` | `mockMessage` is a stub. The others are real discord.js structures, so `member.permissions` and similar work. |
