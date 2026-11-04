@@ -70,6 +70,17 @@ describe("classifyFile", () => {
     expect(classifyFile("src/features/fun/utils.ts").type).toBe("invalid");
     expect(classifyFile("src/features/orphan.ts").type).toBe("invalid");
     expect(classifyFile("src/features/fun/commands/command.tsx").type).toBe("invalid");
+    expect(classifyFile("src/features/fun/commands/group.ts").type).toBe("invalid");
+  });
+
+  test("treats inherited object keys as unknown folders", () => {
+    const file = classifyFile("src/features/fun/constructor/thing.ts");
+    expect(file).toMatchObject({ type: "invalid", reason: expect.stringContaining("Unknown folder") });
+  });
+
+  test("allows events and tasks named like segment files", () => {
+    expect(classifyFile("src/features/fun/events/error.ts")).toMatchObject({ type: "route", kind: "event", routeId: "error" });
+    expect(classifyFile("src/features/fun/tasks/loading.ts")).toMatchObject({ type: "route", kind: "task", routeId: "fun/loading" });
   });
 
   test("accepts windows separators and custom directories", () => {

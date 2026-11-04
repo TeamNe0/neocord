@@ -145,6 +145,10 @@ function isSegmentFileName(base: string): base is SegmentKind {
   return (SEGMENT_FILE_NAMES as readonly string[]).includes(base);
 }
 
+function isRouteDirectory(segment: string): segment is RouteDirectory {
+  return Object.hasOwn(ROUTE_DIRECTORIES, segment);
+}
+
 function isTestFile(fileName: string): boolean {
   return /\.(test|spec)\.tsx?$/.test(fileName);
 }
@@ -175,9 +179,6 @@ function classifyInKindDirectory(
   const routeScopes = [`${featuresDir}/${feature}`, ...scopesFor(prefix, folders)];
 
   if (kind === "event" || kind === "task") {
-    if (isSegmentFileName(parsed.base)) {
-      return { type: "invalid", reason: `"${parsed.base}" files are not used inside "${directory}".` };
-    }
     const named = segments[0] ?? parsed.base;
     if (segments.length > 1) {
       return {
@@ -194,6 +195,9 @@ function classifyInKindDirectory(
   }
 
   if (kind === "command" && parsed.base === "group") {
+    if (segments.length === 0) {
+      return { type: "invalid", reason: `"group" files must live in a named folder inside "${directory}".` };
+    }
     return { type: "group", feature, segments, scope: `${prefix}/${folders.join("/")}` };
   }
 
@@ -250,8 +254,8 @@ export function classifyFile(relativePath: string, options: ClassifyOptions = {}
       };
     }
 
-    if (second in ROUTE_DIRECTORIES) {
-      return classifyInKindDirectory(featuresDir, feature, second as RouteDirectory, parts.slice(2));
+    if (isRouteDirectory(second)) {
+      return classifyInKindDirectory(featuresDir, feature, second, parts.slice(2));
     }
 
     return {
