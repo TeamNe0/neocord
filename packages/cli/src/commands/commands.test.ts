@@ -7,6 +7,7 @@ import {
   LONG_TIMEOUT,
   runCli,
   STANDARD_FILES,
+  type CallRecord,
   type CliResult,
   type Fixture,
 } from "../test-support/fixture.ts";
@@ -777,6 +778,169 @@ describe("neocord test", () => {
       await cli(project, ["test", "--watch", "--no-validate"]);
       expect(project.calls().map((item) => item.call)).toEqual(["vitest"]);
       expect(project.calls()[0]?.args).toEqual(["watch", "--passWithNoTests"]);
+    },
+    LONG_TIMEOUT,
+  );
+
+  describe("test files vitest would not collect", () => {
+    const NODE_TEST_FILE = 'import assert from "node:assert/strict";\nimport { test } from "node:test";\ntest("fails", () => assert.equal(1, 2));\n';
+    const BUN_TEST_FILE = 'import { expect, test } from "bun:test";\ntest("fails", () => expect(1).toBe(2));\n';
+    const VITEST_FILE = 'import { expect, test } from "vitest";\ntest("passes", () => expect(1).toBe(1));\n';
+
+    function vitestProject(files: Record<string, string>): Fixture {
+      return fixture({
+        packageJson: { devDependencies: { vitest: "3.0.0" } },
+        files: { ...STANDARD_FILES, ...VITEST_STUB, ...files },
+      });
+    }
+
+    function vitestCalls(project: Fixture): CallRecord[] {
+      return project.calls().filter((call) => call.call === "vitest");
+    }
+
+    test.each([
+      ["with validation", ["test"]],
+      ["with --no-validate", ["test", "--no-validate"]],
+    ] as const)(
+      "fails before running vitest and lists each file, %s",
+      async (_name, args) => {
+        const project = vitestProject({ "src/a.test.ts": NODE_TEST_FILE, "src/nested/b.spec.tsx": BUN_TEST_FILE, "src/c.test.ts": VITEST_FILE });
+        const result = await cli(project, args);
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain("src/a.test.ts imports node:test");
+        expect(result.stderr).toContain("src/nested/b.spec.tsx imports bun:test");
+        expect(result.stderr).not.toContain("src/c.test.ts");
+        expect(result.stderr).toContain('from "vitest"');
+        expect(vitestCalls(project)).toEqual([]);
+        expect(project.read("src/a.test.ts")).toBe(NODE_TEST_FILE);
+      },
+      LONG_TIMEOUT,
+    );
+
+    test.each([
+      ["a dynamic import", 'await import("node:test");\n'],
+      ["a require call", 'require("bun:test");\n'],
+      ["a bare import", 'import "node:test";\n'],
+      ["a re-export", 'export { test } from "node:test";\n'],
+    ])(
+      "finds %s",
+      async (_name, content) => {
+        const project = vitestProject({ "src/a.test.js": content });
+        const result = await cli(project, ["test", "--no-validate"]);
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain("src/a.test.js");
+        expect(vitestCalls(project)).toEqual([]);
+      },
+      LONG_TIMEOUT,
+    );
+
+    test.each([
+      ["a comment", '// import { test } from "node:test";\nexport {};\n'],
+      ["a string", 'export const source = \'import { test } from "node:test";\';\n'],
+      ["a type-only import", 'import type { TestContext } from "node:test";\nexport type Context = TestContext;\n'],
+      ["a similar module name", 'import { test } from "node:test-helpers";\ntest();\n'],
+    ])(
+      "ignores %s",
+      async (_name, content) => {
+        const project = vitestProject({ "src/a.test.ts": content });
+        const result = await cli(project, ["test", "--no-validate"]);
+        expect(result.code).toBe(0);
+        expect(vitestCalls(project)).toHaveLength(1);
+      },
+      LONG_TIMEOUT,
+    );
+
+    test(
+      "scans what vitest's default patterns include, and nothing else",
+      async () => {
+        const project = vitestProject({
+          "helpers/not-a-test.ts": NODE_TEST_FILE,
+          "src/a_test.ts": NODE_TEST_FILE,
+          "node_modules/dep/index.test.ts": NODE_TEST_FILE,
+          ".git/hooks/x.test.ts": NODE_TEST_FILE,
+        });
+        expect((await cli(project, ["test", "--no-validate"])).code).toBe(0);
+
+        for (const file of ["dist/a.test.mjs", ".hidden/b.test.cts", "test/c.spec.jsx"]) {
+          project.write(file, NODE_TEST_FILE);
+          const result = await cli(project, ["test", "--no-validate"]);
+          expect(result.code).toBe(1);
+          expect(result.stderr).toContain(file);
+          project.remove(file);
+        }
+      },
+      LONG_TIMEOUT,
+    );
+
+    test(
+      "only scans the files that the arguments select",
+      async () => {
+        const project = vitestProject({ "src/bad.test.ts": NODE_TEST_FILE, "src/good.test.ts": VITEST_FILE, "checks/explicit.ts": NODE_TEST_FILE });
+
+        const unrelated = await cli(project, ["test", "--no-validate", "good"]);
+        expect(unrelated.code).toBe(0);
+        expect(vitestCalls(project)[0]?.args).toEqual(["run", "--passWithNoTests", "good"]);
+
+        for (const argument of ["bad", "SRC/BAD", "./src/bad.test.ts", join(project.root, "src", "bad.test.ts"), "src/bad.test.ts:3", "src/"]) {
+          const result = await cli(project, ["test", "--no-validate", argument]);
+          expect(result.code).toBe(1);
+          expect(result.stderr).toContain("src/bad.test.ts");
+        }
+
+        const explicit = await cli(project, ["test", "--no-validate", "checks/explicit.ts"]);
+        expect(explicit.code).toBe(1);
+        expect(explicit.stderr).toContain("checks/explicit.ts");
+      },
+      LONG_TIMEOUT,
+    );
+
+    test(
+      "does not read a forwarded flag or its value as a filter",
+      async () => {
+        const project = vitestProject({ "src/bad.test.ts": NODE_TEST_FILE });
+        for (const args of [["--bail=1"], ["--reporter", "dot"]]) {
+          const result = await cli(project, ["test", "--no-validate", ...args]);
+          expect(result.code).toBe(1);
+          expect(result.stderr).toContain("src/bad.test.ts");
+        }
+      },
+      LONG_TIMEOUT,
+    );
+
+    test(
+      "leaves a file with a syntax error for vitest to report",
+      async () => {
+        const project = vitestProject({ "src/broken.test.ts": "export default {" });
+        const result = await cli(project, ["test", "--no-validate"], { STUB_VITEST_EXIT: "1" });
+        expect(result.code).toBe(1);
+        expect(vitestCalls(project)).toHaveLength(1);
+      },
+      LONG_TIMEOUT,
+    );
+
+    test(
+      "--validate-only does not scan, because no tests run",
+      async () => {
+        const project = vitestProject({ "src/a.test.ts": NODE_TEST_FILE });
+        expect((await cli(project, ["test", "--validate-only"])).code).toBe(0);
+      },
+      LONG_TIMEOUT,
+    );
+  });
+
+  test(
+    "bun test really fails on a failing node:test assertion",
+    async () => {
+      const project = fixture({
+        files: {
+          ...STANDARD_FILES,
+          "src/failing.test.ts": 'import assert from "node:assert/strict";\nimport { test } from "node:test";\ntest("fails", () => assert.equal(1, 2));\n',
+        },
+      });
+      const result = await cli(project, ["test", "--no-validate"]);
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain("1 fail");
+      expect(result.stderr).toContain("0 pass");
     },
     LONG_TIMEOUT,
   );

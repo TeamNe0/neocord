@@ -355,7 +355,7 @@ test("ping replies with the text it was given", async () => {
 });
 ```
 
-This test is written for `bun test`. vitest does not collect `node:test` tests and exits with 0 even when they fail, so if you add vitest, use [vitest's own imports](/docs/testing#which-runner-is-used).
+This test is written for `bun test`. vitest does not collect `node:test` tests, so if you add vitest, `neocord test` stops with an error that lists this file until you switch it to [vitest's own imports](/docs/testing#which-runner-is-used).
 
 ## Typegen
 

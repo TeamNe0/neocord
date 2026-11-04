@@ -1,6 +1,8 @@
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { build, type Plugin } from "esbuild";
 import { CliError } from "../errors.ts";
+import { compareStrings, relativePosix, toPosix } from "../project/paths.ts";
 import { assertNoIssues, openProject, runValidation, syncProject } from "../project/pipeline.ts";
 import { findBun, projectDependsOn, resolvePackageBin, resolveToolRunner } from "../project/runtime.ts";
 import { runProcess } from "../project/spawn.ts";
@@ -25,6 +27,18 @@ export interface SelectRunnerContext {
 
 const TEST_FILE = /[._](test|spec)\.[cm]?[jt]sx?$/;
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", "build", "coverage"]);
+const VITEST_TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
+const VITEST_EXCLUDED_DIRECTORIES = new Set(["node_modules", ".git"]);
+const UNCOLLECTED_RUNNERS = new Set(["node:test", "bun:test"]);
+
+const KEEP_IMPORTS_EXTERNAL: Plugin = {
+  name: "keep-imports-external",
+  setup(pluginBuild) {
+    pluginBuild.onResolve({ filter: /.*/ }, (args) =>
+      args.kind === "entry-point" ? undefined : { path: args.path, external: true },
+    );
+  },
+};
 
 export function selectTestRunner(root: string, context: SelectRunnerContext = {}): TestRunner {
   if (projectDependsOn(root, "vitest")) {
@@ -54,6 +68,91 @@ async function containsTestFile(directory: string): Promise<boolean> {
     }
   }
   return false;
+}
+
+async function listVitestFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) return VITEST_EXCLUDED_DIRECTORIES.has(entry.name) ? [] : listVitestFiles(path);
+      return VITEST_TEST_FILE.test(entry.name) ? [path] : [];
+    }),
+  );
+  return files.flat();
+}
+
+function vitestFilters(args: readonly string[]): string[] {
+  const filters: string[] = [];
+  let mayBeFlagValue = false;
+  for (const arg of args) {
+    if (arg.startsWith("-")) {
+      mayBeFlagValue = !arg.includes("=");
+      continue;
+    }
+    if (!mayBeFlagValue) filters.push(arg.replace(/:\d+$/, ""));
+    mayBeFlagValue = false;
+  }
+  return filters;
+}
+
+function matchesVitestFilter(root: string, file: string, filter: string): boolean {
+  const testFile = relativePosix(root, file).toLowerCase();
+  const fromRoot = relativePosix(root, resolve(root, filter)).toLowerCase();
+  return testFile.includes(toPosix(filter).toLowerCase()) || testFile.includes(fromRoot);
+}
+
+async function selectVitestFiles(root: string, args: readonly string[]): Promise<string[]> {
+  const included = await listVitestFiles(root);
+  const filters = vitestFilters(args);
+  if (filters.length === 0) return included;
+  const explicit = await Promise.all(
+    filters.map((filter) =>
+      stat(resolve(root, filter)).then(
+        (info) => (info.isFile() ? [resolve(root, filter)] : []),
+        () => [],
+      ),
+    ),
+  );
+  const matching = included.filter((file) => filters.some((filter) => matchesVitestFilter(root, file, filter)));
+  return [...new Set([...matching, ...explicit.flat()])];
+}
+
+async function uncollectedImports(root: string, file: string): Promise<string[]> {
+  try {
+    const { metafile } = await build({
+      absWorkingDir: root,
+      entryPoints: [file],
+      bundle: true,
+      write: false,
+      metafile: true,
+      format: "esm",
+      platform: "node",
+      logLevel: "silent",
+      tsconfigRaw: "{}",
+      plugins: [KEEP_IMPORTS_EXTERNAL],
+    });
+    const imports = Object.values(metafile.inputs).flatMap((input) => input.imports.map((item) => item.path));
+    return [...new Set(imports.filter((path) => UNCOLLECTED_RUNNERS.has(path)))];
+  } catch {
+    return [];
+  }
+}
+
+export async function assertVitestCollectsTests(root: string, args: readonly string[]): Promise<void> {
+  const files = await selectVitestFiles(root, args);
+  const found = await Promise.all(
+    files.map(async (file) => {
+      const name = relativePosix(root, file);
+      return (await uncollectedImports(root, file)).map((runner) => `${name} imports ${runner}`);
+    }),
+  );
+  const details = found.flat().sort(compareStrings);
+  if (details.length === 0) return;
+  throw new CliError(
+    "vitest does not collect tests from node:test or bun:test, so these files would pass even with failing assertions.",
+    { details, hint: 'Import test and expect from "vitest" in these files, then run neocord test again.' },
+  );
 }
 
 export function runnerCommand(runner: TestRunner, options: TestCommandOptions): { command: string; args: string[] } {
@@ -101,6 +200,7 @@ export async function runTest(options: TestCommandOptions, ui: Ui): Promise<numb
     ui.success("No tests found.");
     return 0;
   }
+  if (runner.kind === "vitest") await assertVitestCollectsTests(project.root, options.files);
 
   const { command, args } = runnerCommand(runner, options);
   const { code } = await runProcess({ command, args, cwd: project.root, env: project.env });

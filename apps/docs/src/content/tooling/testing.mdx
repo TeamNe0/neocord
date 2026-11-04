@@ -12,7 +12,8 @@ The command runs these steps in order, and stops at the first failure:
 2. Scans the project and generates code. Any scan problem stops the run.
 3. Validates, unless `--no-validate` is set. This bundles a small entry that calls `validateManifest` and `serializeCommands`. Warnings are printed, and errors fail the run. It catches a wrong route id, a missing `group.ts`, or too many options, without talking to Discord.
 4. Exits here if `--validate-only` is set.
-5. Runs the test runner.
+5. If the runner is vitest, checks that the test files don't import `node:test` or `bun:test`. This runs with or without `--no-validate`.
+6. Runs the test runner.
 
 | Argument or flag | Effect |
 | --- | --- |
@@ -56,7 +57,9 @@ test("ping replies with the text it was given", async () => {
 
 <Callout kind="warn">
 
-vitest does not collect `node:test` tests. They run as a side effect, vitest prints `Tests  no tests`, and the command exits with 0 even when an assertion fails. If vitest is a project dependency, rewrite the scaffolded test with vitest's imports, and use them in place of `bun:test` in the examples below.
+vitest does not collect `node:test` or `bun:test` tests, so on its own it would exit with 0 even when an assertion fails. If vitest is a project dependency, `neocord test` checks for this before running it. If a test file imports either module, the command exits with 1 and lists each file, and it doesn't change your files. Rewrite those files with vitest's imports, and use them in place of `bun:test` in the examples below.
+
+The check covers files that match vitest's default `include` pattern, `**/*.{test,spec}.?(c|m)[jt]s?(x)`, outside `node_modules` and `.git`. If you pass arguments, it covers the files they select. It doesn't read a custom `test.include` or `test.exclude` from your vitest config.
 
 </Callout>
 

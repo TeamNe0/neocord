@@ -88,7 +88,7 @@ Registers commands with Discord, skipping when the hash in `.neocord/deploy.json
 
 ### `neocord test`
 
-Generates code, validates all routes and command payloads, then runs the project's tests. The test runner is vitest if it is a project dependency, otherwise `bun test`. Read [Testing](/docs/testing) for runner selection and the test API.
+Generates code, validates all routes and command payloads, then runs the project's tests. The test runner is vitest if it is a project dependency, otherwise `bun test`. Under vitest, the command fails before running any tests if a test file imports `node:test` or `bun:test`, because vitest would not collect those tests. Read [Testing](/docs/testing) for runner selection and the test API.
 
 ```sh
 neocord test [files...]

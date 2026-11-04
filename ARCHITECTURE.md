@@ -391,7 +391,7 @@ interface ManifestRoute {
 | `neocord build` | Production bundle in `.neocord/build`: `shard.js`, `manager.js`, `deploy.js`. |
 | `neocord start [--shards n] [--deploy]` | Launches `manager.js` from the production bundle. |
 | `neocord deploy [--guild id] [--force] [--dry-run]` | Registers commands with Discord. Skips when the hash in `.neocord/deploy.json` is unchanged. |
-| `neocord test [files...] [--watch] [--coverage] [--no-validate] [--validate-only]` | Validates all routes and command payloads, then runs tests with the project's runner. |
+| `neocord test [files...] [--watch] [--coverage] [--no-validate] [--validate-only]` | Validates all routes and command payloads, then runs tests with the project's runner. Under vitest, it first fails if a selected test file imports `node:test` or `bun:test`, because vitest would pass those tests without collecting them. |
 | `neocord typegen` | Writes `.neocord/manifest.ts` and `.neocord/types.d.ts`. |
 | `neocord routes` | Prints the route table. |
 | `neocord lint [--fix]` | Runs ESLint. |
