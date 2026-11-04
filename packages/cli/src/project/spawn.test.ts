@@ -2,7 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import { constants } from "node:os";
 import { createFixture, LONG_TIMEOUT, nodeCommand } from "../test-support/fixture.ts";
-import { exitCodeFor, forwardSignals, runProcess, runTaggedProcess, type ChildHandle, type SignalSource } from "./spawn.ts";
+import {
+  exitCodeFor,
+  forwardSignals,
+  GRACEFUL_STOP_TIMEOUT_MS,
+  runProcess,
+  runTaggedProcess,
+  type ChildHandle,
+  type SignalSource,
+} from "./spawn.ts";
 
 class FakeChild extends EventEmitter {
   readonly signals: (NodeJS.Signals | undefined)[] = [];
@@ -53,6 +61,26 @@ describe("forwardSignals", () => {
     await new Promise((resolve) => setTimeout(resolve, 40));
     expect(child.signals).toEqual(["SIGINT"]);
     detach();
+  });
+
+  test("the default Windows grace period covers the graceful stop budget", async () => {
+    const realSetTimeout = globalThis.setTimeout;
+    const delays: (number | undefined)[] = [];
+    const recording = ((callback: () => void, ms?: number) => {
+      delays.push(ms);
+      return realSetTimeout(callback, 0);
+    }) as unknown as typeof setTimeout;
+    globalThis.setTimeout = recording;
+    try {
+      const child = new FakeChild();
+      const source = signalSource();
+      const detach = forwardSignals(asHandle(child), { source, platform: "win32" });
+      source.emit("SIGINT");
+      detach();
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+    }
+    expect(delays).toEqual([GRACEFUL_STOP_TIMEOUT_MS]);
   });
 
   test("cancels the Windows grace timer once the child exits", async () => {

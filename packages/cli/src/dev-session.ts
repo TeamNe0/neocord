@@ -8,7 +8,14 @@ import { loadConfig, type CliConfig } from "./project/config.ts";
 import { applyEnv, envFileNames, loadEnvFiles } from "./project/env.ts";
 import { assertNoIssues, runDeployEntry, scanConfigured } from "./project/pipeline.ts";
 import { resolveRuntime, type ResolvedRuntime } from "./project/runtime.ts";
-import { defaultSpawn, type ChildHandle, type SpawnFunction } from "./project/spawn.ts";
+import {
+  defaultSpawn,
+  GRACEFUL_STOP_TIMEOUT_MS,
+  IPC_STDIO,
+  requestShutdown,
+  type ChildHandle,
+  type SpawnFunction,
+} from "./project/spawn.ts";
 
 export interface DevClock {
   setTimeout(callback: () => void, ms: number): unknown;
@@ -45,8 +52,11 @@ export interface DevSessionOptions {
   killTimeoutMs?: number;
 }
 
+export interface DevStopOptions {
+  childSignalled?: boolean;
+}
+
 export const DEFAULT_DEBOUNCE_MS = 100;
-export const DEFAULT_KILL_TIMEOUT_MS = 5000;
 
 const realClock: DevClock = {
   setTimeout: (callback, ms) => setTimeout(callback, ms),
@@ -76,6 +86,8 @@ export class DevSession {
   #dirty = false;
   #stopped = false;
   #stopping: Promise<number> | null = null;
+  #childSignalled = false;
+  #interrupts = 0;
   #resolveExit: (code: number) => void = () => {};
   readonly #exit: Promise<number>;
 
@@ -86,7 +98,7 @@ export class DevSession {
     this.#createWatcher = options.createWatcher;
     this.#clock = options.clock ?? realClock;
     this.#debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
-    this.#killTimeoutMs = options.killTimeoutMs ?? DEFAULT_KILL_TIMEOUT_MS;
+    this.#killTimeoutMs = options.killTimeoutMs ?? GRACEFUL_STOP_TIMEOUT_MS;
     this.#exit = new Promise((resolve) => {
       this.#resolveExit = resolve;
     });
@@ -121,9 +133,16 @@ export class DevSession {
     return this.#exit;
   }
 
-  stop(): Promise<number> {
+  stop(options: DevStopOptions = {}): Promise<number> {
+    if (options.childSignalled === true) this.#childSignalled = true;
     this.#stopping ??= this.#shutdown();
     return this.#stopping;
+  }
+
+  interrupt(signal: NodeJS.Signals): Promise<number> {
+    this.#interrupts += 1;
+    if (this.#interrupts > 1) this.forceKill();
+    return this.stop({ childSignalled: signal === "SIGINT" });
   }
 
   forceKill(): void {
@@ -201,7 +220,7 @@ export class DevSession {
     const handle = this.#spawn(build.command, build.args, {
       cwd: build.cwd,
       env: build.env,
-      stdio: "inherit",
+      stdio: IPC_STDIO,
     });
     let expected = false;
     let settled = false;
@@ -239,7 +258,9 @@ export class DevSession {
     const child = this.#child;
     if (child === null) return;
     child.markExpected();
-    child.handle.kill("SIGTERM");
+    requestShutdown(child.handle, () => {
+      if (!this.#childSignalled) child.handle.kill("SIGTERM");
+    });
     const timer = this.#clock.setTimeout(() => {
       child.handle.kill("SIGKILL");
     }, this.#killTimeoutMs);

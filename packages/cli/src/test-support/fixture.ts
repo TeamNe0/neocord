@@ -26,6 +26,13 @@ function record(call, data) {
   appendFileSync(log, JSON.stringify({ call, runtime, env: snapshotEnv(), ...data }) + "\\n");
 }
 
+function stayAlive() {
+  process.on("message", (message) => {
+    if (message?.neocord === "shutdown") process.exit(0);
+  });
+  setInterval(() => {}, 1000);
+}
+
 function summarize(manifest) {
   return {
     version: manifest.version,
@@ -48,13 +55,13 @@ function summarize(manifest) {
 export async function startBot({ config, manifest }) {
   record("startBot", { config: { intents: config.intents }, manifest: summarize(manifest) });
   if (process.env.STUB_EXIT_CODE) process.exit(Number(process.env.STUB_EXIT_CODE));
-  if (process.env.STUB_STAY_ALIVE) setInterval(() => {}, 1000);
+  if (process.env.STUB_STAY_ALIVE) stayAlive();
 }
 
 export async function startManager({ config, shardFile, shards }) {
   record("startManager", { config: { intents: config.intents }, shardFile: String(shardFile), shards: shards ?? null });
   if (process.env.STUB_EXIT_CODE) process.exit(Number(process.env.STUB_EXIT_CODE));
-  if (process.env.STUB_STAY_ALIVE) setInterval(() => {}, 1000);
+  if (process.env.STUB_STAY_ALIVE) stayAlive();
 }
 
 export function serializeCommands(manifest) {

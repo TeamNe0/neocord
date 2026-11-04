@@ -397,6 +397,8 @@ interface ManifestRoute {
 
 Env files load in Next.js order into the child process: `.env`, `.env.<mode>`, `.env.local`, `.env.<mode>.local`, later files overriding earlier ones and the real environment always winning. `.env.local` is skipped in test mode. `neocord start` performs the deploy for `deploy.mode: "auto"` before launching the manager. Bundling uses esbuild with `packages: "external"`, `platform: "node"`, `format: "esm"`. The config is bundled the same way and imported. The runtime is `bun` if `runtime` says so, or if `auto` and the CLI was invoked through bun, otherwise `node`.
 
+`neocord dev` runs the bot with an IPC channel (`stdio: ["inherit", "inherit", "inherit", "ipc"]`). To stop or restart it, the CLI sends `{ neocord: "shutdown" }`, and falls back to `SIGTERM` if the channel is unavailable, unless the signal was SIGINT, which the terminal or console has already delivered to the bot. `GRACEFUL_STOP_TIMEOUT_MS` (20 seconds) in `project/spawn.ts` bounds the wait before a force kill, and must stay longer than the bot's own shutdown budget. A second Ctrl+C force kills at once. `neocord start` has no IPC channel: console Ctrl+C reaches the manager directly on Windows, and `forwardSignals` waits the same timeout before terminating it.
+
 ## `@neocord/eslint-plugin`
 
 Flat config only, with `configs.recommended` and `configs.strict`. Rules read the AST only, so they do not need type information and work with any parser. See the docs site for the full rule list.

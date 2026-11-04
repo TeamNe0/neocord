@@ -8,6 +8,7 @@ export type ExitListener = (code: number | null, signal: NodeJS.Signals | null) 
 
 export interface ChildHandle {
   kill(signal?: NodeJS.Signals): boolean;
+  send?(message: { neocord: string }, callback?: (error: Error | null) => void): boolean;
   on(event: "exit" | "close", listener: ExitListener): unknown;
   on(event: "error", listener: (error: Error) => void): unknown;
   stdout?: Readable | null;
@@ -46,6 +47,10 @@ export interface CapturedResult<T> extends ProcessResult {
   result: T | null;
 }
 
+export const GRACEFUL_STOP_TIMEOUT_MS = 20_000;
+export const IPC_STDIO: StdioOptions = ["inherit", "inherit", "inherit", "ipc"];
+
+const SHUTDOWN_REQUEST = { neocord: "shutdown" };
 const FORWARDED_SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 export function exitCodeFor(code: number | null, signal: NodeJS.Signals | null): number {
@@ -53,10 +58,24 @@ export function exitCodeFor(code: number | null, signal: NodeJS.Signals | null):
   return signal === null ? 1 : 128 + (constants.signals[signal] ?? 0);
 }
 
+export function requestShutdown(child: ChildHandle, onUnreachable: () => void): void {
+  if (typeof child.send !== "function") {
+    onUnreachable();
+    return;
+  }
+  try {
+    child.send(SHUTDOWN_REQUEST, (error) => {
+      if (error) onUnreachable();
+    });
+  } catch {
+    onUnreachable();
+  }
+}
+
 export function forwardSignals(child: ChildHandle, options: ForwardSignalsOptions = {}): () => void {
   const source = options.source ?? process;
   const platform = options.platform ?? process.platform;
-  const graceMs = options.consoleGraceMs ?? 5000;
+  const graceMs = options.consoleGraceMs ?? GRACEFUL_STOP_TIMEOUT_MS;
   const timers = new Set<NodeJS.Timeout>();
 
   const listeners = FORWARDED_SIGNALS.map((signal) => {

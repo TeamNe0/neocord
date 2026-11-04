@@ -45,7 +45,9 @@ With one shard, the bot runs `shard.js` directly. With more, it runs `manager.js
 
 Commands sync to the guild in `dev.guildId` when they change, using `.neocord/deploy.dev.json` to detect changes. If `dev.guildId` is not set, the CLI warns once and does not sync. A failed sync is a warning and the bot still starts.
 
-If bundling or scanning fails, or the bot exits on its own, the CLI prints the reason and waits for changes. Press Ctrl+C once to stop the bot and a second time to force kill it. The child gets `SIGTERM` first and `SIGKILL` after 5 seconds.
+If bundling or scanning fails, or the bot exits on its own, the CLI prints the reason and waits for changes. Press Ctrl+C once to stop the bot and a second time to force kill it.
+
+To stop or restart the bot, the CLI sends it `{ neocord: "shutdown" }` over an IPC channel, so `dispose` and the rest of the shutdown run the same way on every platform. If the channel is unavailable it falls back to `SIGTERM`, unless Ctrl+C has already signalled the bot. A bot that is still running after 20 seconds is force killed.
 
 ### `neocord build`
 
@@ -68,6 +70,8 @@ Launches `.neocord/build/manager.js`. It fails with `Run neocord build first.` i
 | `--deploy` | Deploys commands before starting. |
 
 Commands are also deployed before starting when `deploy.mode` is `"auto"` in the config. This deploy uses the unchanged-hash check, and it fails with the same message if `deploy.js` is missing. See [Deploying commands](/docs/deployment/deploying-commands).
+
+On Windows, Ctrl+C reaches the manager directly through the console. The CLI waits up to 20 seconds for it to stop, then terminates it.
 
 ### `neocord deploy`
 

@@ -1,6 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   createChokidarWatcher,
   createDevSteps,
@@ -13,11 +15,16 @@ import {
   type DevWatcherFactory,
 } from "./dev-session.ts";
 import { applyEnv } from "./project/env.ts";
-import type { ChildHandle, SpawnFunction } from "./project/spawn.ts";
+import { GRACEFUL_STOP_TIMEOUT_MS, type ChildHandle, type SpawnFunction } from "./project/spawn.ts";
 import {
+  bunCommand,
+  cleanEnv,
   createCapture,
   createFixture,
+  ensureDist,
   LONG_TIMEOUT,
+  nodeCommand,
+  PACKAGE_ROOT,
   STANDARD_FILES,
   waitUntil,
   type Fixture,
@@ -38,6 +45,26 @@ class FakeChild extends EventEmitter {
 
   crash(code: number): void {
     this.emit("exit", code, null);
+  }
+}
+
+class IpcChild extends FakeChild {
+  readonly sent: unknown[] = [];
+  sendOutcome: "ok" | "callback-error" | "throw" = "ok";
+  exitOnMessage = true;
+
+  send(message: unknown, callback?: (error: Error | null) => void): boolean {
+    this.sent.push(message);
+    if (this.sendOutcome === "throw") throw new Error("Channel closed");
+    if (this.sendOutcome === "callback-error") {
+      queueMicrotask(() => callback?.(new Error("Channel closed")));
+      return false;
+    }
+    queueMicrotask(() => {
+      callback?.(null);
+      if (this.exitOnMessage) this.emit("exit", 0, null);
+    });
+    return true;
   }
 }
 
@@ -90,18 +117,20 @@ class FakeWatcher implements DevWatcher {
   }
 }
 
-interface Harness {
+interface Harness<Child extends FakeChild = FakeChild> {
   session: DevSession;
   clock: FakeClock;
-  children: FakeChild[];
-  spawned: { command: string; args: readonly string[]; env: Record<string, string> }[];
+  children: Child[];
+  spawned: { command: string; args: readonly string[]; env: Record<string, string>; stdio: unknown }[];
   watcher(): FakeWatcher;
   output(): string;
   errors(): string;
   change(path?: string): Promise<void>;
 }
 
-function harness(steps: DevSteps): Harness {
+function harness(steps: DevSteps): Harness;
+function harness<Child extends FakeChild>(steps: DevSteps, createChild: () => Child): Harness<Child>;
+function harness(steps: DevSteps, createChild: () => FakeChild = () => new FakeChild()): Harness {
   const stdout = createCapture();
   const stderr = createCapture();
   const ui = new Ui({ stdout: stdout.stream, stderr: stderr.stream, env: {} });
@@ -111,9 +140,9 @@ function harness(steps: DevSteps): Harness {
   let watcher: FakeWatcher | null = null;
 
   const spawn: SpawnFunction = (command, args, options) => {
-    const child = new FakeChild();
+    const child = createChild();
     children.push(child);
-    spawned.push({ command, args, env: options.env as Record<string, string> });
+    spawned.push({ command, args, env: options.env as Record<string, string>, stdio: options.stdio });
     return child as unknown as ChildHandle;
   };
   const createWatcher: DevWatcherFactory = (paths, onChange) => {
@@ -200,7 +229,7 @@ describe("DevSession", () => {
     expect(test.clock.pending).toBe(0);
   });
 
-  test("force kills a child that ignores SIGTERM after 5 seconds", async () => {
+  test("force kills a child that ignores SIGTERM after the graceful stop timeout", async () => {
     const test = harness(stubSteps());
     await test.session.start();
     const first = test.children[0];
@@ -213,7 +242,7 @@ describe("DevSession", () => {
     expect(first.signals).toEqual(["SIGTERM"]);
     expect(test.children).toHaveLength(1);
 
-    test.clock.advance(4999);
+    test.clock.advance(GRACEFUL_STOP_TIMEOUT_MS - 1);
     await settle();
     expect(first.signals).toEqual(["SIGTERM"]);
 
@@ -400,6 +429,251 @@ describe("DevSession", () => {
     await test.change();
     expect(test.watcher().paths).toEqual(["src", "modules"]);
   });
+});
+
+describe("DevSession graceful stop", () => {
+  const SHUTDOWN = { neocord: "shutdown" };
+
+  async function started(): Promise<Harness<IpcChild> & { child: IpcChild }> {
+    const test = harness(stubSteps(), () => new IpcChild());
+    await test.session.start();
+    const child = test.children[0];
+    if (!child) throw new Error("no child");
+    return { ...test, child };
+  }
+
+  test("spawns the bot with an IPC channel and inherited stdio", async () => {
+    const test = await started();
+    expect(test.spawned[0]?.stdio).toEqual(["inherit", "inherit", "inherit", "ipc"]);
+  });
+
+  test("the force kill budget leaves room for the bot's own shutdown", () => {
+    expect(GRACEFUL_STOP_TIMEOUT_MS).toBeGreaterThanOrEqual(15_000);
+  });
+
+  test("a restart asks the child to stop over IPC and sends no signal", async () => {
+    const test = await started();
+    await test.change();
+    expect(test.child.sent).toEqual([SHUTDOWN]);
+    expect(test.child.signals).toEqual([]);
+    expect(test.children).toHaveLength(2);
+    expect(test.clock.pending).toBe(0);
+    expect(test.errors()).toBe("");
+  });
+
+  test("stop asks the child to stop over IPC and sends no signal", async () => {
+    const test = await started();
+    expect(await test.session.stop()).toBe(0);
+    expect(test.child.sent).toEqual([SHUTDOWN]);
+    expect(test.child.signals).toEqual([]);
+  });
+
+  test.each(["callback-error", "throw"] as const)("falls back to SIGTERM once when send reports %s", async (outcome) => {
+    const test = await started();
+    test.child.sendOutcome = outcome;
+    expect(await test.session.stop()).toBe(0);
+    expect(test.child.sent).toEqual([SHUTDOWN]);
+    expect(test.child.signals).toEqual(["SIGTERM"]);
+  });
+
+  test("force kills a child that ignores the request once the timeout passes", async () => {
+    const test = await started();
+    test.child.exitOnMessage = false;
+    const stopping = test.session.stop();
+    await settle();
+    expect(test.child.sent).toEqual([SHUTDOWN]);
+
+    test.clock.advance(GRACEFUL_STOP_TIMEOUT_MS - 1);
+    await settle();
+    expect(test.child.signals).toEqual([]);
+
+    test.clock.advance(1);
+    expect(await stopping).toBe(0);
+    expect(test.child.signals).toEqual(["SIGKILL"]);
+  });
+
+  test("Ctrl+C sends the request but never adds a signal to the one the child already received", async () => {
+    const test = await started();
+    await test.session.interrupt("SIGINT");
+    expect(test.child.sent).toEqual([SHUTDOWN]);
+    expect(test.child.signals).toEqual([]);
+  });
+
+  test("Ctrl+C without a working channel waits for the child instead of sending SIGTERM", async () => {
+    const test = await started();
+    test.child.sendOutcome = "callback-error";
+    const stopping = test.session.interrupt("SIGINT");
+    await settle();
+    expect(test.child.signals).toEqual([]);
+
+    test.clock.advance(GRACEFUL_STOP_TIMEOUT_MS);
+    expect(await stopping).toBe(0);
+    expect(test.child.signals).toEqual(["SIGKILL"]);
+  });
+
+  test("SIGTERM to the CLI still falls back to SIGTERM, because it reached only the CLI", async () => {
+    const test = await started();
+    test.child.sendOutcome = "callback-error";
+    await test.session.interrupt("SIGTERM");
+    expect(test.child.signals).toEqual(["SIGTERM"]);
+  });
+
+  test("a second Ctrl+C force kills", async () => {
+    const test = await started();
+    test.child.exitOnMessage = false;
+    const stopping = test.session.interrupt("SIGINT");
+    await settle();
+    expect(test.child.signals).toEqual([]);
+
+    void test.session.interrupt("SIGINT");
+    expect(test.child.signals).toEqual(["SIGKILL"]);
+    expect(await stopping).toBe(0);
+  });
+});
+
+describe("DevSession with real stub children", () => {
+  const RUNTIMES = [
+    ["node", nodeCommand],
+    ["bun", bunCommand],
+  ] as const;
+
+  const COOPERATIVE_CHILD = `import { writeFileSync } from "node:fs";
+process.on("message", (message) => {
+  if (message?.neocord !== "shutdown") return;
+  setTimeout(() => {
+    writeFileSync(process.argv[2] + ".graceful", JSON.stringify(message));
+    process.exit(0);
+  }, 200);
+});
+setInterval(() => {}, 1000);
+writeFileSync(process.argv[2] + ".ready", "");
+`;
+
+  const DISCONNECTING_CHILD = `import { writeFileSync } from "node:fs";
+process.disconnect();
+setInterval(() => {}, 1000);
+writeFileSync(process.argv[2] + ".ready", "");
+`;
+
+  const UNRESPONSIVE_CHILD = `import { writeFileSync } from "node:fs";
+process.on("message", () => {});
+process.on("SIGTERM", () => {});
+setInterval(() => {}, 1000);
+writeFileSync(process.argv[2] + ".ready", "");
+`;
+
+  const NODE_PARENT = `const [sessionUrl, uiUrl, command, script, marker] = process.argv.slice(2);
+const { DevSession } = await import(sessionUrl);
+const { Ui } = await import(uiUrl);
+const { existsSync } = await import("node:fs");
+const session = new DevSession({
+  steps: {
+    watchPaths: () => [],
+    prepare: async () => ({ command, args: [script, marker], cwd: process.cwd(), env: process.env }),
+  },
+  ui: new Ui(),
+  createWatcher: () => ({ add() {}, close: async () => {} }),
+});
+await session.start();
+while (!existsSync(marker + ".ready")) await new Promise((resolve) => setTimeout(resolve, 20));
+await session.stop();
+process.exit(0);
+`;
+
+  let fixture: Fixture;
+
+  beforeAll(() => ensureDist(), LONG_TIMEOUT);
+
+  beforeEach(() => {
+    fixture = createFixture({
+      stubs: false,
+      files: {
+        "cooperative.mjs": COOPERATIVE_CHILD,
+        "disconnecting.mjs": DISCONNECTING_CHILD,
+        "unresponsive.mjs": UNRESPONSIVE_CHILD,
+        "node-parent.mjs": NODE_PARENT,
+      },
+    });
+  });
+
+  afterEach(() => fixture.cleanup());
+
+  function realSession(command: string, script: string, marker: string, killTimeoutMs?: number): DevSession {
+    const ui = new Ui({ stdout: createCapture().stream, stderr: createCapture().stream, env: {} });
+    return new DevSession({
+      steps: {
+        watchPaths: () => [],
+        prepare: async () => ({
+          command,
+          args: [join(fixture.root, script), join(fixture.root, marker)],
+          cwd: fixture.root,
+          env: cleanEnv(),
+        }),
+      },
+      ui,
+      createWatcher: () => new FakeWatcher([], () => {}),
+      ...(killTimeoutMs === undefined ? {} : { killTimeoutMs }),
+    });
+  }
+
+  test.each(RUNTIMES)(
+    "a bun parent lets a %s child finish its shutdown",
+    async (_name, command) => {
+      const session = realSession(command(), "cooperative.mjs", "child");
+      await session.start();
+      await waitUntil(() => fixture.exists("child.ready"));
+      expect(await session.stop()).toBe(0);
+      expect(JSON.parse(fixture.read("child.graceful"))).toEqual({ neocord: "shutdown" });
+    },
+    LONG_TIMEOUT,
+  );
+
+  test.each(RUNTIMES)(
+    "a node parent lets a %s child finish its shutdown",
+    (_name, command) => {
+      const result = spawnSync(
+        nodeCommand(),
+        [
+          join(fixture.root, "node-parent.mjs"),
+          pathToFileURL(join(PACKAGE_ROOT, "dist", "dev-session.js")).href,
+          pathToFileURL(join(PACKAGE_ROOT, "dist", "ui.js")).href,
+          command(),
+          join(fixture.root, "cooperative.mjs"),
+          join(fixture.root, "child"),
+        ],
+        { cwd: fixture.root, env: cleanEnv(), encoding: "utf8", timeout: 30_000 },
+      );
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(JSON.parse(fixture.read("child.graceful"))).toEqual({ neocord: "shutdown" });
+    },
+    LONG_TIMEOUT,
+  );
+
+  test.each(RUNTIMES)(
+    "a %s child that closed its channel is stopped by the SIGTERM fallback, not the timeout",
+    async (_name, command) => {
+      const session = realSession(command(), "disconnecting.mjs", "child");
+      await session.start();
+      await waitUntil(() => fixture.exists("child.ready"));
+      const started = Date.now();
+      expect(await session.stop()).toBe(0);
+      expect(Date.now() - started).toBeLessThan(GRACEFUL_STOP_TIMEOUT_MS / 2);
+    },
+    LONG_TIMEOUT,
+  );
+
+  test.each(RUNTIMES)(
+    "a %s child that ignores the request is force killed",
+    async (_name, command) => {
+      const session = realSession(command(), "unresponsive.mjs", "child", 300);
+      await session.start();
+      await waitUntil(() => fixture.exists("child.ready"));
+      expect(await session.stop()).toBe(0);
+      expect(session.running).toBe(false);
+    },
+    LONG_TIMEOUT,
+  );
 });
 
 describe("devWatchPaths", () => {

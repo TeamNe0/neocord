@@ -16,20 +16,16 @@ export async function runDev(options: DevCommandOptions, ui: Ui): Promise<number
     createWatcher: createChokidarWatcher(root),
   });
 
-  let interrupts = 0;
-  const interrupt = (): void => {
-    interrupts += 1;
-    if (interrupts > 1) session.forceKill();
-    void session.stop();
-  };
-  process.on("SIGINT", interrupt);
-  process.on("SIGTERM", interrupt);
+  const onSigint = (): void => void session.interrupt("SIGINT");
+  const onSigterm = (): void => void session.interrupt("SIGTERM");
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
 
   try {
     await session.start();
     return await session.waitForExit();
   } finally {
-    process.off("SIGINT", interrupt);
-    process.off("SIGTERM", interrupt);
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
   }
 }
