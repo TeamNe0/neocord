@@ -1,0 +1,187 @@
+A shard is one gateway connection that handles a slice of your bot's servers. Discord [requires sharding](https://discord.com/developers/docs/events/gateway#sharding) once a bot is in 2,500 or more servers, and if a bot needs it and does not have it, the gateway closes with code 4011.
+
+neocord always runs production bots through a sharding manager, so you do not change any code when you start needing more than one shard.
+
+## How it works
+
+`neocord build` writes three bundles to `.neocord/build`:
+
+| Bundle | Purpose |
+| --- | --- |
+| `manager.js` | Calls `startManager`. It loads your config, but never your route modules. |
+| `shard.js` | Calls `startBot`. Each shard runs one copy, with its own client, app context, dispatcher and tasks. |
+| `deploy.js` | Calls `deployCommands`. See [Deploying commands](/docs/deployment/deploying-commands). |
+
+`neocord start` launches `manager.js`. The manager wraps discord.js `ShardingManager`, applies your `sharding` config, spawns `shard.js` once per shard, logs each shard's lifecycle, and forwards `SIGINT` and `SIGTERM`.
+
+The manager never deploys commands, because it has no manifest and must not load route modules. Under `deploy.mode: "auto"`, `neocord start` runs the deploy step before it launches the manager.
+
+## Configuration
+
+Set `sharding` in `neocord.config.ts`. This example shows every field with its default:
+
+```ts title="neocord.config.ts"
+import { defineConfig } from "neocord";
+import { env } from "./src/env";
+
+export default defineConfig({
+  intents: ["Guilds"],
+  token: env.DISCORD_TOKEN,
+  sharding: {
+    totalShards: "auto",
+    shardList: "auto",
+    mode: "process",
+    respawn: true,
+    spawnDelay: 5500,
+    spawnTimeout: 30000,
+  },
+});
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `totalShards` | `number \| "auto"` | `"auto"` | Total shards across the whole bot. `"auto"` asks Discord for its recommended count at startup. |
+| `shardList` | `readonly number[] \| "auto"` | `"auto"` | Which shard ids this manager spawns. `"auto"` spawns all of them. |
+| `mode` | `"process" \| "worker"` | `"process"` | Run each shard in a child process or a worker thread. |
+| `respawn` | `boolean` | `true` | Restart a shard after it exits. |
+| `spawnDelay` | `number` | `5500` | Milliseconds to wait between spawning shards. |
+| `spawnTimeout` | `number` | `30000` | Milliseconds a shard has to become ready before the spawn fails. |
+
+### Choosing the shard count
+
+The count comes from the first of these that is set:
+
+1. `--shards <n>` on `neocord start`, which the CLI passes along as `NEOCORD_SHARD_COUNT`.
+2. The `NEOCORD_SHARD_COUNT` environment variable, which must be a positive integer.
+3. `sharding.totalShards`.
+4. `"auto"`.
+
+```pm
+x neocord start --shards 4
+```
+
+If `NEOCORD_SHARD_COUNT` is set but is not a positive integer, startup fails with:
+
+```text
+NEOCORD_SHARD_COUNT must be a positive integer, received "<value>".
+```
+
+## Sharding in development
+
+`neocord dev` uses `dev.shards`, which defaults to `1`. With one shard it runs `shard.js` directly, with no manager. With more than one, it runs the manager, so you can test sharded behaviour locally:
+
+```pm
+x neocord dev --shards 2
+```
+
+`--shards` overrides `dev.shards`. `ctx.shards` works in both cases, so handler code does not change.
+
+## ctx.shards
+
+Every handler, event and task context has `ctx.shards`:
+
+| Member | Type | Meaning |
+| --- | --- | --- |
+| `id` | `number` | The first shard id in this process, or `0` with no manager. |
+| `ids` | `readonly number[]` | Every shard id in this process, or `[0]` with no manager. |
+| `count` | `number` | The total shard count, or `1` with no manager. |
+| `fetchClientValues(prop)` | `Promise<T[]>` | Reads a property of the client on each shard. `prop` can be a dotted path. |
+| `broadcastEval(fn, options?)` | `Promise<Serialized<R>[]>` | Runs a function on each shard and collects the results. |
+
+With no manager, these run against the local client and JSON-serialise the result the same way, so each returns an array with one entry.
+
+```tsx title="src/features/general/commands/stats/command.tsx"
+import { Container, Heading, TextDisplay } from "@neocord/react";
+import { defineCommand } from "neocord";
+
+export default defineCommand({
+  description: "Show bot statistics",
+  async execute(ctx) {
+    const guilds = await ctx.shards.fetchClientValues<number>("guilds.cache.size");
+    const members = await ctx.shards.broadcastEval((client) =>
+      client.guilds.cache.reduce((total, guild) => total + guild.memberCount, 0),
+    );
+
+    return (
+      <Container>
+        <Heading level={2}>
+          Shard {ctx.shards.id} of {ctx.shards.count}
+        </Heading>
+        <TextDisplay>Servers: {guilds.reduce((total, count) => total + count, 0)}</TextDisplay>
+        <TextDisplay>Members: {members.reduce((total, count) => total + count, 0)}</TextDisplay>
+      </Container>
+    );
+  },
+});
+```
+
+Pass outside values to `broadcastEval` through `context`:
+
+```ts
+const found = await ctx.shards.broadcastEval(
+  (client, { guildId }) => client.guilds.cache.has(guildId),
+  { context: { guildId: "123456789012345678" } },
+);
+```
+
+<Callout kind="warn">
+
+Under a manager, discord.js sends `broadcastEval` functions to other shards as source text, so they cannot use variables from the surrounding scope. Without a manager the function runs directly and a captured variable appears to work, so a mistake can pass in development and fail in production. Always use `context`.
+
+</Callout>
+
+## Process and worker modes
+
+| | `process` | `worker` |
+| --- | --- | --- |
+| Each shard runs in | A child process | A worker thread in the manager's process |
+| Fatal login errors reach the manager through | `process.send` | `parentPort.postMessage` |
+| A crash that ends the process affects | That shard, which the manager can respawn | Every shard in the process |
+
+`process` is the default, and keeps shards isolated from each other. Both modes run on Bun and on Node.
+
+## Bun and Node
+
+The runtime comes from `runtime` in the config. With `"auto"`, the default, it is Bun if the CLI was invoked through Bun, otherwise Node. Set `runtime: "bun"` or `runtime: "node"` to fix it.
+
+| Runtime | How the CLI launches bundles |
+| --- | --- |
+| Bun | `bun --no-env-file <bundle>`, so the CLI's env file order applies and Bun does not load env files itself. |
+| Node | `node --enable-source-maps <bundle>`. |
+
+Published `neocord` code runs on Node 22.12 or later and on Bun. The `neocord` CLI package, `@neocord/cli`, requires Node 22.22 or later when you run it with Node.
+
+## What each shard keeps to itself
+
+Each shard has its own memory unless you use `ctx.shards` or an external store. Keep this in mind when you go from one shard to several:
+
+- **Cooldowns** are in memory, per user and route, in each dispatcher.
+- **Live sessions** live in the process that created them. See [Live sessions](/docs/ui/live-sessions).
+- **App context** from `src/context.ts` is created once per shard, so each shard opens its own database connection or pool.
+- **Caches** on `ctx.client` only hold the servers that shard handles.
+- **Tasks** default to `shard: "first"`, which runs them only where the shard ids include `0`. Use `shard: "all"` for per-shard work. See [Tasks](/docs/routing/tasks).
+
+## Failure behaviour
+
+If a shard hits a fatal login error, such as a bad token or disallowed intents, it tells the manager, and the manager stops respawning. A bad token therefore cannot loop against Discord's login endpoint. Startup then fails with a `NeocordStartupError` that carries the shard's message.
+
+Other spawn failures produce these messages, where the first sentence comes from discord.js:
+
+| discord.js code | Added explanation |
+| --- | --- |
+| `ShardingReadyTimeout` | `A shard must connect within sharding.spawnTimeout (<timeout>ms). Check the shard logs above for login errors, or increase the timeout for slow networks.` |
+| `ShardingReadyDied` | `The shard process crashed during startup. Check the shard logs above for the reason.` |
+| `ShardingReadyDisconnected` | `The shard lost its gateway connection during startup. Check your token, intents and network.` |
+
+When the manager receives `SIGINT` or `SIGTERM`, it turns off respawning, asks each shard to shut down, waits up to five seconds for each one, then kills any that are still running.
+
+Logs from a shard are prefixed with its id, and the manager logs under a `manager` scope. Set `NEOCORD_LOG_LEVEL` to override `logLevel`.
+
+## Scaling advice
+
+- Leave `totalShards` on `"auto"` unless you have a reason to pin it. Pin it when you split shards across machines, because every manager must agree on the total.
+- Do not lower `spawnDelay` to start faster. Discord rate limits gateway identifies, and the default leaves a gap between shards.
+- Raise `spawnTimeout` if shards fail with `ShardingReadyTimeout` on a slow network, or if your `src/context.ts` takes a long time to connect.
+- To run shards on more than one machine, set the same numeric `totalShards` everywhere and give each machine its own `shardList`. `ctx.shards` only reaches shards under the same manager, and `shard: "first"` tasks only run on the machine that hosts shard 0.
+- Keep state that must be visible across shards in a database through [App context](/docs/handlers/app-context), not in module variables.
+- Use `shard: "all"` tasks only for work that belongs to each shard. Anything global runs once with `shard: "first"`.

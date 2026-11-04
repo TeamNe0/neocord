@@ -1,0 +1,255 @@
+The file-system routing conventions behind neocord. The CLI, the runtime, the React renderer and the ESLint plugin all share this package, so a file means the same thing to each of them. It has no dependencies, and you rarely need to install it directly.
+
+```pm
+add @neocord/routing
+```
+
+## classifyFile
+
+```ts
+function classifyFile(relativePath: string, options?: ClassifyOptions): FileClassification;
+
+interface ClassifyOptions {
+  sourceDir?: string;
+  featuresDir?: string;
+}
+```
+
+Describes what a file is. This function is the source of truth for the conventions. `sourceDir` defaults to `"src"`, and `featuresDir` to `"<sourceDir>/features"`.
+
+```ts
+import { classifyFile } from "@neocord/routing";
+
+const result = classifyFile("src/features/moderation/buttons/confirm-ban/[userId]/button.tsx");
+```
+
+`result` is:
+
+```json
+{
+  "type": "route",
+  "kind": "button",
+  "feature": "moderation",
+  "routeId": "moderation/confirm-ban/[userId]",
+  "segments": ["confirm-ban", "[userId]"],
+  "scopes": [
+    "src/features/moderation",
+    "src/features/moderation/buttons",
+    "src/features/moderation/buttons/confirm-ban",
+    "src/features/moderation/buttons/confirm-ban/[userId]"
+  ]
+}
+```
+
+### Classification types
+
+```ts
+type FileClassification =
+  | RouteFile
+  | SegmentFile
+  | GroupFile
+  | FeatureFile
+  | ContextFile
+  | InstrumentationFile
+  | PrivateFile
+  | InvalidFile
+  | OutsideFile;
+
+interface RouteFile {
+  type: "route";
+  kind: RouteKind;
+  feature: string;
+  routeId: string;
+  segments: string[];
+  scopes: string[];
+}
+
+interface SegmentFile {
+  type: "segment";
+  kind: SegmentKind;
+  feature: string | null;
+  scope: string;
+}
+
+interface GroupFile {
+  type: "group";
+  feature: string;
+  segments: string[];
+  scope: string;
+}
+
+interface FeatureFile {
+  type: "feature";
+  feature: string;
+}
+
+interface ContextFile {
+  type: "context";
+}
+
+interface InstrumentationFile {
+  type: "env";
+}
+
+interface PrivateFile {
+  type: "private";
+}
+
+interface InvalidFile {
+  type: "invalid";
+  reason: string;
+}
+
+interface OutsideFile {
+  type: "outside";
+}
+```
+
+| `type` | Meaning |
+| --- | --- |
+| `route` | A command, button, select, modal, event or task. |
+| `segment` | A `middleware`, `layout`, `error` or `loading` file. |
+| `group` | A `group` file for a slash command parent. |
+| `feature` | A `feature` file. |
+| `context` | `<sourceDir>/context.ts` or `.tsx`. |
+| `env` | `<sourceDir>/env.ts` or `.tsx`. |
+| `private` | A path with a segment that starts with `_`, or a file without a `.ts` or `.tsx` extension inside a feature. |
+| `invalid` | A file in the features folder that breaks a convention. `reason` says why. |
+| `outside` | Anything else, including `*.test.*` and `*.spec.*` files. |
+
+## Conventions
+
+```ts
+type RouteKind =
+  | "command"
+  | "user-command"
+  | "message-command"
+  | "button"
+  | "select"
+  | "modal"
+  | "event"
+  | "task";
+
+type SegmentKind = "middleware" | "layout" | "error" | "loading";
+
+type RouteDirectory = keyof typeof ROUTE_DIRECTORIES;
+```
+
+| Constant | Value |
+| --- | --- |
+| `ROUTE_DIRECTORIES` | Maps folder names to kinds: `commands`, `user-commands`, `message-commands`, `buttons`, `selects`, `modals`, `events`, `tasks`. |
+| `ROUTE_FILE_NAMES` | The required base name per kind: `command` for all three command kinds, then `button`, `select` and `modal`. |
+| `DEFINE_HELPERS` | Maps each kind, plus `group`, `feature`, `context` and `middleware`, to the name of its `define*` helper. |
+| `SEGMENT_FILE_NAMES` | `["middleware", "layout", "error", "loading"]` |
+| `SOURCE_EXTENSIONS` | `[".ts", ".tsx"]` |
+| `COMMAND_SEGMENT_PATTERN` | The regular expression for a Discord command name: `/^[-_'\p{L}\p{N}\p{sc=Deva}\p{sc=Thai}]{1,32}$/u`. |
+| `MAX_COMMAND_DEPTH` | `3` |
+
+### normalizePath
+
+```ts
+function normalizePath(path: string): string;
+```
+
+Converts backslashes to forward slashes and removes a leading `./`.
+
+## buildCustomId
+
+```ts
+function buildCustomId(route: string, params?: Record<string, unknown>): string;
+```
+
+Fills in a route's params to make a custom id. Values must be a string, number or bigint, and are URI encoded. A `[...rest]` param takes a non-empty array.
+
+```ts
+import { buildCustomId } from "@neocord/routing";
+
+const id = buildCustomId("moderation/confirm-ban/[userId]", { userId: "123" });
+```
+
+`id` is `moderation/confirm-ban/123`. It throws a `CustomIdError` if a param is missing or empty, or if the result is longer than 100 characters.
+
+## Params
+
+```ts
+const CUSTOM_ID_MAX_LENGTH = 100;
+
+type ParamValue = string | number | bigint;
+
+type RouteParams<R extends string> = Simplify<CollectParams<R>>;
+type HasParams<R extends string> = keyof RouteParams<R> extends never ? false : true;
+type RouteParamInput<R extends string> = {
+  [K in keyof RouteParams<R>]: RouteParams<R>[K] extends string[] ? readonly ParamValue[] : ParamValue;
+};
+```
+
+`RouteParams<"mod/[id]/[...rest]">` is `{ id: string; rest: string[] }`.
+
+### parseSegment
+
+```ts
+function parseSegment(segment: string):
+  | { type: "static"; value: string }
+  | { type: "param"; name: string }
+  | { type: "catch-all"; name: string };
+```
+
+### getParamNames
+
+```ts
+function getParamNames(route: string): string[];
+```
+
+Returns the param names in order, without brackets.
+
+### CustomIdError
+
+```ts
+class CustomIdError extends Error {
+  readonly name: "CustomIdError";
+}
+```
+
+## createRouter
+
+```ts
+function createRouter<T>(): Router<T>;
+
+interface Router<T> {
+  add(routeId: string, value: T): void;
+  match(path: string): RouteMatch<T> | null;
+}
+
+interface RouteMatch<T> {
+  route: T;
+  params: Record<string, string | string[]>;
+}
+```
+
+Matches custom ids to routes. Static segments win over `[param]` segments, which win over `[...catchAll]` segments. Values are URI decoded.
+
+```ts
+import { createRouter } from "@neocord/routing";
+
+const router = createRouter<string>();
+router.add("moderation/confirm-ban/[userId]", "handler");
+
+const match = router.match("moderation/confirm-ban/123");
+```
+
+`match` is `{ route: "handler", params: { userId: "123" } }`.
+
+### RouteConflictError
+
+```ts
+class RouteConflictError extends Error {
+  readonly name: "RouteConflictError";
+}
+```
+
+`add` throws this in each of these cases:
+
+- A route uses a different param name at a position where another is registered.
+- A catch-all segment is not last.
+- Two catch-all routes conflict.
+- A route is registered twice.

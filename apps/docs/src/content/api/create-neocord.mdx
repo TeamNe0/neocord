@@ -1,0 +1,192 @@
+The scaffolder behind `bun create neocord`. It is a command only, and has no programmatic API. For a walkthrough, see the [quick start](/docs/quick-start).
+
+```pm
+create neocord my-bot
+```
+
+You can also run the binary directly with `bunx create-neocord my-bot`.
+
+## Usage
+
+```text
+create-neocord [dir] [options]
+```
+
+## Argument
+
+| Argument | Meaning |
+| --- | --- |
+| `[dir]` | The project directory, or `.` for the current directory. `@scope/name` creates `name` and keeps the scope in `package.json`. The default is `my-neocord-bot`. |
+
+The package name comes from the last part of the path, and must be a valid npm name. It must be lowercase, URL-safe, at most 214 characters, and must not start with a dot or underscore, contain any of `~ ' ! ( ) *`, match a Node.js core module, or be `node_modules` or `favicon.ico`.
+
+## Flags
+
+| Flag | Values | Default without prompts |
+| --- | --- | --- |
+| `--db <orm>` | `none`, `drizzle`, `prisma` | `none` |
+| `--dialect <dialect>` | `sqlite`, `postgres`, `mysql` | `sqlite`, when a database is chosen |
+| `--eslint` | Add ESLint with the neocord rules. | on |
+| `--no-eslint` | Skip ESLint. | |
+| `--git` | Initialize a git repository and make the first commit. | on |
+| `--no-git` | Skip git. | |
+| `--install` | Install dependencies. | on |
+| `--no-install` | Skip installing dependencies. | |
+| `--pm <manager>` | `bun`, `npm`, `pnpm`, `yarn` | Detected from how the command was launched, otherwise `bun` |
+| `-y, --yes` | Accept defaults and never prompt. | |
+| `--force` | Allow a non-empty directory. Files with the same name are overwritten, and other files are kept. | off |
+| `-h, --help` | Show help. | |
+| `-v, --version` | Print the version. | |
+
+`--db` and `--dialect` reject values outside these lists. With npm, separate flags from the command with `--`:
+
+```bash
+npm create neocord@latest my-bot -- --db prisma --dialect postgres
+```
+
+### Invalid combinations
+
+| Input | Result |
+| --- | --- |
+| `--dialect` with `--db none` | `--dialect cannot be used with --db none.` |
+| `--dialect` without `--db`, and without prompts | `--dialect needs --db drizzle or --db prisma when running without prompts.` |
+| A non-empty directory without `--force`, and without prompts | `<dir> is not empty. Pass --force to scaffold into it anyway.` |
+| A path that exists and is a file | `<dir> exists and is not a directory.` |
+| An invalid package name | `Invalid project name "<name>": <reason>` |
+
+A directory that holds only a `.git` folder counts as empty.
+
+## Prompts
+
+Prompts run when stdin and stdout are both terminals and `--yes` is not set. Without a terminal, or with `--yes`, nothing prompts and the defaults above apply. Any value given as a flag skips its prompt. The order is:
+
+| Order | Prompt | Choices | Initial value |
+| --- | --- | --- | --- |
+| 1 | Where should the project be created? | A path | `my-neocord-bot` |
+| 2 | `<dir>` is not empty. Continue and overwrite files that have the same name? | Yes or no, only for a non-empty directory | No |
+| 3 | Which database toolkit do you want? | None, Drizzle, Prisma. None is left out if `--dialect` was given. | None, or Drizzle if `--dialect` was given |
+| 4 | Which database will you use? | SQLite, PostgreSQL, MySQL, only if a database is chosen | SQLite |
+| 5 | Add ESLint with the neocord rules? | Yes or no | Yes |
+| 6 | Which package manager do you want to use? | bun, npm, pnpm, yarn | The detected manager |
+| 7 | Initialize a git repository? | Yes or no | Yes |
+| 8 | Install dependencies with `<manager>`? | Yes or no | Yes |
+
+The package manager is detected from the `npm_config_user_agent` environment variable.
+
+## Exit codes
+
+| Code | When |
+| --- | --- |
+| `0` | The project was created, even if git could not be initialized. Also after `--help` or `--version`, and when you cancel a prompt, which prints `Cancelled. Nothing was created.` |
+| `1` | Invalid flags or options, an unusable directory, or a failed dependency install. If the install fails, the project files stay in place and you can retry it yourself. |
+
+Git problems are warnings and do not change the exit code:
+
+| Situation | Behaviour |
+| --- | --- |
+| The target is already inside a repository | Skips git init. |
+| `git` is missing, or `init` fails | Warns that it could not initialize git. |
+| The first commit fails, usually because no git identity is set | Warns that the files are staged but not committed. |
+
+The first commit's message is `chore: initial commit`.
+
+## What it generates
+
+The base template writes these files:
+
+```text
+.dockerignore
+.env.example
+.gitignore
+Dockerfile
+README.md
+neocord.config.ts
+package.json
+tsconfig.json
+src/env.ts
+src/error.tsx
+src/features/general/_components/Stat.tsx
+src/features/general/buttons/refresh/button.tsx
+src/features/general/commands/about/command.tsx
+src/features/general/commands/ping/command.test.tsx
+src/features/general/commands/ping/command.tsx
+src/features/general/events/clientReady.ts
+```
+
+### Options
+
+| Option | Adds |
+| --- | --- |
+| ESLint | `eslint.config.js`, a `lint` script, `@neocord/eslint-plugin`, `@typescript-eslint/parser` and `eslint`. Also keeps `@typescript/native` next to the TypeScript 6 `typescript` alias. |
+| No ESLint | `typescript` is TypeScript 7 directly. |
+| Bun as package manager | `@types/bun`, and `"types": ["node", "bun"]` in `tsconfig.json`. |
+| Drizzle | `drizzle.config.ts`, `src/db/index.ts`, `src/db/schema.ts`, `src/context.ts`, an `.env.example` and `src/env.ts` with `DATABASE_URL`, and a `/remember` command. |
+| Prisma | `prisma.config.ts`, `prisma/schema.prisma`, `src/db/index.ts`, `src/context.ts`, an `.env.example` and `src/env.ts` with `DATABASE_URL`, a `/remember` command, a `postinstall` script and a `db:generate` step in the `Dockerfile`. |
+
+See [Drizzle](/docs/database/drizzle) and [Prisma](/docs/database/prisma) for what each dialect adds.
+
+### Scripts
+
+| Script | Command |
+| --- | --- |
+| `dev` | `neocord dev` |
+| `build` | `neocord build` |
+| `start` | `neocord start` |
+| `deploy` | `neocord deploy` |
+| `test` | `neocord test` |
+| `typecheck` | `neocord typegen && tsc --noEmit` |
+| `lint`, with ESLint | `neocord lint` |
+
+With a database:
+
+| Script | Drizzle | Prisma |
+| --- | --- | --- |
+| `db:push` | `drizzle-kit push` | `prisma db push` |
+| `db:generate` | `drizzle-kit generate` | `prisma generate` |
+| `db:migrate` | `drizzle-kit migrate` | `prisma migrate dev` |
+| `db:studio` | `drizzle-kit studio` | `prisma studio` |
+
+`package.json` also sets `"private": true`, `"type": "module"`, and `"engines": { "node": ">=22.12.0" }`.
+
+## Dependency versions
+
+These are the versions the current release writes to `package.json`.
+
+| Package | Version |
+| --- | --- |
+| `neocord` | `^0.1.0` |
+| `@neocord/react` | `^0.1.0` |
+| `@neocord/cli` | `^0.1.0` |
+| `@neocord/eslint-plugin` | `^0.1.0` |
+| `@t3-oss/env-core` | `^0.13.11` |
+| `@types/bun` | `latest` |
+| `@types/node` | `^26.6.6` |
+| `@types/react` | `^19.3.0` |
+| `@typescript-eslint/parser` | `^8.72.1` |
+| `@typescript/native` | `npm:typescript@^7.0.2` |
+| `typescript` | `npm:@typescript/typescript6@^6.0.2` |
+| `discord.js` | `^14.28.1` |
+| `dotenv` | `^18.0.9` |
+| `eslint` | `^10.14.0` |
+| `react` | `^19.3.1` |
+| `zod` | `^4.6.7` |
+| `@libsql/client` | `^0.18.0` |
+| `drizzle-orm` | `^0.45.4` |
+| `drizzle-kit` | `^0.31.11` |
+| `mysql2` | `^3.24.6` |
+| `postgres` | `^4.0.0` |
+| `@prisma/client` | `^7.10.1` |
+| `prisma` | `^7.10.1` |
+| `@prisma/adapter-libsql` | `^7.10.1` |
+| `@prisma/adapter-mariadb` | `^7.10.1` |
+| `@prisma/adapter-pg` | `^7.10.1` |
+
+## NEOCORD_TEMPLATE_VERSION_OVERRIDES
+
+Set this environment variable to a JSON object to replace any of the versions above. It is useful for testing against local packages.
+
+```bash
+NEOCORD_TEMPLATE_VERSION_OVERRIDES='{"neocord":"file:../neocord.tgz"}' bunx create-neocord my-bot --yes
+```
+
+Invalid JSON, a value that is not an object, or a non-string version makes the command fail with a message that names the variable.

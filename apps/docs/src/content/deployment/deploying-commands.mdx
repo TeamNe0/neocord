@@ -1,0 +1,125 @@
+Discord only shows a slash command or context menu after you register it. `neocord deploy` serializes your commands from the file tree and sends them to Discord. It skips the request when nothing has changed.
+
+## Global and guild scope
+
+| Scope | Command | Use it for |
+| --- | --- | --- |
+| Global | `neocord deploy` | Production. The commands apply to every server the bot is in, and to DMs unless `guildOnly` is set. |
+| One guild | `neocord deploy --guild <id>` | Testing in one server. |
+
+`neocord dev` syncs to `dev.guildId` by itself, so you rarely need `--guild` during development. See [Development sync](#development-sync).
+
+## Deploy globally
+
+```pm
+x neocord deploy
+```
+
+The command does the following:
+
+1. Loads env files in `production` mode, and validates the environment unless you pass `--dry-run`.
+2. Builds first if `.neocord/build/deploy.js` is missing, or is older than your source, config or `tsconfig.json`. That build runs validation.
+3. Runs `deploy.js`, which validates the manifest, serializes the commands and hashes them.
+4. Skips the request if the hash matches `.neocord/deploy.json`, and otherwise replaces the whole command list for that scope.
+5. Records the hash, the command count and the time in `.neocord/deploy.json`.
+
+## Flags
+
+| Flag | Behaviour |
+| --- | --- |
+| `--guild <id>` | Deploy to one guild instead of globally. |
+| `--force` | Deploy even when the command hash is unchanged. |
+| `--dry-run` | Print what would be deployed without calling Discord. It needs no token. |
+
+A dry run prints the hash, followed by a tree of the commands:
+
+```pm
+x neocord deploy --dry-run
+```
+
+The command reports its result with one of these lines:
+
+```text
+Dry run: would deploy 3 commands to global scope (hash <hash>).
+3 commands in global scope already up to date (hash <hash>).
+Deployed 3 commands to global scope (hash <hash>).
+```
+
+## What gets deployed
+
+- Enabled features only. A feature with `enabled: false` contributes no commands.
+- `permissions` become `default_member_permissions`, and `guildOnly: true` becomes the guild-only context, on top-level commands, context menus and root groups only. Discord does not store these on subcommands, so there they are enforced at runtime only, and `validateManifest` warns about it. Set them with `defineGroup` to deploy them.
+- Required options are sorted first.
+- Guild deploys remove `contexts` and `integration_types` from each command.
+
+Buttons, selects, modals, events and tasks are not sent to Discord, so changing them does not need a deploy. Neither does changing the body of an autocomplete handler. Adding or removing `autocomplete` on an option does change the payload.
+
+## The hash file
+
+`.neocord/deploy.json` has one entry per scope, either `global` or `guild:<id>`:
+
+```json title=".neocord/deploy.json"
+{
+  "version": 1,
+  "scopes": {
+    "global": {
+      "hash": "<sha256>",
+      "commandCount": 3,
+      "deployedAt": "2026-01-01T12:00:00.000Z"
+    }
+  }
+}
+```
+
+The hash covers the scope and the serialized commands. Because `.neocord` is not committed or copied into Docker images, a fresh checkout or container has no state and deploys again. That is harmless, because each deploy replaces the list with the same content.
+
+If the commands on Discord changed some other way, for example you edited them through another tool, the hash still matches. Use `--force` to send them again.
+
+## Deploy on start
+
+Set `deploy.mode` to run a global deploy every time `neocord start` launches. It uses the hash in the same way, and it needs the bundle from `neocord build`.
+
+```ts title="neocord.config.ts"
+import { defineConfig } from "neocord";
+import { env } from "./src/env";
+
+export default defineConfig({
+  intents: ["Guilds"],
+  token: env.DISCORD_TOKEN,
+  deploy: { mode: "auto" },
+});
+```
+
+For a single launch, use the flag instead:
+
+```pm
+x neocord start --deploy
+```
+
+The manager itself never deploys. The CLI runs the deploy step, then launches the manager. If you run several managers at once, deploy from one of them, or from your release pipeline, and leave `deploy.mode` on `"manual"`.
+
+## Development sync
+
+`neocord dev` runs a deploy to `dev.guildId` on every rebuild, before it starts the bot. It uses a separate state file, `.neocord/deploy.dev.json`, so it only calls Discord when the commands changed. The template sets `dev.guildId` from `DEV_GUILD_ID`.
+
+| Situation | Behaviour |
+| --- | --- |
+| `dev.guildId` is not set | Warns `No dev.guildId set, so commands are not synced in development.` once, and starts the bot anyway. |
+| `--no-deploy` is set | Does not sync. |
+| The sync fails | Warns `Command sync failed: <reason>` and starts the bot anyway. |
+
+<Callout kind="note">
+
+Guild commands and global commands are separate lists. If a command is registered both globally and in your development server, Discord shows it twice there. neocord has no command that clears a guild's list, so use a separate server for development when you can.
+
+</Callout>
+
+## Errors
+
+| Message | Fix |
+| --- | --- |
+| `No Discord bot token found. Set DISCORD_TOKEN in your environment or pass token in neocord.config.ts. You can create one at https://discord.com/developers/applications under Bot > Reset Token.` | Set the token. A dry run does not need one. |
+| `Discord rejected the bot token while deploying commands. Reset it at https://discord.com/developers/applications under Bot > Reset Token, then update DISCORD_TOKEN.` | Reset the token and update it. |
+| `Cannot deploy commands, the manifest has errors:` | Fix the listed files. `neocord test --validate-only` prints the same issues. |
+
+See [Troubleshooting](/docs/troubleshooting#commands-not-showing-up) if your commands still do not appear.

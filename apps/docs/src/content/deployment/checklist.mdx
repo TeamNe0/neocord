@@ -1,0 +1,62 @@
+Go through this list before a bot goes live. Each item links to the page that explains it.
+
+## Build and validate
+
+1. Run the type checker and tests. `neocord test` validates every route and command payload before it runs your tests. See [Testing](/docs/testing).
+
+   ```pm
+   run typecheck
+   run test
+   ```
+
+2. Run ESLint if the project has it. See [ESLint](/docs/eslint).
+
+   ```pm
+   run lint
+   ```
+
+3. Build the production bundle. `neocord build` validates routes and command payloads too, unless you pass `--no-validate`. Pass `--typecheck` to run `tsc --noEmit` first.
+
+   ```pm
+   x neocord build --typecheck
+   ```
+
+## Secrets and environment
+
+- Set `DISCORD_TOKEN` in the production environment, and every other variable that `src/env.ts` requires. See [Environment variables](/docs/type-safety/environment).
+- Keep `.env*` out of git and out of Docker images. The template's `.gitignore` and `.dockerignore` already do this.
+- Do not set `SKIP_ENV_VALIDATION=true` when the bot runs. It is for steps that load `src/env.ts` without real secrets, such as a Docker image build or CI.
+- `neocord dev` and `neocord start` report invalid variables as a readable error, and never set `SKIP_ENV_VALIDATION` themselves.
+
+## Discord application
+
+- Turn on only the privileged intents you use, under **Bot > Privileged Gateway Intents** in the [Developer Portal](https://discord.com/developers/applications). The privileged intents are `GuildMembers`, `GuildPresences` and `MessageContent`. If you request one that is not enabled, the gateway closes with code 4014.
+- Invite the bot with the `bot` and `applications.commands` scopes. See the [quick start](/docs/quick-start).
+- Register global commands when they change. `neocord dev` only syncs to `dev.guildId`. See [Deploying commands](/docs/deployment/deploying-commands).
+
+## Configuration
+
+- Review `sharding`. `totalShards: "auto"` is a good default. See [Sharding](/docs/sharding).
+- Set `deploy.mode: "auto"` if you want `neocord start` to deploy on every launch. The default is `"manual"`.
+- Keep `allowedMentions` restrictive. The default is `{ parse: [] }`, so user input cannot ping anyone. If you override `client.allowedMentions`, the `no-mass-mentions` rule helps you catch mistakes.
+- Use `escapeMarkdown` on user input in JSX. Plain strings are not escaped. See [Inline text components](/docs/ui/inline).
+- Add a `src/error.tsx`, and an `error.tsx` per feature where it helps. Without one, users see `Something went wrong while handling this interaction.` See [Error boundaries](/docs/handlers/error-boundaries).
+- Check `autoDefer`. The default defers after 2000 ms. Do not turn it off unless every handler acknowledges in time. See [Replying](/docs/handlers/replying).
+- Set `NEOCORD_LOG_LEVEL` or `logLevel` to the level you want. The default is `info`.
+
+## Running it
+
+- Run exactly one copy of each shard per token, and stop your local `neocord dev` before it connects to the same application as production. Two processes can both receive an interaction and race to answer it.
+- Use a host that keeps a long-running process alive. See [Hosting notes](/docs/deployment/hosting).
+- Use [Docker](/docs/deployment/docker) or a [process manager](/docs/deployment/process-managers), and give shutdowns enough time. Each shard gets up to five seconds to stop.
+- Include your database migration step in your release process if you have one. See [Drizzle](/docs/database/drizzle) or [Prisma](/docs/database/prisma).
+
+## Things that reset on restart
+
+These live in memory, so plan for them to reset on every deploy:
+
+- Live sessions. Clicking an old button shows an ephemeral `This message has expired.` notice and removes its components. See [Live sessions](/docs/ui/live-sessions).
+- Cooldowns.
+- Anything in your own module variables.
+
+Buttons, selects and modals that use file routes keep working across restarts, because the custom id is the route. They stop working if you rename the file. See [Upgrading](/docs/deployment/upgrading).

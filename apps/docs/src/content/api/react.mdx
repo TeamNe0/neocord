@@ -1,0 +1,390 @@
+The renderer behind neocord's JSX. It also works alone with plain discord.js. See [Using @neocord/react standalone](/docs/ui/standalone).
+
+```pm
+add @neocord/react react discord.js
+```
+
+Peer dependencies are `discord.js` `^14.28.0` and `react` `^19.3.0`. It runs on Node 22.12 or later and on Bun.
+
+## Functions
+
+### render
+
+```ts
+function render(node: ReactNode, options?: RenderOptions): RenderResult;
+
+interface RenderOptions {
+  live?: never;
+}
+```
+
+Renders synchronously. It throws if anything suspends, and it throws if the tree has an `onClick` or `onSelect`, because those need a live root.
+
+### renderAsync
+
+```ts
+function renderAsync(node: ReactNode): Promise<RenderResult>;
+```
+
+Waits for `<Suspense>` and `use()` to resolve, then serializes.
+
+### renderModal
+
+```ts
+function renderModal(node: ReactElement, options?: Partial<ModalOptions>): ModalRenderResult;
+function renderModal(node: ReactNode, options: ModalOptions): ModalRenderResult;
+
+interface ModalOptions {
+  customId: string;
+  title: string;
+}
+```
+
+Renders a modal synchronously, and throws if anything suspends. The custom id and title come from a root `Modal`, or from `options`.
+
+### createLiveRoot
+
+```ts
+function createLiveRoot(options: LiveRootOptions): LiveRoot;
+
+interface LiveRootOptions {
+  sessionId: string;
+  onUpdate?: (result: RenderResult) => unknown;
+  onError?: (error: unknown) => unknown;
+}
+
+interface LiveRoot {
+  render(node: ReactNode): void;
+  readonly payload: RenderResult;
+  readonly hasHandlers: boolean;
+  dispatch(customId: string, event: unknown): Promise<boolean>;
+  flush(): Promise<void>;
+  settle(): Promise<void>;
+  disableInteractive(): RenderResult;
+  unmount(): void;
+}
+```
+
+Creates a mounted tree for `onClick` and `onSelect`. See [Using @neocord/react standalone](/docs/ui/standalone).
+
+### useLiveInteraction
+
+```ts
+function useLiveInteraction<E = LiveInteraction>(): E | null;
+
+type LiveInteraction = ButtonInteraction | AnySelectMenuInteraction;
+```
+
+Returns the current event for components that render during a dispatch, and `null` otherwise.
+
+### escapeMarkdown
+
+```ts
+function escapeMarkdown(text: string): string;
+```
+
+Escapes Discord markdown in user input, including headings, lists, masked links, quotes and subtext.
+
+### buildCustomId
+
+```ts
+function buildCustomId(route: string, params?: Record<string, unknown>): string;
+```
+
+Re-exported from [`@neocord/routing`](/docs/api/routing#buildcustomid), along with the `RouteParams` type.
+
+## Result types
+
+```ts
+interface RenderResult {
+  flags: MessageFlags.IsComponentsV2 | (MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral);
+  components: APIMessageTopLevelComponent[];
+  files?: AttachmentPayload[];
+  allowedMentions?: MessageMentionOptions;
+}
+
+interface ModalRenderResult {
+  custom_id: string;
+  title: string;
+  components: (APILabelComponent | APITextDisplayComponent)[];
+}
+```
+
+## Components
+
+Every component is a function that takes the props type below and returns a `ReactElement`.
+
+### Layout
+
+| Component | Props type | Details |
+| --- | --- | --- |
+| `Message` | `MessageProps` | [Layout components](/docs/ui/layout) |
+| `Container` | `ContainerProps` | [Layout components](/docs/ui/layout) |
+| `Section` | `SectionProps` | [Layout components](/docs/ui/layout) |
+| `TextDisplay` | `TextDisplayProps` | [Layout components](/docs/ui/layout) |
+| `Separator` | `SeparatorProps` | [Layout components](/docs/ui/layout) |
+| `ActionRow` | `ActionRowProps` | [Layout components](/docs/ui/layout) |
+| `MediaGallery` | `MediaGalleryProps` | [Layout components](/docs/ui/layout) |
+| `MediaItem` | `MediaItemProps` | [Layout components](/docs/ui/layout) |
+| `Thumbnail` | `ThumbnailProps` | [Layout components](/docs/ui/layout) |
+| `File` | `FileProps` | [Layout components](/docs/ui/layout) |
+
+### Interactive
+
+| Component | Props type | Details |
+| --- | --- | --- |
+| `Button` | `ButtonProps` | [Interactive components](/docs/ui/interactive) |
+| `StringSelect` | `StringSelectProps` | [Interactive components](/docs/ui/interactive) |
+| `Option` | `OptionProps` | [Interactive components](/docs/ui/interactive) |
+| `UserSelect` | `UserSelectProps` | [Interactive components](/docs/ui/interactive) |
+| `RoleSelect` | `RoleSelectProps` | [Interactive components](/docs/ui/interactive) |
+| `MentionableSelect` | `MentionableSelectProps` | [Interactive components](/docs/ui/interactive) |
+| `ChannelSelect` | `ChannelSelectProps` | [Interactive components](/docs/ui/interactive) |
+
+### Modal
+
+| Component | Props type | Details |
+| --- | --- | --- |
+| `Modal` | `ModalProps` | [Modal components](/docs/ui/modal) |
+| `Label` | `LabelProps` | [Modal components](/docs/ui/modal) |
+| `TextInput` | `TextInputProps` | [Modal components](/docs/ui/modal) |
+| `FileUpload` | `FileUploadProps` | [Modal components](/docs/ui/modal) |
+| `RadioGroup` | `RadioGroupProps` | [Modal components](/docs/ui/modal) |
+| `CheckboxGroup` | `CheckboxGroupProps` | [Modal components](/docs/ui/modal) |
+| `Checkbox` | `CheckboxProps` | [Modal components](/docs/ui/modal) |
+
+### Inline text
+
+| Component | Props type | Details |
+| --- | --- | --- |
+| `Bold` | `BoldProps` | [Inline text components](/docs/ui/inline) |
+| `Italic` | `ItalicProps` | [Inline text components](/docs/ui/inline) |
+| `Underline` | `UnderlineProps` | [Inline text components](/docs/ui/inline) |
+| `Strikethrough` | `StrikethroughProps` | [Inline text components](/docs/ui/inline) |
+| `Spoiler` | `SpoilerProps` | [Inline text components](/docs/ui/inline) |
+| `Code` | `CodeProps` | [Inline text components](/docs/ui/inline) |
+| `CodeBlock` | `CodeBlockProps` | [Inline text components](/docs/ui/inline) |
+| `Quote` | `QuoteProps` | [Inline text components](/docs/ui/inline) |
+| `Heading` | `HeadingProps` | [Inline text components](/docs/ui/inline) |
+| `Subtext` | `SubtextProps` | [Inline text components](/docs/ui/inline) |
+| `Link` | `LinkProps` | [Inline text components](/docs/ui/inline) |
+| `List` | `ListProps` | [Inline text components](/docs/ui/inline) |
+| `ListItem` | `ListItemProps` | [Inline text components](/docs/ui/inline) |
+| `UserMention` | `UserMentionProps` | [Inline text components](/docs/ui/inline) |
+| `RoleMention` | `RoleMentionProps` | [Inline text components](/docs/ui/inline) |
+| `ChannelMention` | `ChannelMentionProps` | [Inline text components](/docs/ui/inline) |
+| `Timestamp` | `TimestampProps` | [Inline text components](/docs/ui/inline) |
+| `Emoji` | `EmojiProps` | [Inline text components](/docs/ui/inline) |
+| `LineBreak` | `LineBreakProps` | [Inline text components](/docs/ui/inline) |
+
+## Route types
+
+The CLI augments `RegisteredRoutes` in `.neocord/types.d.ts`. With nothing registered, each route type is `string`.
+
+```ts
+interface RegisteredRoutes {}
+
+type ButtonRoute = RegisteredRoutes extends { buttons: infer R extends string } ? R : string;
+type SelectRoute = RegisteredRoutes extends { selects: infer R extends string } ? R : string;
+type ModalRoute = RegisteredRoutes extends { modals: infer R extends string } ? R : string;
+
+type RouteParamsRecord = Readonly<Record<string, ParamValue | readonly ParamValue[]>>;
+
+type RouteAddress<R extends string> = string extends R
+  ? { route: string; params?: RouteParamsRecord }
+  : RouteTarget<R>;
+```
+
+`RouteAddress` requires `params` exactly when a route has params. See [Dynamic routes](/docs/routing/dynamic-routes).
+
+## Prop types
+
+### Shared
+
+```ts
+interface BaseComponentProps {
+  id?: number;
+}
+
+interface LayoutProps extends BaseComponentProps {
+  children?: ReactNode;
+}
+
+type EmojiInput = string | { id?: string; name?: string; animated?: boolean };
+type NamedColor = "blurple" | "green" | "yellow" | "fuchsia" | "red" | "white" | "black";
+type AccentColor = number | `#${string}` | NamedColor;
+```
+
+### Layout props
+
+```ts
+interface MessageProps {
+  ephemeral?: boolean;
+  allowedMentions?: MessageMentionOptions;
+  children?: ReactNode;
+}
+
+interface ContainerProps extends LayoutProps {
+  accentColor?: AccentColor;
+  spoiler?: boolean;
+}
+
+interface SectionProps extends LayoutProps {
+  accessory: ReactNode;
+}
+
+type TextDisplayProps = LayoutProps;
+type ActionRowProps = LayoutProps;
+
+interface SeparatorProps extends BaseComponentProps {
+  divider?: boolean;
+  spacing?: "small" | "large";
+  children?: never;
+}
+
+type MediaSource =
+  | { src: string; name?: string }
+  | { src: Buffer | Uint8Array; name: string };
+
+type MediaItemProps = MediaSource & {
+  description?: string;
+  spoiler?: boolean;
+  children?: never;
+};
+
+type ThumbnailProps = BaseComponentProps & MediaItemProps;
+
+type MediaGalleryProps = BaseComponentProps &
+  (
+    | { items: readonly MediaItemProps[]; children?: never }
+    | { items?: never; children: ReactNode }
+  );
+
+type FileProps = BaseComponentProps &
+  MediaSource & {
+    spoiler?: boolean;
+    children?: never;
+  };
+```
+
+### Button props
+
+`ButtonProps<R>` is `InteractiveButtonProps<R> | LinkButtonProps | PremiumButtonProps`.
+
+```ts
+type InteractiveButtonStyle = "primary" | "secondary" | "success" | "danger";
+type ButtonClickHandler = (event: ButtonInteraction) => unknown;
+```
+
+| Type | `style` | Addressed with |
+| --- | --- | --- |
+| `InteractiveButtonProps<R>` | `InteractiveButtonStyle`, optional | One of `route` and `params`, `customId`, or `onClick` |
+| `LinkButtonProps` | `"link"` | `url` |
+| `PremiumButtonProps` | `"premium"` | `skuId`, with no label, children or emoji |
+
+Interactive and link buttons take `label`, `children` or `emoji`, as well as `disabled` and `id`. Premium buttons take `disabled` and `id`.
+
+### Select props
+
+Each select takes `placeholder`, `minValues`, `maxValues`, `disabled`, `required` and `id`, and is addressed with one of `route` and `params`, `customId`, or `onSelect`.
+
+```ts
+type SelectHandler<E> = (event: E) => unknown;
+type SelectDefaultValue<T extends string> = string | { id: string; type: T };
+
+interface OptionProps {
+  label: string;
+  value: string;
+  description?: string;
+  emoji?: EmojiInput;
+  default?: boolean;
+  children?: never;
+}
+```
+
+| Type | Extra props |
+| --- | --- |
+| `StringSelectProps<R>` | `options`, or `Option` children |
+| `UserSelectProps<R>` | `defaultValues?: readonly SelectDefaultValue<"user">[]` |
+| `RoleSelectProps<R>` | `defaultValues?: readonly SelectDefaultValue<"role">[]` |
+| `MentionableSelectProps<R>` | `defaultValues?: readonly { id: string; type: "user" \| "role" }[]` |
+| `ChannelSelectProps<R>` | `defaultValues?: readonly SelectDefaultValue<"channel">[]`, `channelTypes?: readonly ChannelType[]` |
+
+### Modal props
+
+```ts
+type ModalOptionProps = Omit<OptionProps, "emoji" | "children">;
+
+interface LabelProps extends LayoutProps {
+  label: string;
+  description?: string;
+}
+
+interface FileUploadProps extends BaseComponentProps {
+  customId: string;
+  minValues?: number;
+  maxValues?: number;
+  fileTypes?: NonNullable<APIFileUploadComponent["file_types"]>;
+  required?: boolean;
+  children?: never;
+}
+
+interface CheckboxProps extends BaseComponentProps {
+  customId: string;
+  default?: boolean;
+  children?: never;
+}
+```
+
+| Type | Props |
+| --- | --- |
+| `ModalProps<R>` | `title`, `children`, and either `route` with `params` or `customId` |
+| `TextInputProps` | `customId`, `style`, `placeholder`, `required`, `minLength`, `maxLength`, `id`, and either `value` or `children` |
+| `RadioGroupProps` | `customId`, `required`, `id`, and either `options` or `children` |
+| `CheckboxGroupProps` | `customId`, `minValues`, `maxValues`, `required`, `id`, and either `options` or `children` |
+
+### Inline props
+
+```ts
+interface InlineProps {
+  children?: ReactNode;
+}
+
+interface CodeBlockProps extends InlineProps {
+  language?: string;
+}
+
+interface HeadingProps extends InlineProps {
+  level?: 1 | 2 | 3;
+}
+
+interface LinkProps extends InlineProps {
+  href: string;
+}
+
+interface ListProps {
+  ordered?: boolean;
+  children?: ReactNode;
+}
+
+interface MentionProps {
+  id: string;
+  children?: never;
+}
+
+interface TimestampProps {
+  date: Date | number | string;
+  style?: TimestampStylesString;
+  children?: never;
+}
+
+type EmojiProps =
+  | { emoji: EmojiInput; name?: never; id?: never; animated?: never; children?: never }
+  | { name: string; id?: string; animated?: boolean; emoji?: never; children?: never };
+
+interface LineBreakProps {
+  children?: never;
+}
+```
+
+`BoldProps`, `ItalicProps`, `UnderlineProps`, `StrikethroughProps`, `SpoilerProps`, `CodeProps`, `QuoteProps`, `SubtextProps` and `ListItemProps` are aliases of `InlineProps`. `UserMentionProps`, `RoleMentionProps` and `ChannelMentionProps` are aliases of `MentionProps`.

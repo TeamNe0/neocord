@@ -1,0 +1,193 @@
+`neocord/runtime` is what the CLI generates code against. Most projects never import it, because `neocord build` writes the entry files for you. Use it if you need to write your own entry point.
+
+```ts
+import { startBot } from "neocord/runtime";
+```
+
+## Generated entries
+
+`neocord typegen` writes the entry files to `.neocord/entries`. This is the generated `shard.ts`, where the config path depends on your project:
+
+```ts title=".neocord/entries/shard.ts"
+import { startBot } from "neocord/runtime";
+import config from "../../neocord.config.ts";
+import { manifest } from "../manifest.ts";
+
+await startBot({ config, manifest });
+```
+
+And `manager.ts`:
+
+```ts title=".neocord/entries/manager.ts"
+import { startManager } from "neocord/runtime";
+import config from "../../neocord.config.ts";
+
+const shards = Number(process.env.NEOCORD_SHARD_COUNT);
+
+await startManager({
+  config,
+  shardFile: new URL("./shard.js", import.meta.url),
+  ...(Number.isInteger(shards) && shards > 0 ? { shards } : {}),
+});
+```
+
+## startBot
+
+```ts
+function startBot(options: StartBotOptions): Promise<Bot>;
+
+interface StartBotOptions {
+  config: NeocordConfig;
+  manifest: Manifest;
+}
+
+interface Bot {
+  client: Client<true>;
+  app: AppContext;
+  manifest: Manifest;
+  logger: Logger;
+  stop(): Promise<void>;
+}
+```
+
+The entry for one process. In order, it:
+
+1. Validates the manifest, logs warnings and fails on errors.
+2. Resolves the token, then merges intents and partials from enabled features.
+3. Creates the client, with `allowedMentions: { parse: [] }` as a default that `config.client` can override.
+4. Creates the app context from `src/context.ts`.
+5. Wires interactions and events, and starts tasks on `clientReady`.
+6. Logs in, with a 120 second timeout, and installs handlers for `SIGINT`, `SIGTERM` and unhandled rejections.
+
+`stop()` stops tasks, expires live sessions, disposes the app context and destroys the client. It is safe to call more than once. Startup failures reject with a `NeocordStartupError`.
+
+## startManager
+
+```ts
+function startManager(options: StartManagerOptions): Promise<ShardingManager>;
+
+interface StartManagerOptions {
+  config: NeocordConfig;
+  shardFile: string | URL;
+  shards?: number | undefined;
+}
+```
+
+The production entry. It wraps discord.js `ShardingManager`, applies `config.sharding`, logs lifecycle events and forwards `SIGINT` and `SIGTERM`.
+
+The shard count comes from the `shards` argument, then `NEOCORD_SHARD_COUNT`, then `sharding.totalShards`, then `"auto"`. It does not deploy commands, because it has no manifest and must not load route modules. See [Sharding](/docs/sharding).
+
+## deployCommands
+
+```ts
+function deployCommands(options: DeployOptions): Promise<DeployResult>;
+
+interface DeployOptions {
+  config: NeocordConfig;
+  manifest: Manifest;
+  guildId?: string | undefined;
+  force?: boolean | undefined;
+  dryRun?: boolean | undefined;
+  stateFile?: string | undefined;
+}
+
+interface DeployResult {
+  status: "deployed" | "unchanged" | "dry-run";
+  scope: "global" | "guild";
+  guildId?: string;
+  commandCount: number;
+  hash: string;
+  commands: unknown[];
+}
+```
+
+Throws if the manifest has validation errors or there is no token. With `stateFile`, it skips the request when the hash is unchanged, unless `force` is set. With `dryRun`, it returns before reading state or calling Discord. See [Deploying commands](/docs/deployment/deploying-commands).
+
+## serializeCommands
+
+```ts
+function serializeCommands(manifest: Manifest): RESTPutAPIApplicationCommandsJSONBody;
+```
+
+Converts a manifest to the JSON that Discord's command endpoint accepts. Disabled features are left out. It throws if a command has no description or a group is missing, because Discord requires a description on every parent.
+
+## validateManifest
+
+```ts
+function validateManifest(manifest: Manifest, config?: NeocordConfig): ManifestIssue[];
+
+interface ManifestIssue {
+  severity: "error" | "warning";
+  file: string;
+  message: string;
+}
+```
+
+Returns every issue instead of throwing. `neocord test`, `neocord build` and `startBot` all run it. It checks:
+
+- Default exports carry the expected brand, and layouts, error views and loading views are functions.
+- Command names, depth, descriptions, option names, option descriptions, option counts and choices are within Discord's limits.
+- Top-level commands stay within 100, children within 25, and each context menu kind within 15.
+- Parents of subcommands have a `group.ts`, and no path is both a command and a parent.
+- Interaction routes match their file, do not start with `~`, fit in 100 characters and do not conflict.
+- Events match their file, task intervals are between 1 ms and 2147483647 ms, and durations parse.
+- With `config`, events have the intents they need, and `Guilds` is enabled.
+
+## NeocordStartupError
+
+```ts
+class NeocordStartupError extends Error {
+  readonly name: "NeocordStartupError";
+  constructor(message: string, options?: ErrorOptions);
+}
+```
+
+The error for startup failures, with an actionable message. Its stack is only the name and message, so logs stay readable. The original error is on `cause` when there is one. See [Troubleshooting](/docs/troubleshooting) for the messages.
+
+## Types
+
+The generated `.neocord/manifest.ts` exports a `Manifest`, with static imports so the bundler sees every route.
+
+```ts
+interface Manifest {
+  version: 1;
+  context: ModuleNamespace | null;
+  features: ManifestFeature[];
+  groups: ManifestGroup[];
+  routes: ManifestRoute[];
+}
+
+interface ManifestFeature {
+  name: string;
+  module: ModuleNamespace | null;
+}
+
+interface ManifestGroup {
+  feature: string;
+  segments: string[];
+  file: string;
+  module: ModuleNamespace;
+}
+
+interface ManifestRoute {
+  kind: RouteKind;
+  id: string;
+  feature: string;
+  file: string;
+  segments: string[];
+  module: ModuleNamespace;
+  middleware: ManifestModule[];
+  layouts: ManifestModule[];
+  error: ManifestModule | null;
+  loading: ManifestModule | null;
+}
+
+interface ManifestModule {
+  file: string;
+  module: ModuleNamespace;
+}
+
+type ModuleNamespace = object & { readonly default?: unknown };
+```
+
+`NeocordConfig` is also exported from this entry. See [`neocord`](/docs/api/neocord#defineconfig).

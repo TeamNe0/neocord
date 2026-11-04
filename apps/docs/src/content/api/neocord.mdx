@@ -1,0 +1,492 @@
+The main package. Import from `neocord` in route files, the config and tests.
+
+```ts
+import { defineCommand, option } from "neocord";
+```
+
+Peer dependencies are `discord.js` `^14.28.0` and `react` `^19.3.0`. It runs on Node 22.12 or later and on Bun. Its other entry points are [`neocord/runtime`](/docs/api/runtime) and [`neocord/testing`](/docs/api/testing).
+
+## defineConfig
+
+```ts
+function defineConfig<const T extends NeocordConfig>(config: T): T & { readonly __neocord: "config" };
+```
+
+The default export of `neocord.config.ts`.
+
+```ts
+interface NeocordConfig {
+  readonly __neocord?: "config";
+  intents?: readonly IntentName[];
+  partials?: readonly PartialName[];
+  client?: NeocordClientOptions;
+  token?: string | undefined;
+  sourceDir?: string;
+  featuresDir?: string;
+  runtime?: "auto" | "bun" | "node";
+  sharding?: ShardingConfig;
+  deploy?: DeployConfig;
+  dev?: DevConfig;
+  live?: LiveConfig;
+  autoDefer?: AutoDeferConfig | false;
+  logLevel?: LogLevel;
+}
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `intents` | `["Guilds"]` | Keys of discord.js `GatewayIntentBits`. Intents from enabled features are merged in. |
+| `partials` | `[]` | Keys of discord.js `Partials`. Partials from enabled features are merged in. |
+| `client` | `{ allowedMentions: { parse: [] } }` | Other discord.js `ClientOptions`, without `intents`, `partials`, `shards` and `shardCount`. Your values override the default. |
+| `token` | `process.env.DISCORD_TOKEN` | The bot token. |
+| `sourceDir` | `"src"` | Source folder inside the project. |
+| `featuresDir` | `"<sourceDir>/features"` | Features folder inside the project. |
+| `runtime` | `"auto"` | `"auto"` uses Bun if the CLI was invoked through Bun, otherwise Node. |
+| `sharding` | See below | Sharding settings. |
+| `deploy.mode` | `"manual"` | `"auto"` deploys commands during `neocord start`. |
+| `dev.guildId` | none | The guild `neocord dev` syncs commands to. |
+| `dev.shards` | `1` | Shards in `neocord dev`. |
+| `live.ttl` | `"14m"` | Idle timeout of live sessions. |
+| `autoDefer` | `{ after: 2000 }` | Milliseconds before an unacknowledged interaction is deferred. `false` turns it off. |
+| `logLevel` | `"info"` | `NEOCORD_LOG_LEVEL` takes priority. |
+
+```ts
+interface ShardingConfig {
+  totalShards?: number | "auto";
+  shardList?: readonly number[] | "auto";
+  mode?: ShardingMode;
+  respawn?: boolean;
+  spawnDelay?: number;
+  spawnTimeout?: number;
+}
+
+interface DeployConfig {
+  mode?: "manual" | "auto";
+}
+
+interface DevConfig {
+  guildId?: string | undefined;
+  shards?: number;
+}
+
+interface LiveConfig {
+  ttl?: DurationInput;
+}
+
+interface AutoDeferConfig {
+  after: number;
+}
+
+type ShardingMode = "process" | "worker";
+type IntentName = keyof typeof GatewayIntentBits;
+type PartialName = keyof typeof Partials;
+type NeocordClientOptions = Partial<Omit<ClientOptions, "intents" | "partials" | "shards" | "shardCount">>;
+```
+
+Sharding defaults are listed in [Sharding](/docs/sharding#configuration).
+
+## Define helpers
+
+Every helper returns its input with a `__neocord` brand. The runtime rejects a module whose default export lacks the expected brand, and names the file.
+
+```ts
+function defineCommand<O extends OptionsRecord = {}, const G extends boolean = false>(
+  definition: CommandInput<O, G>,
+): CommandDefinition<O, G>;
+
+function defineUserCommand<const G extends boolean = false>(
+  definition: UserCommandInput<G>,
+): UserCommandDefinition<G>;
+
+function defineMessageCommand<const G extends boolean = false>(
+  definition: MessageCommandInput<G>,
+): MessageCommandDefinition<G>;
+
+function defineGroup(definition: GroupInput): GroupDefinition;
+
+function defineButton<const R extends string, const G extends boolean = false>(
+  route: R,
+  definition: ButtonInput<R, G>,
+): ButtonDefinition<R, G>;
+
+function defineSelect<const R extends string, const T extends SelectType = "string", const G extends boolean = false>(
+  route: R,
+  definition: SelectInput<R, T, G>,
+): SelectDefinition<R, T, G>;
+
+function defineModal<const R extends string, S extends ModalSchema = undefined, const G extends boolean = false>(
+  route: R,
+  definition: ModalInput<R, S, G>,
+): ModalDefinition<R, S, G>;
+
+function defineEvent<const E extends EventName>(event: E, definition: EventInput<E>): EventDefinition<E>;
+
+function defineTask(definition: TaskInput): TaskDefinition;
+
+function defineMiddleware<K extends InteractionKind = InteractionKind>(
+  handler: MiddlewareHandler<K>,
+  options?: MiddlewareOptions<K>,
+): MiddlewareDefinition<K>;
+
+function defineFeature(definition?: FeatureInput): FeatureDefinition;
+
+function defineContext<T>(factory: ContextFactory<T>): ContextDefinition<T>;
+```
+
+### Definition inputs
+
+```ts
+interface RouteOptions<G extends boolean = boolean> {
+  permissions?: readonly PermissionsString[];
+  guildOnly?: G;
+  ephemeral?: boolean;
+  cooldown?: DurationInput;
+  layout?: boolean;
+}
+
+interface CommandMetadata<G extends boolean = boolean> extends RouteOptions<G> {
+  nsfw?: boolean;
+  nameLocalizations?: LocalizationMap | undefined;
+}
+
+interface CommandInput<O extends OptionsRecord, G extends boolean> extends CommandMetadata<G> {
+  description: string;
+  descriptionLocalizations?: LocalizationMap | undefined;
+  options?: O;
+  execute(ctx: CommandContext<O, G>): Awaitable<HandlerResult>;
+}
+
+interface UserCommandInput<G extends boolean> extends CommandMetadata<G> {
+  name: string;
+  execute(ctx: UserCommandContext<G>): Awaitable<HandlerResult>;
+}
+
+interface MessageCommandInput<G extends boolean> extends CommandMetadata<G> {
+  name: string;
+  execute(ctx: MessageCommandContext<G>): Awaitable<HandlerResult>;
+}
+
+interface GroupInput {
+  description: string;
+  permissions?: readonly PermissionsString[];
+  guildOnly?: boolean;
+  nsfw?: boolean;
+  nameLocalizations?: LocalizationMap | undefined;
+  descriptionLocalizations?: LocalizationMap | undefined;
+}
+
+interface ButtonInput<R extends string, G extends boolean> extends RouteOptions<G> {
+  respond?: "update" | "reply";
+  execute(ctx: ButtonContext<R, G>): Awaitable<HandlerResult>;
+}
+
+interface SelectInput<R extends string, T extends SelectType, G extends boolean> extends RouteOptions<G> {
+  type?: T;
+  respond?: "update" | "reply";
+  execute(ctx: SelectContext<R, T, G>): Awaitable<HandlerResult>;
+}
+
+interface ModalInput<R extends string, S extends ModalSchema, G extends boolean> extends RouteOptions<G> {
+  respond?: "update" | "reply";
+  title: string | ((ctx: ModalRenderContext<R, S>) => string);
+  schema?: S;
+  render(ctx: ModalRenderContext<R, S>): ReactNode;
+  submit(ctx: ModalContext<R, S, G>): Awaitable<HandlerResult>;
+}
+
+interface EventInput<E extends EventName> {
+  once?: boolean;
+  execute(ctx: EventContext, ...args: ClientEvents[E]): unknown;
+}
+
+interface TaskInput {
+  every: DurationInput;
+  runOnStart?: boolean;
+  shard?: "first" | "all";
+  execute(ctx: TaskContext): unknown;
+}
+
+interface MiddlewareOptions<K extends InteractionKind = InteractionKind> {
+  kinds?: readonly K[];
+}
+
+interface FeatureInput {
+  enabled?: boolean;
+  intents?: readonly IntentName[];
+  partials?: readonly PartialName[];
+}
+
+interface ContextResult<T> {
+  value: T;
+  dispose?: () => unknown;
+}
+
+interface ContextFactoryArgs {
+  client: Client<true>;
+  logger: Logger;
+}
+
+type ContextFactory<T> = (args: ContextFactoryArgs) => Awaitable<ContextResult<T>>;
+type MiddlewareHandler<K extends InteractionKind = InteractionKind> = (
+  ctx: ContextForKind[K],
+  next: MiddlewareNext,
+) => Awaitable<HandlerResult>;
+type MiddlewareNext = () => Promise<void>;
+type HandlerResult = ReactNode | void;
+type Awaitable<T> = T | PromiseLike<T>;
+```
+
+Each helper's result type is its input with `readonly __neocord` added, plus `readonly route` on buttons, selects and modals, and `readonly event` on events. `MiddlewareDefinition` has `handler` and `kinds`, and `ContextDefinition` has `factory`.
+
+## option
+
+`option` is an object with one helper per option type. Every helper takes `description`, `required`, `nameLocalizations` and `descriptionLocalizations`.
+
+| Helper | Extra input | Value type |
+| --- | --- | --- |
+| `option.string(input)` | `minLength`, `maxLength`, `choices` or `autocomplete` | `string`, or a union of the choice values |
+| `option.integer(input)` | `minValue`, `maxValue`, `choices` or `autocomplete` | `number`, or a union of the choice values |
+| `option.number(input)` | `minValue`, `maxValue`, `choices` or `autocomplete` | `number`, or a union of the choice values |
+| `option.boolean(input)` | | `boolean` |
+| `option.user(input)` | | `User` |
+| `option.member(input)` | | `GuildMember` |
+| `option.channel(input)` | `channelTypes` | `ChannelOfType<T>` |
+| `option.role(input)` | | `Role` |
+| `option.mentionable(input)` | | `MentionableValue`, which is `User \| GuildMember \| Role` |
+| `option.attachment(input)` | | `Attachment` |
+
+An option is `T` when `required: true`, and `T | undefined` otherwise. `choices` and `autocomplete` are mutually exclusive.
+
+```ts
+interface OptionChoice<V extends string | number = string | number> {
+  readonly name: string;
+  readonly value: V;
+  readonly nameLocalizations?: LocalizationMap | undefined;
+}
+
+type AutocompleteHandler<V extends string | number = string | number> = (
+  ctx: AutocompleteContext,
+) => Awaitable<readonly OptionChoice<V>[]>;
+
+type OptionKind =
+  | "string"
+  | "integer"
+  | "number"
+  | "boolean"
+  | "user"
+  | "member"
+  | "channel"
+  | "role"
+  | "mentionable"
+  | "attachment";
+
+type OptionsRecord = Readonly<Record<string, OptionDefinition>>;
+type InferOption<D> = D extends OptionDefinition<infer T, infer R> ? ([R] extends [true] ? T : T | undefined) : never;
+type InferOptions<O extends OptionsRecord> = { readonly [K in keyof O]: InferOption<O[K]> };
+```
+
+`OptionDefinition<T, R, K>` is the type the helpers return. See [Options](/docs/routing/options).
+
+## useContext
+
+```ts
+function useContext<C extends AnyContext = AnyContext>(): C;
+```
+
+Returns the current interaction context from any component rendered by neocord. Outside one, it throws `useContext() must be used inside a component rendered by neocord.`
+
+## parseDuration
+
+```ts
+function parseDuration(input: DurationInput): number;
+
+type DurationUnit = "ms" | "s" | "m" | "h" | "d";
+type DurationString = DurationPart | `${DurationPart}${DurationPart}` | `${DurationPart}${DurationPart}${DurationPart}`;
+type DurationInput = DurationString | number;
+```
+
+`DurationPart` is `` `${number}${DurationUnit}` ``, so a string has up to three parts at the type level, such as `"1h30m"`. The function returns milliseconds, and throws on a negative number or an invalid string.
+
+## Context types
+
+```ts
+interface BaseContext {
+  client: Client<true>;
+  app: AppContext;
+  logger: Logger;
+  feature: string;
+  route: string;
+  shards: ShardHelpers;
+  commands: readonly CommandInfo[];
+}
+
+interface InteractionContext<I extends RepliableInteraction = RepliableInteraction, G extends boolean = boolean>
+  extends BaseContext {
+  kind: InteractionKind;
+  interaction: I;
+  guild: GuildValue<G>;
+  member: MemberValue<G>;
+  user: User;
+  state: Record<string, unknown>;
+  reply(node: ReactNode, options?: ReplyOptions): Promise<void>;
+  editReply(node: ReactNode, options?: ReplyOptions): Promise<void>;
+  followUp(node: ReactNode, options?: ReplyOptions): Promise<void>;
+  defer(options?: DeferOptions): Promise<void>;
+  deleteReply(): Promise<void>;
+  showModal: ShowModalMethod;
+}
+
+interface ComponentContext<I extends RepliableInteraction, G extends boolean> extends InteractionContext<I, G> {
+  message: Message;
+  update(node: ReactNode, options?: ReplyOptions): Promise<void>;
+  deferUpdate(): Promise<void>;
+}
+
+interface CommandContext<O extends OptionsRecord = OptionsRecord, G extends boolean = boolean>
+  extends InteractionContext<ChatInputCommandInteraction<CacheOf<G>>, G> {
+  kind: "command";
+  options: InferOptions<O>;
+}
+
+interface UserCommandContext<G extends boolean = boolean>
+  extends InteractionContext<UserContextMenuCommandInteraction<CacheOf<G>>, G> {
+  kind: "user-command";
+  target: User;
+  targetMember: MemberValue<G>;
+}
+
+interface MessageCommandContext<G extends boolean = boolean>
+  extends InteractionContext<MessageContextMenuCommandInteraction<CacheOf<G>>, G> {
+  kind: "message-command";
+  target: Message;
+}
+
+interface ButtonContext<R extends string = string, G extends boolean = boolean>
+  extends ComponentContext<ButtonInteraction<CacheOf<G>>, G> {
+  kind: "button";
+  params: RouteParams<R>;
+}
+
+interface BaseSelectContext<R extends string, T extends SelectType, G extends boolean>
+  extends ComponentContext<SelectInteractionFor<T, CacheOf<G>>, G> {
+  kind: "select";
+  params: RouteParams<R>;
+  values: string[];
+}
+
+type SelectContext<
+  R extends string = string,
+  T extends SelectType = SelectType,
+  G extends boolean = boolean,
+> = BaseSelectContext<R, T, G> & SelectExtras<T, CacheOf<G>>;
+
+interface ModalContext<R extends string = string, S extends ModalSchema = ModalSchema, G extends boolean = boolean>
+  extends Omit<InteractionContext<ModalSubmitInteraction<CacheOf<G>>, G>, "showModal"> {
+  kind: "modal";
+  params: RouteParams<R>;
+  values: ModalValues<S>;
+  fields: ModalSubmitFields<CacheOf<G>>;
+  update(node: ReactNode, options?: ReplyOptions): Promise<void>;
+  deferUpdate(): Promise<void>;
+}
+
+interface ModalRenderContext<R extends string = string, S extends ModalSchema = ModalSchema> {
+  params: RouteParams<R>;
+  field(name: ModalFieldName<S>): string;
+}
+
+interface AutocompleteContext extends BaseContext {
+  kind: "autocomplete";
+  interaction: AutocompleteInteraction;
+  guild: Guild | null;
+  member: GuildMember | null;
+  user: User;
+  focused: string;
+  optionName: string;
+}
+
+type EventContext = BaseContext;
+type TaskContext = BaseContext;
+
+interface ReplyOptions {
+  ephemeral?: boolean;
+  layout?: boolean;
+}
+
+interface DeferOptions {
+  ephemeral?: boolean;
+}
+
+interface ShardHelpers {
+  readonly id: number;
+  readonly ids: readonly number[];
+  readonly count: number;
+  fetchClientValues<T = unknown>(prop: string): Promise<T[]>;
+  broadcastEval<R>(fn: (client: Client<true>) => Awaitable<R>): Promise<Serialized<R>[]>;
+  broadcastEval<R, C>(
+    fn: (client: Client<true>, context: Serialized<C>) => Awaitable<R>,
+    options: { context: C },
+  ): Promise<Serialized<R>[]>;
+}
+
+interface CommandInfo {
+  kind: "command" | "user-command" | "message-command";
+  name: string;
+  description: string | null;
+  feature: string;
+  guildOnly: boolean;
+  permissions: readonly PermissionsString[];
+}
+```
+
+`ctx.commands` lists the enabled commands. See [Handler context](/docs/handlers/context) for how each member behaves.
+
+### Other context types
+
+| Type | Definition |
+| --- | --- |
+| `AppContext` | The context type registered through `RegisteredApp`, or `Record<string, never>`. |
+| `RegisteredApp` | An empty interface that generated types augment. See [How type safety works](/docs/type-safety). |
+| `InferAppContext<T>` | Extracts `V` from a `ContextDefinition<V>` or `ContextFactory<V>`. |
+| `InteractionKind` | `"command" \| "user-command" \| "message-command" \| "button" \| "select" \| "modal"` |
+| `AnyContext` | `ContextForKind[InteractionKind]`. |
+| `ContextForKind` | Maps each interaction kind to its context type. |
+| `CacheOf<G>` | `"cached"` when `G` is `true`, otherwise `CacheType`. |
+| `GuildValue<G>` | `Guild` when `G` is `true`, otherwise `Guild \| null`. |
+| `MemberValue<G>` | `GuildMember` when `G` is `true`, otherwise `GuildMember \| null`. |
+| `ShowModalArgs<R>` | The arguments after the route in `ctx.showModal`. `params` is required exactly when `R` has params. |
+| `ShowModalMethod<Route>` | The type of `ctx.showModal`. |
+| `LayoutProps` | `{ children: ReactNode }`, for `layout.tsx` components. |
+| `ErrorProps` | `{ error: unknown; ctx: AnyContext }`, for `error.tsx` components. |
+| `EventName` | `keyof ClientEvents`. |
+| `SelectType` | `"string" \| "user" \| "role" \| "channel" \| "mentionable"` |
+| `SelectInteractionFor<T, C>` | The discord.js select interaction for a select type. |
+| `SelectExtras<T, C>` | `users`, `members`, `roles` or `channels` on the context, by select type. |
+| `ModalValue` | `string \| string[] \| boolean` |
+| `DefaultModalValues` | `Record<string, ModalValue>` |
+| `ModalSchema` | `StandardSchemaV1 \| undefined` |
+| `ModalValues<S>` | The schema's output, or `DefaultModalValues`. |
+| `ModalFieldName<S>` | The schema's input keys, or `string`. |
+| `ChannelOfType<T>` | The guild channel type for a `ChannelType`. |
+| `MentionableValue` | `User \| GuildMember \| Role` |
+| `StandardSchemaV1` | The [Standard Schema](https://standardschema.dev) interface. |
+
+Types for the manifest, such as `Manifest` and `ManifestRoute`, are exported here and from [`neocord/runtime`](/docs/api/runtime#types).
+
+## Logger
+
+`ctx.logger` is a small built-in logger. It prefixes the shard and scope, and redacts tokens.
+
+```ts
+type LogLevel = "debug" | "info" | "warn" | "error" | "silent";
+type LogMethod = "debug" | "info" | "warn" | "error";
+
+interface Logger {
+  readonly level: LogLevel;
+  debug(message: string, ...details: unknown[]): void;
+  info(message: string, ...details: unknown[]): void;
+  warn(message: string, ...details: unknown[]): void;
+  error(message: string, ...details: unknown[]): void;
+  child(scope: string): Logger;
+}
+```

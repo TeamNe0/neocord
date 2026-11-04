@@ -1,0 +1,69 @@
+Upgrade the neocord packages together, then run the same checks you use before a release.
+
+## Update the packages
+
+```pm
+add neocord@latest @neocord/react@latest
+add -d @neocord/cli@latest @neocord/eslint-plugin@latest
+```
+
+Leave out `@neocord/eslint-plugin` if the project does not use ESLint. `@neocord/routing` comes in as a dependency, so you do not need to list it.
+
+Check the peer dependencies at the same time:
+
+| Package | Peer dependency |
+| --- | --- |
+| `neocord`, `@neocord/react` | `discord.js` `^14.28.0`, `react` `^19.3.0` |
+| `@neocord/cli` | `neocord` |
+| `@neocord/eslint-plugin` | `eslint` `^9.0.0 \|\| ^10.0.0` |
+
+Print the versions you ended up with:
+
+```pm
+x neocord info
+```
+
+`neocord info` shows the installed versions, the runtime, the OS, and whether `DISCORD_TOKEN` is set, without printing its value. Include its output in bug reports.
+
+## Check the project
+
+```pm
+run typecheck
+run test
+run lint
+run build
+x neocord deploy --dry-run
+```
+
+- Skip `run lint` if the project does not use ESLint.
+- `neocord typegen` regenerates `.neocord`, and the `typecheck` script runs it first. You never edit that folder, and it is not committed, so there is nothing to migrate in it.
+- `neocord test` validates every route and command payload, so it catches a definition the new version rejects.
+- The dry run shows the commands you would send, including its hash. If the hash differs from the last deploy, the serialized commands changed, and you need to deploy.
+
+## Things that can break in-flight messages
+
+Discord keeps old messages and their components, so keep these in mind whenever you release a change, not only during upgrades.
+
+- **Renaming or moving a button, select or modal file changes its custom id.** Clicking a component on an old message then shows `This interaction is no longer available.` and logs `No route matches ...`. Keep the old route for a while if the old messages matter.
+- **Changing a route's params** breaks old custom ids in the same way.
+- **Changing a select's `type`** makes old messages fail too, because the route expects another type.
+- **Live sessions** do not survive a restart. Clicking an old button shows `This message has expired.` and removes its components.
+
+## TypeScript
+
+Generated projects run native TypeScript 7 as `tsc`, side by side with TypeScript 6 under the `typescript` package name when ESLint is enabled, because typescript-eslint needs the TypeScript 6 API. Keep both aliases when you upgrade:
+
+```json title="package.json"
+{
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}
+```
+
+See [Manual setup](/docs/manual-setup) and the [TypeScript 7 and ESLint](/docs/troubleshooting#typescript-7-and-eslint) section of Troubleshooting.
+
+## Node
+
+`@neocord/cli` requires Node 22.22 or later, and the runtime packages require Node 22.12 or later. If you run on Node, check your version and any Docker base image when you upgrade. On Bun, keep Bun current.

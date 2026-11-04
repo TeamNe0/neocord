@@ -1,0 +1,98 @@
+Projects from `create-neocord` include a `Dockerfile` and a `.dockerignore` for a production image based on Bun. If you set the project up by hand, copy both files from this page.
+
+## The Dockerfile
+
+```docker title="Dockerfile"
+FROM oven/bun:1 AS build
+WORKDIR /app
+COPY package.json bun.lock* ./
+RUN bun install --ignore-scripts
+COPY . .
+RUN SKIP_ENV_VALIDATION=true bun --bun run build
+
+FROM oven/bun:1-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+RUN chown bun:bun /app
+COPY --chown=bun:bun --from=build /app ./
+USER bun
+CMD ["bun", "--bun", "run", "start"]
+```
+
+What each part does:
+
+- `SKIP_ENV_VALIDATION=true` lets `src/env.ts` load during the build, when the image has no secrets. It applies only to that step, so the running container still validates its environment.
+- The build stage bundles the bot into `.neocord/build`. Bundles keep packages external, so the runtime stage copies all of `/app`, including `node_modules`.
+- `@neocord/cli` is a dev dependency of the project, and `start` needs it, so dev dependencies are kept in the image.
+- The container runs as the unprivileged `bun` user, and owns `/app`, because `neocord start` writes its bundled config to `.neocord/cache` and `neocord deploy` writes `.neocord/deploy.json`.
+
+### With Prisma
+
+The install step uses `--ignore-scripts`, so Prisma's `postinstall` does not run. When you choose Prisma, `create-neocord` replaces the build line with these two lines, and you need the same change if you add Prisma by hand:
+
+```docker title="Dockerfile"
+RUN bun run db:generate
+RUN SKIP_ENV_VALIDATION=true bun --bun run build
+```
+
+## The .dockerignore
+
+```text title=".dockerignore"
+node_modules
+.neocord
+.git
+dist
+.env*
+!.env.example
+*.db
+*.db-*
+Dockerfile
+.dockerignore
+```
+
+This keeps your `.env` files and local SQLite databases out of the image. Pass secrets when the container starts.
+
+## Build and run
+
+```bash
+docker build -t my-bot .
+docker run --env-file .env my-bot
+```
+
+## Registering commands
+
+<Callout kind="warn">
+
+The build does not deploy commands, and neither does `start` by default. If you never deploy, your commands do not appear in Discord.
+
+</Callout>
+
+Choose one of these:
+
+- Run a one-off container when commands change:
+
+  ```bash
+  docker run --rm --env-file .env my-bot bun --bun run deploy
+  ```
+
+- Set `deploy: { mode: "auto" }` in `neocord.config.ts`, so `neocord start` deploys every time the container starts. `.neocord/deploy.json` is not kept between containers, so each new container sends the commands again.
+
+See [Deploying commands](/docs/deployment/deploying-commands).
+
+## Databases
+
+Run schema changes as a one-off container, using the same scripts as in development:
+
+```bash
+docker run --rm --env-file .env my-bot bun --bun run db:push
+```
+
+With SQLite, the database file must outlive the container. Mount a volume and point `DATABASE_URL` at a file inside it, and make sure the `bun` user can write to that folder. See [Drizzle](/docs/database/drizzle) and [Prisma](/docs/database/prisma).
+
+## Stopping
+
+`docker stop` sends `SIGTERM` to the container's main process. When the signal reaches neocord, each shard stops tasks, expires live sessions, disposes the app context and destroys the client, and the manager gives each shard up to five seconds. See [Process managers](/docs/deployment/process-managers#what-neocord-does-on-a-signal). Docker's default grace period is ten seconds, and you can raise it with `docker stop --time`.
+
+## Using Node instead
+
+The template's image uses Bun, because `bun --bun run` makes the CLI itself run under Bun, and `runtime: "auto"` then picks Bun for the bot. For a Node image, start from an official Node image that satisfies `@neocord/cli`'s requirement of Node 22.22 or later, and use `npm ci` and `npm run` with your own lockfile.

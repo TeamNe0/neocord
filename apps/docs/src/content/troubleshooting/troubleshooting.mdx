@@ -1,0 +1,255 @@
+Most neocord errors say what to do. This page lists the common ones with their exact text, so you can search for what you see. If nothing here helps, include the output of `neocord info` in your report. It prints whether `DISCORD_TOKEN` is set, and never its value.
+
+## Invalid or missing token
+
+```text
+Discord rejected the bot token. Reset it at https://discord.com/developers/applications under Bot > Reset Token, then update DISCORD_TOKEN or the token in neocord.config.ts.
+```
+
+Discord refused the login. Reset the token in the [Developer Portal](https://discord.com/developers/applications) and update it. If you just reset it, the old value no longer works anywhere. The same problem has its own wording at two other points:
+
+```text
+Discord rejected the bot token while fetching the recommended shard count. Reset it at https://discord.com/developers/applications under Bot > Reset Token.
+```
+
+```text
+Discord rejected the bot token while deploying commands. Reset it at https://discord.com/developers/applications under Bot > Reset Token, then update DISCORD_TOKEN.
+```
+
+If there is no token at all, you see this:
+
+```text
+No Discord bot token found. Set DISCORD_TOKEN in your environment or pass token in neocord.config.ts. You can create one at https://discord.com/developers/applications under Bot > Reset Token.
+```
+
+Check that the variable is in a file the CLI loads. The order is `.env`, `.env.<mode>`, `.env.local`, `.env.<mode>.local`, and the real environment always wins. `.env.local` is skipped in test mode. See the [CLI reference](/docs/cli).
+
+## Environment validation failed
+
+```text
+Environment validation failed.
+```
+
+A variable in `src/env.ts` is missing or invalid, and the lines below this message name each one. Set it in the environment or a `.env` file. `dev`, `start` and a real `deploy` always validate. See [Environment variables](/docs/type-safety/environment).
+
+## Disallowed intents (4014)
+
+```text
+Discord refused the requested gateway intents (close code 4014). Privileged intents requested: GuildMembers. Enable them at https://discord.com/developers/applications, under your application's Bot > Privileged Gateway Intents, or remove them from your config.
+```
+
+`GuildMembers`, `GuildPresences` and `MessageContent` are privileged. Enable each one you request in the Developer Portal, or remove it from `intents` in `neocord.config.ts` and from any `defineFeature({ intents })`. Intents from enabled features are merged into the config's list, so check both.
+
+Other gateway close codes have their own messages:
+
+| Close code | Message |
+| --- | --- |
+| 4010 | `Discord reported an invalid shard configuration (close code 4010). Check sharding.totalShards and sharding.shardList.` |
+| 4011 | ``Discord requires this bot to shard (close code 4011). Run it with `neocord start` so the sharding manager is used.`` |
+| 4012 | `Discord rejected the gateway API version (close code 4012). Update discord.js.` |
+| 4013 | `Discord reported invalid intents (close code 4013). Check the intents in neocord.config.ts: <intents>.` |
+
+## An event never fires
+
+Events need intents. `neocord test`, `neocord build` and startup warn when one is missing:
+
+```text
+Event "guildMemberAdd" needs the GuildMembers intent, which is not enabled. Add it to config.intents or the feature's intents.
+```
+
+`messageCreate` and `messageUpdate` also warn that `message.content, embeds and attachments stay empty without the privileged MessageContent intent`. See [Events](/docs/routing/events).
+
+## The three second limit
+
+Discord gives each interaction three seconds to be acknowledged. neocord defers automatically after 2000 ms if your handler has not responded, so slow handlers do not hit the limit. You can change that in the config:
+
+```ts title="neocord.config.ts"
+import { defineConfig } from "neocord";
+
+export default defineConfig({
+  intents: ["Guilds"],
+  autoDefer: { after: 1000 },
+});
+```
+
+Auto defer can still miss the limit in these cases:
+
+- `autoDefer: false` is set and the handler is slow.
+- Something blocks the event loop, so the timer cannot fire. Synchronous file or process calls are the usual cause, and the [`no-blocking-calls`](/docs/eslint/no-blocking-calls) rule catches them.
+- The process is overloaded, or the network is very slow. Lower `after`.
+
+What an automatic defer does depends on the route. Commands get a deferred reply, which Discord shows as a thinking state. Buttons and selects get a deferred update, unless they set `respond: "reply"`.
+
+If a command returns nothing after an automatic defer, neocord removes the placeholder and logs:
+
+```text
+command <id> (<file>) was deferred automatically but returned nothing, removing the placeholder.
+```
+
+## Unknown interaction (10062)
+
+```text
+Could not reply: the interaction expired before neocord responded (code 10062).
+```
+
+The first word after `Could not` changes with the action, such as `edit the reply`, `follow up` or `show the modal`. Discord no longer accepts this interaction, usually because the three second limit passed before the first acknowledgement. See [The three second limit](#the-three-second-limit). This is logged as a warning, and does not crash the handler.
+
+## Already acknowledged (40060)
+
+```text
+Could not reply: the interaction was already acknowledged (code 40060).
+```
+
+Something else responded first. The likely causes are:
+
+- **Two processes are using the same token.** A common one is `neocord dev` running while production is up, or two replicas of a service. Each process receives the interaction and they race. Stop one.
+- **A handler called `ctx.interaction.reply` directly**, which neocord's state machine cannot see. Use `ctx.reply` or return JSX. The [`no-direct-interaction-reply`](/docs/eslint/no-direct-interaction-reply) rule catches this.
+
+neocord recovers where it can. A first reply or update that fails this way is retried as an edit, and handlers do not crash. See [Replying](/docs/handlers/replying).
+
+## showModal fails
+
+```text
+showModal() must be the first response to an interaction, but it has already been deferred. Remove loading.tsx from this route or show the modal before any reply or slow work.
+```
+
+A modal must be the first response. Either `loading.tsx` applies to the route, the handler did slow work and `autoDefer` ran, or the handler already replied. Call `ctx.showModal` first. A modal submit cannot open another modal, and `showModal` is not on the modal context for that reason. See [Modals](/docs/routing/modals).
+
+### A root loading.tsx breaks commands that open a modal
+
+`src/loading.tsx` applies to every slash command and context menu command in the bot, because the closest `loading` file wins and the root is the fallback. neocord sends the loading reply before your handler runs, so the interaction is already acknowledged when the handler calls `ctx.showModal`. Buttons and selects ignore `loading` files, so a modal opened from a button is not affected.
+
+Move the file into a feature or a command folder that contains no command that opens a modal. See [Loading UI](/docs/handlers/loading#modals).
+
+## Nothing happened, or the warning about returning nothing
+
+```text
+command <id> (<file>) returned nothing and did not acknowledge the interaction.
+```
+
+A command must return a node or call a reply method. Otherwise Discord shows that the application did not respond. Buttons and selects that return nothing are acknowledged with a deferred update, and modals acknowledge silently, so only commands get this warning. See [Replying](/docs/handlers/replying).
+
+If a returned node renders nothing, you get:
+
+```text
+The returned node rendered no components, so there is nothing to send to Discord.
+```
+
+## Commands not showing up
+
+Work through these in order:
+
+1. **Did you deploy?** `neocord dev` only syncs to `dev.guildId`, and `neocord build` and `neocord start` do not deploy by default. Run `neocord deploy`. See [Deploying commands](/docs/deployment/deploying-commands).
+2. **Is `dev.guildId` set?** Without it, `neocord dev` warns:
+
+   ```text
+   No dev.guildId set, so commands are not synced in development.
+   ```
+
+   Set `DEV_GUILD_ID` to a server you own, and check that `--no-deploy` is not set.
+3. **Does the hash say it is up to date?** If you see `already up to date`, neocord skipped the request. If you think Discord has a different list, run `neocord deploy --force`.
+4. **Are you looking at the right scope?** `neocord dev` deploys to a guild, and `neocord deploy` deploys globally unless you pass `--guild`. If you registered the commands in one scope, they do not appear in the other.
+5. **Was the bot invited with the `applications.commands` scope?** See the [quick start](/docs/quick-start).
+6. **Is the command hidden?** `permissions` hide a command from members without them. `guildOnly: true` hides it in DMs. A feature with `enabled: false` contributes no commands.
+7. **Does your Discord client have an old list?** Reload the client with Ctrl+R, or Cmd+R on macOS.
+
+If you see a command twice, it is registered both globally and in that server. See [Development sync](/docs/deployment/deploying-commands#development-sync).
+
+## Interaction is no longer available
+
+```text
+This interaction is no longer available.
+```
+
+Users see this when no route matches a command or custom id, and the log says `No route matches ...`. Usually you renamed or removed a route that an old message still uses, or the deployed commands are older than the running code. Deploy again if it is a command. See [Upgrading](/docs/deployment/upgrading#things-that-can-break-in-flight-messages).
+
+## This message has expired
+
+```text
+This message has expired.
+```
+
+The live session that owned this button or select is gone. Sessions are in memory per process, so they end on restart, and they also end after the idle timeout, `live.ttl`, which defaults to `14m`. See [Live sessions](/docs/ui/live-sessions).
+
+## TypeScript 7 and ESLint
+
+`tsc` in a neocord project is native TypeScript 7, from the `@typescript/native` package. typescript-eslint needs the TypeScript 6 API, so the `typescript` package name is aliased to `@typescript/typescript6`:
+
+```json title="package.json"
+{
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}
+```
+
+This is Microsoft's documented side-by-side setup, and `create-neocord` writes it when you choose ESLint. Without ESLint, `typescript` is simply TypeScript 7. If `@typescript-eslint/parser` fails on the TypeScript API, or warns about an unsupported version, check that `typescript` resolves to the TypeScript 6 package and not to version 7.
+
+Other tooling messages:
+
+| Message | Fix |
+| --- | --- |
+| `ESLint is not installed in this project.` | Run `bun add -d eslint @neocord/eslint-plugin`. See [ESLint](/docs/eslint). |
+| `Could not find tsc in this project.` | Run `bun add -d typescript`. `neocord build --typecheck` looks for `@typescript/native` first, then `typescript`. |
+
+The plugin supports flat config only, on ESLint 9 and 10. If path-based rules do nothing in a monorepo, set `sourceDir` relative to where ESLint runs. See [ESLint](/docs/eslint).
+
+## A route has the wrong type
+
+If `route` accepts any string, or rejects a route you just added, the generated types are out of date or not included:
+
+1. Run `neocord typegen`. `neocord dev` also regenerates them on change.
+2. Check that `tsconfig.json` includes `.neocord/types.d.ts`.
+
+If `ctx.app` has no properties, the same fix applies, and you also need a `src/context.ts`. See [How type safety works](/docs/type-safety).
+
+## CLI errors
+
+| Message | Fix |
+| --- | --- |
+| `No neocord.config file found in "<dir>" or any parent directory.` | Run inside a project, or pass `--cwd <dir>`. |
+| `Run neocord build first.` | Run `neocord build` before `neocord start`. |
+| `Found <n> problems in the project files.` | The lines below name each file. See [Project structure](/docs/project-structure). |
+| `Validation found <n> errors.` | The lines below name each file and issue. |
+| `No test runner found.` | Install Bun, or add vitest as a project dependency. See [Testing](/docs/testing). |
+| `The config sets runtime: "bun", but bun was not found on PATH.` | Install Bun, or set `runtime: "node"`. |
+| `The config selects the "node" runtime, but node was not found on PATH.` | Install Node 22.22 or later, or set `runtime: "bun"`. |
+
+## FAQ
+
+### Can I use embeds?
+
+No. `@neocord/react` renders Components V2 only, and every message it produces has the `IsComponentsV2` flag. Discord does not allow embeds on those messages. Use `Container`, which has an `accentColor`, in place of an embed. See [UI overview](/docs/ui).
+
+### Can I use discord.js directly?
+
+Yes. `ctx.client` and `ctx.interaction` are the real discord.js objects. Use them to read data and to call any API you need. Respond through `ctx` rather than `ctx.interaction`, so the reply state stays correct.
+
+### Why did `@here` not ping anyone?
+
+`allowedMentions` defaults to `{ parse: [] }` through the client options, so nothing is pinged unless you allow it. Use `<Message allowedMentions={...}>` for one message, or `client.allowedMentions` in the config for all of them.
+
+### Can anyone click my buttons?
+
+Yes. Anyone who can see the message can click. Check `ctx.user.id` in the handler, or `interaction.user.id` in a live `onClick`, if that matters. A route can also use `permissions`, which is enforced at runtime on buttons and selects.
+
+### Can I respond to plain messages instead of slash commands?
+
+Yes. Add `events/messageCreate.ts` with `defineEvent`, and enable `GuildMessages` and the privileged `MessageContent` intent. See [Events](/docs/routing/events).
+
+### Does a button still work after a restart?
+
+A button with `route` or `customId` does, because the handler is found by its custom id. A button with `onClick` does not, because its handler lived in memory.
+
+### Do I need Bun?
+
+No. Everything runs on Node too. `neocord test` is the one exception to check: it uses vitest if the project depends on it, and otherwise needs Bun, so on Node either install Bun or add vitest. See [Testing](/docs/testing).
+
+### Which Node version do I need?
+
+`@neocord/cli` declares Node 22.22 or later. `neocord`, `@neocord/react`, `@neocord/routing`, `@neocord/eslint-plugin` and `create-neocord` declare Node 22.12 or later.
+
+### Why does `ctx.guild` have a type that includes null?
+
+The handler may run in a DM. Set `guildOnly: true` on the route, and `ctx.guild` and `ctx.member` become non-null. The [`prefer-guild-only`](/docs/eslint/prefer-guild-only) rule suggests this when it finds `ctx.guild!`.

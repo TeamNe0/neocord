@@ -1,0 +1,46 @@
+A neocord bot connects out to Discord's gateway over a WebSocket and stays connected. That decides what kind of hosting it needs.
+
+## What the host must provide
+
+| Requirement | Why |
+| --- | --- |
+| A process that stays running | The gateway connection, tasks and live sessions all live in memory. |
+| Outbound access to Discord | The bot opens a WebSocket to the gateway and calls the REST API over HTTPS. |
+| Bun, or Node 22.22 or later | `@neocord/cli` declares `node >=22.22.0`, and `neocord start` is how a bot runs. The runtime packages declare `node >=22.12.0`. |
+| Environment variables | At least `DISCORD_TOKEN`. See [Environment variables](/docs/type-safety/environment). |
+
+The bot does not need any of these:
+
+- **An inbound port.** Interactions arrive over the gateway. neocord does not start an HTTP server, and has no HTTP interactions endpoint.
+- **A public domain or TLS certificate.**
+- **Persistent disk**, unless you use SQLite or want to keep `.neocord/deploy.json`.
+
+## Choosing a host
+
+- A VPS or dedicated server fits well, with [Docker](/docs/deployment/docker) or a [process manager](/docs/deployment/process-managers).
+- A container platform fits if it can run a background worker. Look for a service type that does not expect an open port, because neocord does not listen on one. A platform that restarts or stops a service for failing a port or HTTP health check will not work.
+- Serverless functions do not fit. They cannot hold a gateway connection.
+
+## Run one copy
+
+Run one copy of each shard for each bot token. If you scale a service to several replicas, each one starts its own manager and connects the same shards, and Discord then delivers interactions to more than one of them. Handlers race, and you see code 40060 in the logs. To scale out, follow [Sharding](/docs/sharding#scaling-advice), and give each machine its own `shardList`.
+
+During a rolling deploy, the old and new versions can overlap and cause the same race for a moment. Stop the old copy first if that matters.
+
+## Memory and CPU
+
+`process` sharding runs each shard in its own process, so memory grows with the shard count. discord.js caches also grow with the number of servers. Measure your own bot, because the numbers depend on your intents and caches. To reduce cache use, pass the discord.js options through `client` in your config, and request only the intents you need.
+
+Avoid synchronous work in handlers, because it blocks the event loop and stops the `autoDefer` timer. The [`no-blocking-calls`](/docs/eslint/no-blocking-calls) rule catches the common cases.
+
+## Filesystem
+
+`neocord build` writes to `.neocord/build`, and `neocord start` reads from it. Build the bot during your image or release step.
+
+`.neocord` must stay writable when the bot runs, even if nothing else is. `neocord start` bundles your config to `.neocord/cache` each time it launches, and a deploy writes `.neocord/deploy.json`.
+
+## Time and networking
+
+- Discord's three second limit on acknowledging an interaction is measured from when Discord sends it, so slow networks reduce your margin. `autoDefer` runs at 2000 ms by default, and you can lower it with `autoDefer: { after: 1000 }`.
+- A shard must connect within `sharding.spawnTimeout`, which defaults to 30 seconds. Raise it on a slow network.
+- If `Could not reach Discord` appears in the logs, check your connection and [Discord's status page](https://discordstatus.com).
