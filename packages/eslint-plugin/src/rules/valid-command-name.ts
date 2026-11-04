@@ -10,7 +10,6 @@ export default createRule({
     notLowercase: 'Command folder "{{segment}}" must be lowercase. Rename it to "{{lowercase}}".',
     tooDeep: "Commands can be at most {{max}} levels deep, but this one is {{depth}}.",
     groupTooDeep: "A group at depth {{depth}} cannot hold subcommands, because commands can be at most {{max}} levels deep.",
-    groupWithoutFolder: 'A "group" file must sit in a command folder, such as "commands/mod/group.ts".',
   },
   create(kit) {
     return {
@@ -21,10 +20,6 @@ export default createRule({
         if (!isCommand && !isGroup) return;
 
         const { segments } = classification;
-        if (isGroup && segments.length === 0) {
-          kit.report({ node: program, messageId: "groupWithoutFolder" });
-          return;
-        }
 
         for (const segment of segments) {
           if (!COMMAND_SEGMENT_PATTERN.test(segment)) {

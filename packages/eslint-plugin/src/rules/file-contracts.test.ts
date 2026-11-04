@@ -340,7 +340,6 @@ tester.run("valid-command-name", validCommandName, {
     },
     { filename: `${FEATURE}/commands/Mod/group.ts`, code: "", errors: [{ messageId: "notLowercase" }] },
     { filename: `${FEATURE}/commands/a/b/c/group.ts`, code: "", errors: [{ messageId: "groupTooDeep" }] },
-    { filename: `${FEATURE}/commands/group.ts`, code: "", errors: [{ messageId: "groupWithoutFolder" }] },
   ],
 });
 
