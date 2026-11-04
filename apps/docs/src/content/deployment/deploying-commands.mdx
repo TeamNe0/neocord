@@ -20,8 +20,8 @@ The command does the following:
 1. Loads env files in `production` mode, and validates the environment unless you pass `--dry-run`.
 2. Builds first if `.neocord/build/deploy.js` is missing, or is older than your source, config or `tsconfig.json`. That build runs validation.
 3. Runs `deploy.js`, which validates the manifest, serializes the commands and hashes them.
-4. Skips the request if the hash matches `.neocord/deploy.json`, and otherwise replaces the whole command list for that scope.
-5. Records the hash, the command count and the time in `.neocord/deploy.json`.
+4. Skips the request if the hash and the application match `.neocord/deploy.json`, and otherwise replaces the whole command list for that scope.
+5. Records the application, the hash, the command count and the time in `.neocord/deploy.json`.
 
 ## Flags
 
@@ -64,6 +64,7 @@ Buttons, selects, modals, events and tasks are not sent to Discord, so changing 
   "version": 1,
   "scopes": {
     "global": {
+      "applicationId": "<application id>",
       "hash": "<sha256>",
       "commandCount": 3,
       "deployedAt": "2026-01-01T12:00:00.000Z"
@@ -72,7 +73,9 @@ Buttons, selects, modals, events and tasks are not sent to Discord, so changing 
 }
 ```
 
-The hash covers the scope and the serialized commands. Because `.neocord` is not committed or copied into Docker images, a fresh checkout or container has no state and deploys again. That is harmless, because each deploy replaces the list with the same content.
+The hash covers the scope and the serialized commands. A deploy only counts as unchanged when the entry also belongs to the same application, so deploying the same checkout with another bot's token sends the commands to that bot. neocord reads the id from the first segment of the token without calling Discord, and asks Discord when a token cannot be decoded. An entry with no `applicationId`, written by an older version, does not match, so the next deploy sends the commands once.
+
+Because `.neocord` is not committed or copied into Docker images, a fresh checkout or container has no state and deploys again. That is harmless, because each deploy replaces the list with the same content.
 
 If the commands on Discord changed some other way, for example you edited them through another tool, the hash still matches. Use `--force` to send them again.
 

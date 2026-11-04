@@ -101,7 +101,7 @@ interface DeployResult {
 }
 ```
 
-Throws if the manifest has validation errors or there is no token. With `stateFile`, it skips the request when the hash is unchanged, unless `force` is set. With `dryRun`, it returns before reading state or calling Discord. See [Deploying commands](/docs/deployment/deploying-commands).
+Throws if the manifest has validation errors or there is no token. With `stateFile`, it skips the request when the hash and the application are unchanged, unless `force` is set. With `dryRun`, it returns before reading state or calling Discord. See [Deploying commands](/docs/deployment/deploying-commands).
 
 ## serializeCommands
 

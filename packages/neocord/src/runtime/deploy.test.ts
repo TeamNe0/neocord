@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineCommand, defineGroup } from "../index.ts";
 import type { Manifest, ManifestRoute } from "../types.ts";
-import { deployWithRest, type DeployRest } from "./deploy.ts";
+import { applicationIdFromToken, deployWithRest, type DeployRest } from "./deploy.ts";
 
 const execute = () => "ok";
 
@@ -32,7 +32,12 @@ interface StubRest extends DeployRest {
   token: string | null;
 }
 
-function stubRest(overrides: { getError?: unknown } = {}): StubRest {
+const APP_A = "100000000000000001";
+const APP_B = "200000000000000002";
+const TOKEN_A = `${Buffer.from(APP_A).toString("base64")}.GAAAAA.signature`;
+const TOKEN_B = `${Buffer.from(APP_B).toString("base64url")}.GBBBBB.signature`;
+
+function stubRest(overrides: { getError?: unknown; applicationId?: string } = {}): StubRest {
   const stub: StubRest = {
     calls: [],
     token: null,
@@ -42,7 +47,7 @@ function stubRest(overrides: { getError?: unknown } = {}): StubRest {
     async get(path) {
       stub.calls.push({ method: "get", route: path });
       if (overrides.getError !== undefined) throw overrides.getError;
-      return { id: "app-1" };
+      return { id: overrides.applicationId ?? "app-1" };
     },
     async put(path, options) {
       stub.calls.push({ method: "put", route: path, body: options.body });
@@ -136,12 +141,72 @@ describe("deployCommands", () => {
 
   test("skips when the hash in the state file matches", async () => {
     const first = stubRest();
-    const deployed = await deployWithRest({ config: { token: "t" }, manifest: manifest(), stateFile }, () => first);
+    const deployed = await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => first);
     const second = stubRest();
-    const result = await deployWithRest({ config: { token: "t" }, manifest: manifest(), stateFile }, () => second);
+    const result = await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => second);
     expect(result.status).toBe("unchanged");
     expect(result.hash).toBe(deployed.hash);
     expect(second.calls).toEqual([]);
+  });
+
+  describe("per application state", () => {
+    test("a second application with the same commands deploys instead of reporting unchanged", async () => {
+      await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => stubRest());
+      const rest = stubRest();
+      const result = await deployWithRest({ config: { token: TOKEN_B }, manifest: manifest(), stateFile }, () => rest);
+      expect(result.status).toBe("deployed");
+      expect(rest.calls.map((call) => call.method)).toEqual(["get", "put"]);
+      const state = JSON.parse(await readFile(stateFile, "utf8")) as { scopes: Record<string, { applicationId?: string }> };
+      expect(state.scopes.global?.applicationId).toBe(APP_B);
+    });
+
+    test("switching back to the first application deploys again", async () => {
+      await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => stubRest());
+      await deployWithRest({ config: { token: TOKEN_B }, manifest: manifest(), stateFile }, () => stubRest());
+      const result = await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => stubRest());
+      expect(result.status).toBe("deployed");
+    });
+
+    test("a token that cannot be decoded falls back to the id from the API", async () => {
+      const first = stubRest({ applicationId: "app-a" });
+      await deployWithRest({ config: { token: "opaque-a" }, manifest: manifest(), stateFile }, () => first);
+      const same = stubRest({ applicationId: "app-a" });
+      const unchanged = await deployWithRest({ config: { token: "opaque-a" }, manifest: manifest(), stateFile }, () => same);
+      expect(unchanged.status).toBe("unchanged");
+      expect(same.calls.map((call) => call.method)).toEqual(["get"]);
+
+      const other = stubRest({ applicationId: "app-b" });
+      const deployed = await deployWithRest({ config: { token: "opaque-b" }, manifest: manifest(), stateFile }, () => other);
+      expect(deployed.status).toBe("deployed");
+      expect(other.calls.map((call) => call.method)).toEqual(["get", "put"]);
+    });
+
+    test("a state file from before this change is treated as not matching", async () => {
+      const deployed = await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => stubRest());
+      await writeFile(
+        stateFile,
+        JSON.stringify({ version: 1, scopes: { global: { hash: deployed.hash, commandCount: 1, deployedAt: "2026-01-01T00:00:00.000Z" } } }),
+      );
+      const result = await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => stubRest());
+      expect(result.status).toBe("deployed");
+    });
+
+    test.each([["[1,2]"], ['{"version":1,"scopes":null}'], ['{"version":2}'], ['{"version":1,"scopes":{"global":7}}']])(
+      "a malformed state file %s does not crash",
+      async (content) => {
+        await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => stubRest());
+        await writeFile(stateFile, content);
+        const result = await deployWithRest({ config: { token: TOKEN_A }, manifest: manifest(), stateFile }, () => stubRest());
+        expect(result.status).toBe("deployed");
+      },
+    );
+
+    test("the id is decoded from the first segment of the token", () => {
+      expect(applicationIdFromToken(TOKEN_A)).toBe(APP_A);
+      expect(applicationIdFromToken(`Bot ${TOKEN_B}`)).toBe(APP_B);
+      expect(applicationIdFromToken("not-a-token")).toBeNull();
+      expect(applicationIdFromToken("")).toBeNull();
+    });
   });
 
   test("does not need a token when unchanged", async () => {

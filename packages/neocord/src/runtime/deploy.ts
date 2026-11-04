@@ -34,6 +34,7 @@ export interface DeployRest {
 }
 
 interface DeployStateEntry {
+  applicationId?: string;
   hash: string;
   commandCount: number;
   deployedAt: string;
@@ -66,12 +67,20 @@ async function readState(path: string | undefined): Promise<DeployState> {
   if (path === undefined) return empty;
   try {
     const parsed = JSON.parse(await readFile(path, "utf8")) as Partial<DeployState>;
-    return parsed.version === 1 && typeof parsed.scopes === "object" && parsed.scopes !== null
-      ? { version: 1, scopes: parsed.scopes }
-      : empty;
+    if (parsed.version !== 1 || typeof parsed.scopes !== "object" || parsed.scopes === null) return empty;
+    const scopes = Object.entries(parsed.scopes).filter(
+      ([, entry]) => typeof entry === "object" && entry !== null && typeof entry.hash === "string",
+    );
+    return { version: 1, scopes: Object.fromEntries(scopes) };
   } catch {
     return empty;
   }
+}
+
+export function applicationIdFromToken(token: string): string | null {
+  const segment = token.replace(/^Bot\s+/i, "").split(".")[0] ?? "";
+  const decoded = Buffer.from(segment, "base64").toString("utf8");
+  return /^\d{15,25}$/.test(decoded) ? decoded : null;
 }
 
 async function writeState(path: string, state: DeployState): Promise<void> {
@@ -114,10 +123,16 @@ export async function deployWithRest(options: DeployOptions, createRest: () => D
 
   const state = await readState(stateFile);
   const key = scopeKey(guildId);
-  if (!clear && !force && state.scopes[key]?.hash === hash) return { status: "unchanged", ...base };
-
+  const recorded = state.scopes[key];
   const token = resolveToken(config);
+  const hashMatches = !clear && !force && recorded?.hash === hash;
+  if (hashMatches && token === undefined && recorded?.applicationId !== undefined) return { status: "unchanged", ...base };
   if (token === undefined) throw new Error(MISSING_TOKEN_MESSAGE);
+
+  const tokenApplicationId = applicationIdFromToken(token);
+  if (hashMatches && tokenApplicationId !== null && recorded?.applicationId === tokenApplicationId) {
+    return { status: "unchanged", ...base };
+  }
 
   const rest = createRest();
   rest.setToken(token);
@@ -136,6 +151,9 @@ export async function deployWithRest(options: DeployOptions, createRest: () => D
     throw error;
   }
 
+  const stateApplicationId = tokenApplicationId ?? applicationId;
+  if (hashMatches && recorded?.applicationId === stateApplicationId) return { status: "unchanged", ...base };
+
   await rest.put(
     guildId === undefined
       ? Routes.applicationCommands(applicationId)
@@ -147,7 +165,12 @@ export async function deployWithRest(options: DeployOptions, createRest: () => D
     if (clear) {
       delete state.scopes[key];
     } else {
-      state.scopes[key] = { hash, commandCount: commands.length, deployedAt: new Date().toISOString() };
+      state.scopes[key] = {
+        applicationId: stateApplicationId,
+        hash,
+        commandCount: commands.length,
+        deployedAt: new Date().toISOString(),
+      };
     }
     await writeState(stateFile, state);
   }
