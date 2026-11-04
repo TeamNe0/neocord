@@ -36,5 +36,6 @@ export type {
   RunOptions,
   RunSelectOptions,
   RunUserCommandOptions,
+  TestMiddleware,
   TestResult,
 } from "./run.tsx";

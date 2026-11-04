@@ -32,6 +32,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "bun check",
+    "typecheck:consumer": "tsc --noEmit -p test-d/tsconfig.json",
     "test": "bun test",
     "check:package": "publint && attw --pack . --profile esm-only"
   },

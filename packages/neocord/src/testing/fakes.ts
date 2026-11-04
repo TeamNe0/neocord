@@ -259,6 +259,12 @@ export function mockChannel<T extends ChannelType = ChannelType.GuildText>(
       permission_overwrites: [],
       parent_id: null,
       nsfw: false,
+      topic: null,
+      last_message_id: null,
+      rate_limit_per_user: 0,
+      bitrate: 64_000,
+      user_limit: 0,
+      rtc_region: null,
     },
     guild,
   ) as ChannelOfType<T>;

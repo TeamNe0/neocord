@@ -19,6 +19,7 @@ import { renderModalRoute, stringifyParams } from "../runtime/render.tsx";
 import { createShardHelpers } from "../runtime/shards.ts";
 import { createTaskRunner } from "../runtime/tasks.ts";
 import type {
+  AnyContext,
   AppContext,
   ButtonDefinition,
   CommandDefinition,
@@ -27,6 +28,7 @@ import type {
   EventDefinition,
   EventName,
   InferOptions,
+  InteractionKind,
   LayoutProps,
   Manifest,
   ManifestRoute,
@@ -66,12 +68,18 @@ export interface TestResult {
   text: string;
 }
 
+export interface TestMiddleware {
+  readonly __neocord: MiddlewareDefinition["__neocord"];
+  readonly handler: unknown;
+  readonly kinds?: readonly InteractionKind[] | undefined;
+}
+
 export interface RunOptions {
   user?: User;
   guild?: Guild | null;
   member?: GuildMember | null;
   app?: AppContext | Record<string, unknown>;
-  middleware?: readonly MiddlewareDefinition<never>[] | readonly MiddlewareDefinition[];
+  middleware?: readonly TestMiddleware[];
   layouts?: readonly ReactComponentType<LayoutProps>[];
   error?: ReactComponentType<ErrorProps>;
   loading?: ReactComponentType;
@@ -93,7 +101,7 @@ function moduleEntry(file: string, value: unknown): { file: string; module: Modu
 }
 
 function manifestFor(spec: RouteSpec, options: RunOptions): Manifest {
-  const middleware = (options.middleware ?? []) as readonly unknown[];
+  const middleware = options.middleware ?? [];
   const layouts = options.layouts ?? [];
   const route: ManifestRoute = {
     kind: spec.kind,
@@ -243,11 +251,9 @@ function resolveScope(
 
 export interface RunCommandOptions<O extends OptionsRecord = OptionsRecord> extends RunOptions {
   options?: Partial<InferOptions<O>>;
-  commandName?: string;
-  focused?: { name: string; value: string };
 }
 
-export function runCommand<O extends OptionsRecord, G extends boolean>(
+export async function runCommand<O extends OptionsRecord, G extends boolean>(
   definition: CommandDefinition<O, G>,
   options: RunCommandOptions<O> = {},
 ): Promise<TestResult> {
@@ -264,7 +270,7 @@ export interface RunUserCommandOptions extends RunOptions {
   targetMember?: GuildMember | null;
 }
 
-export function runUserCommand<G extends boolean>(
+export async function runUserCommand<G extends boolean>(
   definition: UserCommandDefinition<G>,
   options: RunUserCommandOptions = {},
 ): Promise<TestResult> {
@@ -286,7 +292,7 @@ export interface RunMessageCommandOptions extends RunOptions {
   target: Message;
 }
 
-export function runMessageCommand<G extends boolean>(
+export async function runMessageCommand<G extends boolean>(
   definition: MessageCommandDefinition<G>,
   options: RunMessageCommandOptions,
 ): Promise<TestResult> {
@@ -308,7 +314,7 @@ function customIdFor(route: string, customId: string | undefined, params: unknow
   return customId ?? buildCustomId(route, (params ?? {}) as Record<string, unknown>);
 }
 
-export function runButton<R extends string, G extends boolean>(
+export async function runButton<R extends string, G extends boolean>(
   definition: ButtonDefinition<R, G>,
   options: RunButtonOptions<R> = {},
 ): Promise<TestResult> {
@@ -341,7 +347,7 @@ const SELECT_FAKE_KINDS = {
   mentionable: "mentionable-select",
 } as const;
 
-export function runSelect<R extends string, T extends SelectType, G extends boolean>(
+export async function runSelect<R extends string, T extends SelectType, G extends boolean>(
   definition: SelectDefinition<R, T, G>,
   options: RunSelectOptions<R>,
 ): Promise<TestResult> {
@@ -370,7 +376,7 @@ export interface RunModalOptions<R extends string> extends RunButtonOptions<R> {
   values: DefaultModalValues;
 }
 
-export function runModal<R extends string, S extends ModalSchema, G extends boolean>(
+export async function runModal<R extends string, S extends ModalSchema, G extends boolean>(
   definition: ModalDefinition<R, S, G>,
   options: RunModalOptions<R>,
 ): Promise<TestResult> {
@@ -449,8 +455,31 @@ export async function runTask(definition: TaskDefinition, options: RunBackground
   return { error: captured };
 }
 
-export interface RenderModalOptions<R extends string> {
+export interface RenderModalOptions<R extends string> extends RunBackgroundOptions {
   params?: RouteParamInput<R>;
+  user?: User;
+  guild?: Guild | null;
+  member?: GuildMember | null;
+}
+
+function renderOnlyContext(route: string, options: RenderModalOptions<string>): AnyContext {
+  const unavailable = (): Promise<never> =>
+    Promise.reject(new Error("Replying is not available while renderModalOf() renders a modal."));
+  return {
+    ...createBaseContext(backgroundDeps(options, () => undefined), { id: route, feature: "test" }),
+    kind: "button",
+    interaction: null,
+    guild: options.guild ?? options.member?.guild ?? null,
+    member: options.member ?? null,
+    user: options.user ?? options.member?.user ?? mockUser(),
+    state: {},
+    reply: unavailable,
+    editReply: unavailable,
+    followUp: unavailable,
+    defer: unavailable,
+    deleteReply: unavailable,
+    showModal: unavailable,
+  } as unknown as AnyContext;
 }
 
 export function renderModalOf<R extends string, S extends ModalSchema, G extends boolean>(
@@ -462,6 +491,6 @@ export function renderModalOf<R extends string, S extends ModalSchema, G extends
     definition as unknown as ModalDefinition,
     buildCustomId(definition.route, params),
     stringifyParams(params),
-    null,
+    renderOnlyContext(definition.route, options as RenderModalOptions<string>),
   );
 }
