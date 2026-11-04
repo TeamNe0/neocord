@@ -10,7 +10,7 @@ export default defineMiddleware(
         </Message>
       );
     }
-    ctx.state.moderatorId = ctx.user.id;
+    ctx.state.moderator = true;
     await next();
   },
   { kinds: ["command", "user-command", "button", "select", "modal"] },

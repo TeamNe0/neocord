@@ -18,6 +18,7 @@ import {
 import { eq } from "drizzle-orm";
 import { cases } from "~/db/schema";
 import RootLayout from "~/layout";
+import rootMiddleware from "~/middleware";
 import { createTestDatabase, type TestDatabase } from "~/test-support/database";
 import { createRecordingLogger } from "~/test-support/logger";
 import { countActiveWarnings, createCase } from "./_lib/cases";
@@ -211,6 +212,21 @@ describe("moderation middleware", () => {
     });
 
     expect(text).toContain("Warning issued");
+  });
+
+  test("shares state along the chain, so the root middleware can log the role", async () => {
+    const logger = createRecordingLogger();
+    const moderator = mockMember({ permissions: ["ModerateMembers"] });
+
+    await runCommand(warnCommand, {
+      member: moderator,
+      middleware: [rootMiddleware, moderationMiddleware],
+      app: database.app,
+      logger,
+      options: { user: mockUser(), reason: "Being rude" },
+    });
+
+    expect(logger.lines.some((line) => line.includes(`for moderator ${moderator.id} took`))).toBe(true);
   });
 
   test("does not apply to message commands, so anyone can report", async () => {
