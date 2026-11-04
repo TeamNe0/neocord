@@ -71,8 +71,12 @@ function run(command: string[], cwd: string): void {
   }
 }
 
-function readPackedManifest(tarball: string): string {
-  const result = Bun.spawnSync(["tar", "-xzOf", tarball, "package/package.json"], { stdout: "pipe", stderr: "pipe" });
+function readPackedManifest(directory: string, tarball: string): string {
+  const result = Bun.spawnSync(["tar", "-xzOf", tarball, "package/package.json"], {
+    cwd: directory,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   if (result.exitCode !== 0) throw new Error(`Could not read ${tarball}: ${result.stderr.toString()}`);
   return result.stdout.toString();
 }
@@ -83,7 +87,7 @@ function verifyPack({ directory, manifest }: WorkspacePackage, destination: stri
   const tarball = readdirSync(destination).find((entry) => !before.has(entry));
   if (!tarball) throw new Error(`Packing ${manifest.name} produced no tarball.`);
 
-  const packed = JSON.parse(readPackedManifest(join(destination, tarball))) as PackageManifest;
+  const packed = JSON.parse(readPackedManifest(destination, tarball)) as PackageManifest;
   const ranges = { ...packed.dependencies, ...packed.peerDependencies };
   const unresolved = Object.entries(ranges).filter(([, range]) => /^(workspace|catalog):/.test(range));
   if (unresolved.length > 0) {
@@ -117,7 +121,7 @@ for (const item of packages) {
 if (packDirectory !== null) rmSync(packDirectory, { recursive: true, force: true, maxRetries: 3 });
 
 if (!dryRun && publishedCount > 0) {
-  run(["bunx", "changeset", "tag"], rootDirectory);
+  run(["bunx", "changeset", "git-tag"], rootDirectory);
 }
 
 console.log(`${dryRun ? "Checked" : "Published"} ${publishedCount} package(s).`);
