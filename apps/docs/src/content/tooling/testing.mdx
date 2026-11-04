@@ -1,0 +1,269 @@
+neocord has two levels of testing. `neocord test` validates every route and command payload, then runs your test files. Inside those tests, `neocord/testing` runs your handlers through the real dispatch pipeline on fake interactions, with no gateway connection.
+
+## `neocord test`
+
+```pm
+run test
+```
+
+The command runs these steps in order, and stops at the first failure:
+
+1. Loads the env files in `test` mode, sets `SKIP_ENV_VALIDATION=true` unless you set it, and sets `NODE_ENV` to `test`. `.env.local` is skipped so tests stay reproducible.
+2. Scans the project and generates code. Any scan problem stops the run.
+3. Validates, unless `--no-validate` is set. This bundles a small entry that calls `validateManifest` and `serializeCommands`. Warnings are printed, and errors fail the run. It catches a wrong route id, a missing `group.ts`, or too many options, without talking to Discord.
+4. Exits here if `--validate-only` is set.
+5. Runs the test runner.
+
+| Argument or flag | Effect |
+| --- | --- |
+| `[files...]` | Test files or filters, forwarded to the runner. |
+| `--watch` | Re-runs tests on change. |
+| `--coverage` | Collects coverage. |
+| `--no-validate` | Skips route and command validation. |
+| `--validate-only` | Validates without running tests. |
+
+`--no-validate` and `--validate-only` cannot be used together. See the [CLI reference](/docs/cli#neocord-test) for the rest of the CLI.
+
+### Which runner is used
+
+| Situation | Runner |
+| --- | --- |
+| `vitest` is in `dependencies`, `devDependencies` or `optionalDependencies` | `vitest run --passWithNoTests`, or `vitest watch` with `--watch`. If it is listed but not installed, the command fails and asks you to install your dependencies. |
+| Otherwise, Bun is available | `bun --no-env-file test`. If there are no test files and no file arguments, it prints `No tests found.` and succeeds. |
+| Neither | The command fails with `No test runner found.` and a hint to install Bun or add vitest. |
+
+<Callout kind="warn">
+
+A project without vitest needs Bun on `PATH` to run its tests, even if you installed with npm, pnpm or yarn and run the bot on Node. Add vitest if Bun is not an option.
+
+</Callout>
+
+The test scaffolded by `create-neocord` uses `node:test` and `node:assert/strict`, and it runs under `bun test`:
+
+```tsx title="src/features/general/commands/ping/command.test.tsx"
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { runCommand } from "neocord/testing";
+import command from "./command";
+
+test("ping replies with the text it was given", async () => {
+  const { replies } = await runCommand(command, { options: { message: "hello" } });
+
+  assert.equal(replies.length, 1);
+  assert.match(JSON.stringify(replies[0]), /hello/);
+});
+```
+
+Test files next to a route are not routes. `classifyFile` ignores any file that ends in `.test.ts`, `.test.tsx`, `.spec.ts` or `.spec.tsx`.
+
+## Testing a command
+
+`runCommand` takes the definition your file exports, runs it and returns everything it sent. The options are the resolved values your handler would receive.
+
+```tsx title="src/features/moderation/commands/ban/command.test.tsx"
+import { expect, test } from "bun:test";
+import { mockMember, mockUser, runCommand } from "neocord/testing";
+import command from "./command";
+
+test("asks before banning", async () => {
+  const user = mockUser({ username: "ada" });
+  const { text, ephemeral, error } = await runCommand(command, {
+    options: { user },
+    member: mockMember({ permissions: ["BanMembers"] }),
+  });
+
+  expect(error).toBeNull();
+  expect(ephemeral).toBe(true);
+  expect(text).toContain("ada");
+});
+```
+
+`guildOnly` and `permissions` get a passing guild and member by default. Pass `guild: null` or an explicit `member` to test rejection:
+
+```tsx title="src/features/moderation/commands/ban/command.test.tsx"
+test("refuses without the permission", async () => {
+  const { text } = await runCommand(command, {
+    options: { user: mockUser() },
+    member: mockMember({ permissions: [] }),
+  });
+
+  expect(text).toContain("You need these permissions");
+});
+
+test("refuses in a DM", async () => {
+  const { text } = await runCommand(command, {
+    options: { user: mockUser() },
+    guild: null,
+  });
+
+  expect(text).toContain("can only be used in a server");
+});
+```
+
+## Testing middleware, layouts and errors
+
+Pass the same files the route would get from the manifest. They run in the order you give them.
+
+```tsx title="src/features/moderation/commands/ban/command.test.tsx"
+import auth from "../../middleware";
+import Layout from "../../layout";
+import ErrorView from "../../error";
+
+const result = await runCommand(command, {
+  options: { user: mockUser() },
+  middleware: [auth],
+  layouts: [Layout],
+  error: ErrorView,
+});
+```
+
+If a handler throws, the first error is on `result.error`. Your error view or the built-in message is in `result.replies`, `result.edits` or `result.followUps`, depending on whether the interaction was already acknowledged.
+
+## Testing buttons, selects and modals
+
+Address these by `params`, which builds the custom id from the route, or by a raw `customId`.
+
+```tsx title="src/features/moderation/buttons/confirm-ban/[userId]/button.test.tsx"
+import { expect, test } from "bun:test";
+import { runButton } from "neocord/testing";
+import button from "./button";
+
+test("updates the message", async () => {
+  const { updates, text } = await runButton(button, { params: { userId: "123" } });
+
+  expect(updates).toHaveLength(1);
+  expect(text).toContain("123");
+});
+```
+
+`runSelect` needs `values`, and takes the resolved `users`, `members`, `roles` and `channels`:
+
+```tsx
+const result = await runSelect(select, {
+  values: [role.id],
+  roles: [role],
+});
+```
+
+`runModal` needs the raw `values`. They go through the modal's `schema`, so a failed parse replies with the issues and does not call `submit`:
+
+```tsx
+const result = await runModal(modal, {
+  params: { userId: "123" },
+  values: { reason: "Posting spam" },
+});
+```
+
+`renderModalOf` renders a modal's `render` function to the payload Discord would receive, without an interaction:
+
+```tsx
+const payload = renderModalOf(modal, { params: { userId: "123" } });
+
+expect(payload.custom_id).toBe("moderation/ban-reason/123");
+```
+
+If a handler calls `ctx.showModal`, pass the modal definitions in `modals`, and the result is on `result.modal`:
+
+```tsx
+const { modal } = await runButton(button, {
+  params: { userId: "123" },
+  modals: [banReason],
+});
+
+expect(modal?.title).toBe("Ban reason");
+```
+
+## Testing context menus
+
+`runUserCommand` takes a `target` user, which defaults to a new `mockUser()`, and an optional `targetMember`. `runMessageCommand` requires a `target` message, and `mockMessage` builds one with an `author` and `content`:
+
+```tsx
+const author = mockUser({ username: "ada" });
+
+const { text } = await runMessageCommand(quote, {
+  target: mockMessage({ author, content: "Hello there" }),
+});
+
+expect(text).toContain("Hello there");
+```
+
+## Testing autocomplete
+
+`runAutocomplete` runs an option's `autocomplete` handler and resolves to `{ choices, error }`. Name the option, and pass what the user has typed as `value`:
+
+```tsx
+const { choices, error } = await runAutocomplete(quiz, { option: "topic", value: "SPA" });
+
+expect(error).toBeNull();
+expect(choices.map((choice) => choice.value)).toContain("space");
+```
+
+As in production, an error in the handler results in empty choices, with the error on `error`.
+
+## Testing live sessions
+
+Pass `live: true` and the session stays open on the result's `live` property. It is `null` if the handler did not render an `onClick` or `onSelect`.
+
+```tsx
+const { live } = await runCommand(counter, { live: true });
+
+const first = await live!.click("Add");
+expect(first.text).toContain("Count: 1");
+
+const second = await live!.click("Add", { user: mockUser() });
+expect(second.text).toContain("Count: 2");
+
+await live!.close();
+```
+
+| Method | Behaviour |
+| --- | --- |
+| `live.click(label, options?)` | Clicks the button with that label on the live message. Rejects with the labels it found if there is no match. |
+| `live.select(values, options?)` | Chooses values in a select. Pass `placeholder` in `options` to pick one select when the message has several. |
+| `live.close()` | Ends the session. Call it at the end of the test. |
+
+`click` and `select` take `user` and `member` in `options`, so you can test who is allowed to click. Each resolves to a new `TestResult` for that event.
+
+## Testing ctx.commands
+
+Pass `commands` to set what `ctx.commands` returns:
+
+```tsx
+const { text } = await runCommand(help, {
+  commands: [
+    { kind: "command", name: "ping", description: "Check the bot", feature: "general", guildOnly: false, permissions: [] },
+  ],
+});
+
+expect(text).toContain("/ping");
+```
+
+## Testing events and tasks
+
+`runEvent` and `runTask` resolve to `{ error }`. They run the handler once, and errors are captured instead of thrown, as they are in production.
+
+```ts
+const { error } = await runEvent(guildMemberAdd, [mockMember()]);
+
+const task = await runTask(cleanup);
+expect(task.error).toBeNull();
+```
+
+`runTask` runs the task once regardless of its `every`, `runOnStart` and `shard` values.
+
+## Testing the app context
+
+Pass a fake as `app` and your handler sees it on `ctx.app`:
+
+```tsx
+const notes = new Map<string, string>();
+
+await runCommand(command, {
+  options: { note: "hello" },
+  app: { db: createFakeDb(notes) },
+});
+```
+
+## Reference
+
+The [`neocord/testing` API reference](/docs/api/testing) lists every function, option and result field.

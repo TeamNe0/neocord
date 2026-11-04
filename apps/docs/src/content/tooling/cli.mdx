@@ -1,0 +1,212 @@
+`@neocord/cli` provides the `neocord` binary. It scans your file routes, generates code and types, bundles the bot and runs it. Scaffolded projects install it as a dev dependency and call it from `package.json` scripts.
+
+```pm
+add -d @neocord/cli
+```
+
+`@neocord/cli` has `neocord` as a peer dependency, and its own `package.json` requires Node 22.22 or later.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| [`neocord dev`](#neocord-dev) | Generates, bundles and runs the bot, restarting on change. |
+| [`neocord build`](#neocord-build) | Creates the production bundle in `.neocord/build`. |
+| [`neocord start`](#neocord-start) | Launches the sharding manager from the production bundle. |
+| [`neocord deploy`](#neocord-deploy) | Registers commands with Discord, skipping when nothing changed. |
+| [`neocord test`](#neocord-test) | Validates routes and command payloads, then runs the project's tests. |
+| [`neocord typegen`](#neocord-typegen) | Writes `.neocord/manifest.ts`, `.neocord/types.d.ts` and the entry files. |
+| [`neocord routes`](#neocord-routes) | Prints the route table. |
+| [`neocord lint`](#neocord-lint) | Runs the project's ESLint. |
+| [`neocord info`](#neocord-info) | Prints versions and environment for bug reports. |
+
+## Global flags
+
+| Flag | Effect |
+| --- | --- |
+| `--cwd <dir>` | Runs as if started in this directory. |
+| `-v`, `--version` | Prints the CLI version. |
+| `-h`, `--help` | Shows help. Also works after a command, such as `neocord deploy --help`. |
+
+The project root is the given directory or the nearest parent that contains a `neocord.config.ts`, `neocord.config.mts`, `neocord.config.js` or `neocord.config.mjs`, checked in that order.
+
+## Command reference
+
+### `neocord dev`
+
+Runs the bot in development mode. On each cycle it loads the env files, loads the config, scans the routes, stops on any scan problem, generates code, bundles into `.neocord/dev`, syncs commands, and starts the bot. It watches the source folder, the features folder if it is outside the source folder, the config, the env files for development mode and `tsconfig.json`. It ignores `node_modules`, `.neocord`, `.git` and test files.
+
+| Flag | Effect |
+| --- | --- |
+| `--shards <n>` | Runs through the sharding manager with `n` shards. Must be a positive integer. Without it, `dev.shards` from the config is used, which defaults to 1. |
+| `--no-deploy` | Does not sync commands to `dev.guildId`. |
+
+With one shard, the bot runs `shard.js` directly. With more, it runs `manager.js` and sets `NEOCORD_SHARD_COUNT`.
+
+Commands sync to the guild in `dev.guildId` when they change, using `.neocord/deploy.dev.json` to detect changes. If `dev.guildId` is not set, the CLI warns once and does not sync. A failed sync is a warning and the bot still starts.
+
+If bundling or scanning fails, or the bot exits on its own, the CLI prints the reason and waits for changes. Press Ctrl+C once to stop the bot and a second time to force kill it. The child gets `SIGTERM` first and `SIGKILL` after 5 seconds.
+
+### `neocord build`
+
+Creates the production bundle in `.neocord/build`: `shard.js`, `manager.js` and `deploy.js`, each with a linked source map. It generates code first, stops on any scan problem, and prints a table of routes per feature and a table of bundle sizes.
+
+| Flag | Effect |
+| --- | --- |
+| `--no-validate` | Skips validating routes and command payloads. |
+| `--typecheck` | Runs `tsc --noEmit` before bundling. It uses the `tsc` from `@typescript/native`, or from `typescript` if that is missing, and stops the build if type checking fails. |
+
+Bundling uses esbuild with `packages: "external"`, so `node_modules` must be present at runtime.
+
+### `neocord start`
+
+Launches `.neocord/build/manager.js`. It fails with `Run neocord build first.` if the file does not exist.
+
+| Flag | Effect |
+| --- | --- |
+| `--shards <n>` | Total shard count, passed to the manager as `NEOCORD_SHARD_COUNT`. Must be a positive integer. |
+| `--deploy` | Deploys commands before starting. |
+
+Commands are also deployed before starting when `deploy.mode` is `"auto"` in the config. This deploy uses the unchanged-hash check, and it fails with the same message if `deploy.js` is missing. See [Deploying commands](/docs/deployment/deploying-commands).
+
+### `neocord deploy`
+
+Registers commands with Discord, skipping when the hash in `.neocord/deploy.json` is unchanged. If `.neocord/build/deploy.js` is missing or older than the source folder, the features folder, the config or `tsconfig.json`, it builds first, with validation.
+
+| Flag | Effect |
+| --- | --- |
+| `--guild <id>` | Deploys to one guild instead of globally. |
+| `--force` | Deploys even when the command hash is unchanged. |
+| `--dry-run` | Prints what would be deployed, as a tree, without calling Discord. |
+
+### `neocord test`
+
+Generates code, validates all routes and command payloads, then runs the project's tests. The test runner is vitest if it is a project dependency, otherwise `bun test`. Read [Testing](/docs/testing) for runner selection and the test API.
+
+```sh
+neocord test [files...]
+```
+
+| Argument or flag | Effect |
+| --- | --- |
+| `[files...]` | Test files or filters, forwarded to the runner. |
+| `--watch` | Re-runs tests on change. |
+| `--coverage` | Collects coverage. |
+| `--no-validate` | Skips route and command validation. |
+| `--validate-only` | Validates without running tests. |
+
+`--no-validate` and `--validate-only` cannot be used together.
+
+### `neocord typegen`
+
+Writes `.neocord/manifest.ts`, `.neocord/types.d.ts` and the files in `.neocord/entries`. Files are only written when their content changes. Problems found by the scan are reported after the files are written, and the command exits with an error.
+
+Run it before `tsc`, because `.neocord/types.d.ts` holds your route types. The scaffolded `typecheck` script is `neocord typegen && tsc --noEmit`.
+
+### `neocord routes`
+
+Prints a table of every route with its kind, id, feature and file, sorted by kind and then id.
+
+| Flag | Effect |
+| --- | --- |
+| `--json` | Prints machine-readable JSON with `routes` and `issues`. Each route includes its `segments`, `middleware`, `layouts`, `error` and `loading`. The exit code is 1 if there are issues. |
+
+### `neocord lint`
+
+Runs ESLint on the project root using the `eslint` installed in the project. It fails with an install hint if ESLint is not installed. See [ESLint](/docs/eslint).
+
+| Flag | Effect |
+| --- | --- |
+| `--fix` | Applies automatic fixes. |
+
+### `neocord info`
+
+Prints versions and environment for bug reports: the versions of `@neocord/cli`, `neocord`, `@neocord/react`, `@neocord/routing`, `discord.js` and `react`, the resolved runtime, the Node and Bun versions, the operating system and the project root. It prints only whether `DISCORD_TOKEN` is set, never its value.
+
+## Environment files
+
+Env files load in this order, and later files override earlier ones:
+
+1. `.env`
+2. `.env.<mode>`
+3. `.env.local`, which is skipped in test mode so tests stay reproducible
+4. `.env.<mode>.local`
+
+The real environment always wins over every file. `NODE_ENV` is set to the mode.
+
+| Command | Mode |
+| --- | --- |
+| `neocord dev`, `neocord typegen`, `neocord routes`, `neocord info`, `neocord lint` | `development` |
+| `neocord build`, `neocord start`, `neocord deploy` | `production` |
+| `neocord test` | `test` |
+
+Bun autoloads `.env` files, which would make them look like real environment variables. When the CLI runs on Bun, it removes values that match an env file, and it starts the bot with `--no-env-file` so the order above is the one that applies.
+
+## `SKIP_ENV_VALIDATION`
+
+[`src/env.ts`](/docs/type-safety/environment) checks `SKIP_ENV_VALIDATION`, and some commands need to load your config without real secrets. Those commands set it to `true` unless you already set it, so they work in a fresh clone.
+
+| Sets `SKIP_ENV_VALIDATION=true` | Never sets it |
+| --- | --- |
+| `neocord typegen` | `neocord dev` |
+| `neocord routes` | `neocord start` |
+| `neocord build` | `neocord deploy` without `--dry-run` |
+| `neocord info` | |
+| `neocord lint` | |
+| `neocord test` | |
+| `neocord deploy --dry-run` | |
+
+The commands that never set it report invalid variables as a readable error, listing each variable and its problem, with the hint `Set the missing variables in the environment or a .env file.`
+
+<Callout kind="warn">
+
+`neocord deploy` can build first when the bundle is stale. A real deploy needs valid variables for that step too, because it does not skip validation.
+
+</Callout>
+
+## Runtime
+
+The `runtime` field in `neocord.config` chooses what runs the bot, and every command uses the same choice.
+
+| `runtime` | Behaviour |
+| --- | --- |
+| `"auto"` | Bun if the CLI was invoked through Bun, otherwise Node. This is the default. |
+| `"bun"` | Bun. The command fails if Bun is not on `PATH`. |
+| `"node"` | Node. The command fails if Node is not on `PATH`. |
+
+The CLI counts as invoked through Bun when it runs on Bun, or when `npm_config_user_agent` starts with `bun`. Bun runs with `--no-env-file`, and Node runs with `--enable-source-maps`.
+
+## The `.neocord` folder
+
+Everything in `.neocord` is generated, so keep it out of version control. The scaffolded `.gitignore` already does this.
+
+| Path | Contents |
+| --- | --- |
+| `.neocord/manifest.ts` | Static imports of every route, group, feature, segment and context file, and the `manifest` object built from them. |
+| `.neocord/types.d.ts` | Declarations that register your route ids and app context. See [How type safety works](/docs/type-safety). |
+| `.neocord/entries/shard.ts` | Calls `startBot({ config, manifest })`. |
+| `.neocord/entries/manager.ts` | Calls `startManager({ config, shardFile })`, reading the shard count from `NEOCORD_SHARD_COUNT`. |
+| `.neocord/entries/deploy.ts` | Calls `deployCommands` with options from `NEOCORD_DEPLOY_OPTIONS`. |
+| `.neocord/entries/validate.ts` | Calls `validateManifest` and `serializeCommands`, and prints the issues as JSON. |
+| `.neocord/build` | The production bundle from `neocord build`. |
+| `.neocord/dev` | The development bundle from `neocord dev`. |
+| `.neocord/cache` | The bundled config and the bundled validation entry. |
+| `.neocord/deploy.json` | The last deployed command hash for each scope, used by `neocord deploy`. |
+| `.neocord/deploy.dev.json` | The same, used by `neocord dev`. |
+
+## Exit codes
+
+Every command exits with 0 on success. A failed command prints the error with its details and hints, and exits with a non-zero code. `neocord lint`, `neocord test` and `neocord start` exit with the code of the process they ran.
+
+## Programmatic API
+
+`@neocord/cli` also exports its project functions:
+
+```ts
+import { generate, loadConfig, loadEnvFiles, scanProject } from "@neocord/cli";
+
+const root = process.cwd();
+const { config, file } = await loadConfig({ root });
+const scan = await scanProject({ root, sourceDir: config.sourceDir, featuresDir: config.featuresDir });
+await generate(scan, { configFile: file });
+```

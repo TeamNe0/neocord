@@ -1,0 +1,43 @@
+`@neocord/eslint-plugin` exports the plugin as its default export, and the rule modules as the named export `rules`. For setup and a description of each rule, read [ESLint](/docs/eslint).
+
+```js
+import neocord, { rules } from "@neocord/eslint-plugin";
+```
+
+It requires ESLint 9 or 10 as a peer dependency, and depends only on `@neocord/routing`.
+
+## Default export
+
+| Member | Type | Meaning |
+| --- | --- | --- |
+| `meta` | `{ name: string; version: string; namespace: string }` | The package name and version, and the `@neocord` namespace. |
+| `rules` | `Record<NeocordRuleName, Rule.RuleModule>` | The rule modules. |
+| `configs.recommended` | `Linter.Config` | File contracts and correctness rules are errors, advice rules are warnings, and `require-error-boundary` is off. |
+| `configs.strict` | `Linter.Config` | Every rule is an error. |
+
+Each config registers the plugin under `plugins: { "@neocord": plugin }`. Neither sets a parser.
+
+## Settings
+
+Read from `settings.neocord` in your flat config.
+
+| Setting | Type | Default |
+| --- | --- | --- |
+| `sourceDir` | `string` | `"src"` |
+| `featuresDir` | `string` | `"<sourceDir>/features"` |
+
+Both are relative to the directory ESLint runs in.
+
+## Rule metadata
+
+Every rule has `meta.docs.description` and `meta.docs.url`, which is `https://neocord.dev/docs/eslint/<rule-name>`. No rule takes options, because every rule has an empty `schema`. `route-matches-path` is the only rule with `fixable: "code"`, and `route-matches-path`, `valid-event-name`, `prefer-guild-only` and `no-unawaited-context-calls` have `hasSuggestions`.
+
+## Exported types
+
+| Type | Definition |
+| --- | --- |
+| `NeocordPlugin` | The type of the default export. Extends `ESLint.Plugin`. |
+| `NeocordRuleName` | The union of all rule names, `keyof typeof rules`. |
+| `NeocordSeverity` | `"off" \| "warn" \| "error"` |
+| `NeocordConfigName` | `"recommended" \| "strict"` |
+| `NeocordSettings` | `{ sourceDir?: string; featuresDir?: string }` |

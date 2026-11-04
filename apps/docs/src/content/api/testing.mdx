@@ -1,0 +1,129 @@
+`neocord/testing` runs the real dispatch pipeline on fake interactions, with no gateway connection. For how to use it, read [Testing](/docs/testing).
+
+```ts
+import {
+  mockChannel,
+  mockGuild,
+  mockMember,
+  mockMessage,
+  mockRole,
+  mockUser,
+  renderModalOf,
+  runAutocomplete,
+  runButton,
+  runCommand,
+  runEvent,
+  runMessageCommand,
+  runModal,
+  runSelect,
+  runTask,
+  runUserCommand,
+} from "neocord/testing";
+```
+
+## Run functions
+
+| Function | Signature |
+| --- | --- |
+| `runCommand` | `(definition, options?: RunCommandOptions) => Promise<TestResult>` |
+| `runAutocomplete` | `(definition, options: RunAutocompleteOptions) => Promise<AutocompleteResult>` |
+| `runUserCommand` | `(definition, options?: RunUserCommandOptions) => Promise<TestResult>` |
+| `runMessageCommand` | `(definition, options: RunMessageCommandOptions) => Promise<TestResult>` |
+| `runButton` | `(definition, options?: RunButtonOptions) => Promise<TestResult>` |
+| `runSelect` | `(definition, options: RunSelectOptions) => Promise<TestResult>` |
+| `runModal` | `(definition, options: RunModalOptions) => Promise<TestResult>` |
+| `runEvent` | `(definition, args, options?: RunBackgroundOptions) => Promise<BackgroundResult>` |
+| `runTask` | `(definition, options?: RunBackgroundOptions) => Promise<BackgroundResult>` |
+| `renderModalOf` | `(definition, options?: RenderModalOptions) => ModalRenderResult` |
+
+## `TestResult`
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `replies` | `RenderResult[]` | Payloads sent as the first reply. |
+| `updates` | `RenderResult[]` | Payloads that updated the message a component is on. |
+| `followUps` | `RenderResult[]` | Payloads sent as follow-ups. |
+| `edits` | `RenderResult[]` | Payloads that edited the reply. |
+| `modal` | `ModalRenderResult \| null` | The modal that was shown. |
+| `deferred` | `boolean` | Whether the interaction was deferred. |
+| `deferredUpdate` | `boolean` | Whether a component update was deferred. |
+| `ephemeral` | `boolean` | Whether the response was ephemeral. |
+| `error` | `unknown` | The first error the handler threw, or `null`. |
+| `text` | `string` | All text from replies, updates, edits and follow-ups, joined by newlines. |
+| `live` | `LiveTestSession \| null` | The open session, when the run set `live: true` and the handler started one. |
+
+## `LiveTestSession`
+
+| Member | Signature | Meaning |
+| --- | --- | --- |
+| `click` | `(label: string, options?: LiveEventOptions) => Promise<TestResult>` | Clicks the button with that label. Rejects if there is none, listing the labels it found. |
+| `select` | `(values: readonly string[], options?: LiveSelectOptions) => Promise<TestResult>` | Chooses values in a select. Rejects if there is none. |
+| `close` | `() => Promise<void>` | Ends the session. |
+
+`LiveEventOptions` is `{ user?: User; member?: GuildMember \| null }`. `LiveSelectOptions` adds `placeholder`, which picks a select by its placeholder.
+
+## `RunOptions`
+
+Every interaction run function accepts these.
+
+| Option | Type | Meaning |
+| --- | --- | --- |
+| `user` | `User` | The user who ran it. Defaults to the member's user, or a new `mockUser()`. |
+| `guild` | `Guild \| null` | The guild. `null` runs it outside a server. |
+| `member` | `GuildMember \| null` | The member. |
+| `app` | `AppContext \| Record<string, unknown>` | The value of `ctx.app`. Defaults to an empty object. |
+| `middleware` | `readonly TestMiddleware[]` | Middleware definitions, in order. |
+| `layouts` | `readonly ComponentType<LayoutProps>[]` | Layout components, outermost first. |
+| `error` | `ComponentType<ErrorProps>` | The error view. |
+| `loading` | `ComponentType` | The loading view. |
+| `modals` | `readonly ModalDefinition[]` | Modals that `ctx.showModal` can open. |
+| `commands` | `readonly CommandInfo[]` | The value of `ctx.commands`. Defaults to the commands in the run, which is only the command under test if there is one. |
+| `live` | `boolean` | Keeps a live session open on `result.live`. Close it with `live.close()`. |
+| `logger` | `Logger` | The logger. Defaults to a silent one. |
+| `autoDeferAfter` | `number \| false` | Milliseconds before an automatic defer. Defaults to `false`. |
+| `hook` | `ApiHook` | Called with the method name and payload of each fake API call. Throw from it to simulate a Discord error. |
+
+A guild and member are created for you when the definition sets `guildOnly` or non-empty `permissions`, and the member gets those permissions. Without them, and with no `guild` or `member` passed, the run has neither.
+
+## Options per function
+
+| Function | Extra options |
+| --- | --- |
+| `runCommand` | `options`: a partial object of resolved option values. |
+| `runAutocomplete` | `option`: the option name, required. `value`: what the user typed, defaulting to an empty string. |
+| `runUserCommand` | `target`: `User`, defaulting to a new `mockUser()`. `targetMember`: `GuildMember \| null`. |
+| `runMessageCommand` | `target`: `Message`, required. |
+| `runButton` | `customId`, or `params` to build it from the route. `message`: the message the button is on. |
+| `runSelect` | Everything `runButton` takes, plus `values` (required), `users`, `members`, `roles` and `channels`. |
+| `runModal` | Everything `runButton` takes, plus `values` (required), a `DefaultModalValues` record. |
+
+## `BackgroundResult` and `RunBackgroundOptions`
+
+`runEvent` and `runTask` resolve to `{ error: unknown }`, which is `null` if nothing was thrown. Their options are `app` and `logger`.
+
+`runEvent` takes the client event's arguments as an array. `runTask` always runs the task once, on start.
+
+## `AutocompleteResult`
+
+`runAutocomplete` resolves to `{ choices: OptionChoice[]; error: unknown }`. `error` is `null` if the handler did not throw.
+
+## `renderModalOf`
+
+Renders a modal to its payload. `RenderModalOptions` has `app` and `logger`, plus `params`, `user`, `guild` and `member`. Replying is not available while it renders, so any reply method on the context rejects.
+
+## Mocks
+
+`mockUser`, `mockMember`, `mockGuild`, `mockChannel` and `mockRole` return real discord.js structures, so `member.permissions` and similar work. `mockMessage` returns a stub. Every option is optional, and ids default to generated values.
+
+| Function | Options |
+| --- | --- |
+| `mockUser` | `id`, `username`, `globalName`, `bot` |
+| `mockGuild` | `id`, `name`, `ownerId` |
+| `mockRole` | `id`, `guild`, `name`, `permissions` |
+| `mockMember` | `user`, `guild`, `nickname`, `roles`, `permissions` |
+| `mockChannel` | `id`, `guild`, `name`, `type`, which defaults to `ChannelType.GuildText` |
+| `mockMessage` | `id`, `author`, `content`, `components`, `hook`, `recording` |
+
+## Exported types
+
+`AutocompleteResult`, `BackgroundResult`, `LiveEventOptions`, `LiveSelectOptions`, `LiveTestSession`, `MockChannelOptions`, `MockGuildOptions`, `MockMemberOptions`, `MockMessageOptions`, `MockRoleOptions`, `MockUserOptions`, `RenderModalOptions`, `RunAutocompleteOptions`, `RunBackgroundOptions`, `RunButtonOptions`, `RunCommandOptions`, `RunMessageCommandOptions`, `RunModalOptions`, `RunOptions`, `RunSelectOptions`, `RunUserCommandOptions`, `TestMiddleware` and `TestResult`.

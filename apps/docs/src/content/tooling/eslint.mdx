@@ -1,0 +1,119 @@
+`@neocord/eslint-plugin` checks what each routed file has to export, catches Discord limits before you deploy, and gives best practice advice. All rules read the AST only, so they need no type information and work with any parser. The plugin supports flat config only, on ESLint 9 and 10.
+
+## Setup
+
+A project scaffolded with `--eslint` already has this. To add it by hand, install the packages:
+
+```pm
+add -d eslint @neocord/eslint-plugin @typescript-eslint/parser
+```
+
+Then create the config. The plugin's configs do not set a parser, so add `@typescript-eslint/parser` yourself:
+
+```js title="eslint.config.js"
+import neocord from "@neocord/eslint-plugin";
+import tsParser from "@typescript-eslint/parser";
+
+export default [
+  { ignores: [".neocord/**", "dist/**"] },
+  {
+    files: ["**/*.{ts,tsx}"],
+    languageOptions: { parser: tsParser, parserOptions: { ecmaFeatures: { jsx: true } } },
+  },
+  neocord.configs.recommended,
+];
+```
+
+Run it with [`neocord lint`](/docs/cli#neocord-lint):
+
+```sh
+neocord lint
+neocord lint --fix
+```
+
+If you use TypeScript 7, `typescript` must be aliased to TypeScript 6 because `@typescript-eslint/parser` needs the TypeScript 6 API. [Manual setup](/docs/manual-setup) explains the alias, and [Troubleshooting](/docs/troubleshooting) covers the errors you see without it.
+
+## Configs
+
+| Config | Behaviour |
+| --- | --- |
+| `neocord.configs.recommended` | File contracts and correctness rules are errors, advice rules are warnings, and `require-error-boundary` is off. |
+| `neocord.configs.strict` | Every rule is an error, including `require-error-boundary`. |
+
+Both configs register the plugin under the `@neocord` namespace, so rule ids look like `@neocord/no-process-env`. To change one rule, add it after the config:
+
+```js title="eslint.config.js"
+export default [
+  neocord.configs.recommended,
+  { rules: { "@neocord/no-process-env": "off" } },
+];
+```
+
+## Settings
+
+Paths are computed from the directory ESLint runs in. If your source lives elsewhere, set the same values you use in `defineConfig`:
+
+```js title="eslint.config.js"
+export default [
+  neocord.configs.recommended,
+  { settings: { neocord: { sourceDir: "src", featuresDir: "src/features" } } },
+];
+```
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `sourceDir` | `"src"` | Source folder, relative to the ESLint working directory. |
+| `featuresDir` | `"<sourceDir>/features"` | Features folder, relative to the ESLint working directory. |
+
+<Callout kind="warn">
+
+In a monorepo where ESLint runs from the repository root, include the project folder, such as `sourceDir: "apps/bot/src"`. Otherwise files are treated as outside the project and the path-based rules do nothing.
+
+</Callout>
+
+## Rules
+
+The severity column shows `recommended` and then `strict`. "Fix" means `eslint --fix` can correct it, and "Suggestion" means your editor offers a change.
+
+### File contracts
+
+| Rule | Severity | Fixes | Description |
+| --- | --- | --- | --- |
+| [`require-default-export`](/docs/eslint/require-default-export) | error / error | | Route, group, feature, context and middleware files need a default export. Layout, error and loading files must default-export a function component. |
+| [`require-define-helper`](/docs/eslint/require-define-helper) | error / error | | The default export must be a call to the matching helper, such as `defineCommand` in `commands` and `defineUserCommand` in `user-commands`. |
+| [`route-matches-path`](/docs/eslint/route-matches-path) | error / error | Fix, Suggestion | The first argument of `defineButton`, `defineSelect`, `defineModal` and `defineEvent` must be a literal equal to the id from the path. |
+| [`no-extra-exports`](/docs/eslint/no-extra-exports) | error / error | | Routed files export only the default. Type exports are fine. |
+| [`no-unknown-route-file`](/docs/eslint/no-unknown-route-file) | error / error | | Reports files in the features folder that neocord cannot classify, and why. |
+| [`valid-command-name`](/docs/eslint/valid-command-name) | error / error | | Folders under `commands` must be valid lowercase Discord names, at most three levels deep. |
+| [`no-command-with-subcommands`](/docs/eslint/no-command-with-subcommands) | error / error | | A folder with a `command` file cannot also hold nested commands. |
+| [`require-group-file`](/docs/eslint/require-group-file) | warn / error | | Nested commands need a `group.ts` in their root command folder, for the description. |
+| [`valid-event-name`](/docs/eslint/valid-event-name) | error / error | Suggestion | `defineEvent` must name a real discord.js client event, and the closest name is suggested. |
+| [`valid-command-definition`](/docs/eslint/valid-command-definition) | error / error | | Checks required properties, description lengths, option names, option descriptions and the option count. |
+| [`valid-modal-definition`](/docs/eslint/valid-modal-definition) | error / error | | `defineModal` needs a literal or function `title` of at most 45 characters, plus `render` and `submit`. |
+
+### UI
+
+| Rule | Severity | Fixes | Description |
+| --- | --- | --- | --- |
+| [`no-embed-builders`](/docs/eslint/no-embed-builders) | warn / error | | Forbids discord.js builders and raw `embeds` or `components` in send calls. Use `@neocord/react`. |
+| [`valid-component-nesting`](/docs/eslint/valid-component-nesting) | error / error | | Checks the static JSX structure of `@neocord/react` components, including aliased imports. Custom components and expressions are skipped. |
+| [`prefer-route-prop`](/docs/eslint/prefer-route-prop) | warn / error | | Recommends `route` over a literal `customId` on buttons and selects. Modal fields are exempt. |
+| [`no-text-in-action-row`](/docs/eslint/no-text-in-action-row) | error / error | | Forbids text directly inside `ActionRow`, `MediaGallery` and selects. |
+
+### Best practices
+
+| Rule | Severity | Fixes | Description |
+| --- | --- | --- | --- |
+| [`no-direct-interaction-reply`](/docs/eslint/no-direct-interaction-reply) | warn / error | | Forbids `ctx.interaction.reply` and friends. Use `ctx.reply` or return JSX. |
+| [`no-client-instantiation`](/docs/eslint/no-client-instantiation) | error / error | | Forbids creating a discord.js `Client` or `ShardingManager`, or calling `.login()` on a client, in project source. |
+| [`no-process-env`](/docs/eslint/no-process-env) | warn / error | | Forbids `process.env` outside `src/env.ts` and root `*.config.*` files. |
+| [`no-hardcoded-token`](/docs/eslint/no-hardcoded-token) | error / error | | Forbids strings shaped like Discord tokens. |
+| [`no-blocking-calls`](/docs/eslint/no-blocking-calls) | warn / error | | Forbids `*Sync` calls from `fs` and `child_process`, and `Atomics.wait`, in route files. |
+| [`prefer-guild-only`](/docs/eslint/prefer-guild-only) | warn / error | Suggestion | Recommends `guildOnly: true` over `ctx.guild!` and `ctx.member!`. |
+| [`no-unawaited-context-calls`](/docs/eslint/no-unawaited-context-calls) | warn / error | Suggestion | Requires `ctx.reply` and similar calls to be awaited, returned or voided. |
+| [`require-error-boundary`](/docs/eslint/require-error-boundary) | off / error | | Each feature should have its own `error.tsx`. It is reported once per feature, on `feature.ts` or the feature's first file. |
+| [`no-mass-mentions`](/docs/eslint/no-mass-mentions) | warn / error | | Forbids `everyone` in a literal `allowedMentions.parse`, and literal `@everyone` or `@here` in JSX text. |
+
+## Rules that scan the project
+
+`no-command-with-subcommands`, `require-group-file` and `require-error-boundary` read the features folder from disk, so they can compare a file with its siblings. The scan is cached for two seconds, and skips `node_modules` and folders that start with `.` or `_`. A file that does not exist on disk is not compared.
