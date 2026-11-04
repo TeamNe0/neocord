@@ -1,4 +1,4 @@
 {
-  "extends": "@neocord/tsconfig/library.json",
+  "extends": "@teamneo/neocord-tsconfig/library.json",
   "include": ["src"]
 }

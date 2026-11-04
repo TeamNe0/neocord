@@ -1,4 +1,4 @@
-import { Message, TextDisplay } from "@neocord/react";
+import { Message, TextDisplay } from "@teamneo/neocord-react";
 import { defineMiddleware } from "neocord";
 
 export default defineMiddleware(

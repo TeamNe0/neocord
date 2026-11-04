@@ -43,7 +43,7 @@ function page(rule: EslintRule): string {
   return [
     `| | |`,
     `| --- | --- |`,
-    `| Rule id | \`@neocord/${rule.name}\` |`,
+    `| Rule id | \`neocord/${rule.name}\` |`,
     `| Category | ${CATEGORY_NAMES[rule.category]} |`,
     `| Severity | ${severity} |`,
     fixes.length > 0 ? `| Fixes | ${fixes.join(" ")} |` : null,
@@ -68,7 +68,7 @@ function page(rule: EslintRule): string {
     "",
     fence(
       "js",
-      `export default [\n  neocord.configs.recommended,\n  { rules: { "@neocord/${rule.name}": "off" } },\n];`,
+      `export default [\n  neocord.configs.recommended,\n  { rules: { "neocord/${rule.name}": "off" } },\n];`,
       "eslint.config.js",
     ),
     "",

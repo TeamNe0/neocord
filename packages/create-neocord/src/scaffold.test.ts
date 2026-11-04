@@ -149,10 +149,10 @@ for (const { database, dialect } of COMBINATIONS) {
           test: "neocord test",
           typecheck: "neocord typegen && tsc --noEmit",
         });
-        for (const name of ["discord.js", "neocord", "@neocord/react", "react", "@t3-oss/env-core", "zod"] as const) {
+        for (const name of ["discord.js", "neocord", "@teamneo/neocord-react", "react", "@t3-oss/env-core", "zod"] as const) {
           expect(manifest.dependencies[name]).toBe(dependencyVersionMap[name]);
         }
-        for (const name of ["@neocord/cli", "@types/react", "@types/node", "@types/bun"] as const) {
+        for (const name of ["@teamneo/neocord-cli", "@types/react", "@types/node", "@types/bun"] as const) {
           expect(manifest.devDependencies[name]).toBe(dependencyVersionMap[name]);
         }
       });
@@ -165,7 +165,7 @@ for (const { database, dialect } of COMBINATIONS) {
             "@typescript/native": "npm:typescript@^7.0.2",
             typescript: "npm:@typescript/typescript6@^6.0.2",
             eslint: dependencyVersionMap.eslint,
-            "@neocord/eslint-plugin": dependencyVersionMap["@neocord/eslint-plugin"],
+            "@teamneo/neocord-eslint-plugin": dependencyVersionMap["@teamneo/neocord-eslint-plugin"],
             "@typescript-eslint/parser": dependencyVersionMap["@typescript-eslint/parser"],
           });
         } else {
@@ -173,7 +173,7 @@ for (const { database, dialect } of COMBINATIONS) {
           expect(manifest.devDependencies.typescript).toBe("npm:typescript@^7.0.2");
           expect(manifest.devDependencies["@typescript/native"]).toBeUndefined();
           expect(manifest.devDependencies.eslint).toBeUndefined();
-          expect(manifest.devDependencies["@neocord/eslint-plugin"]).toBeUndefined();
+          expect(manifest.devDependencies["@teamneo/neocord-eslint-plugin"]).toBeUndefined();
         }
       });
 
@@ -333,7 +333,7 @@ describe("scaffold behaviour", () => {
     await scaffold(options);
     expect(readFileSync(join(options.targetDir, "eslint.config.js"), "utf8")).toBe(
       [
-        'import neocord from "@neocord/eslint-plugin";',
+        'import neocord from "@teamneo/neocord-eslint-plugin";',
         'import tsParser from "@typescript-eslint/parser";',
         "export default [",
         '  { ignores: [".neocord/**", "dist/**"] },',

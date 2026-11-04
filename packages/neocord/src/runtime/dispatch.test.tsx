@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ActionRow, Button, Container, Message, TextDisplay } from "@neocord/react";
+import { ActionRow, Button, Container, Message, TextDisplay } from "@teamneo/neocord-react";
 import { MessageFlags, type Interaction, type PermissionsString } from "discord.js";
 import { Suspense, use, type ReactNode } from "react";
 import { createLogger, type LogMethod } from "../logger.ts";

@@ -1,21 +1,21 @@
-`@neocord/eslint-plugin` exports the plugin as its default export, and the rule modules as the named export `rules`. For setup and a description of each rule, read [ESLint](/docs/eslint).
+`@teamneo/neocord-eslint-plugin` exports the plugin as its default export, and the rule modules as the named export `rules`. For setup and a description of each rule, read [ESLint](/docs/eslint).
 
 ```js
-import neocord, { rules } from "@neocord/eslint-plugin";
+import neocord, { rules } from "@teamneo/neocord-eslint-plugin";
 ```
 
-It requires ESLint 9 or 10 as a peer dependency, and depends only on `@neocord/routing`.
+It requires ESLint 9 or 10 as a peer dependency, and depends only on `@teamneo/neocord-routing`.
 
 ## Default export
 
 | Member | Type | Meaning |
 | --- | --- | --- |
-| `meta` | `{ name: string; version: string; namespace: string }` | The package name and version, and the `@neocord` namespace. |
+| `meta` | `{ name: string; version: string; namespace: string }` | The package name and version, and the `neocord` namespace. |
 | `rules` | `Record<NeocordRuleName, Rule.RuleModule>` | The rule modules. |
 | `configs.recommended` | `Linter.Config` | File contracts and correctness rules are errors, advice rules are warnings, and `require-error-boundary` is off. |
 | `configs.strict` | `Linter.Config` | Every rule is an error. |
 
-Each config registers the plugin under `plugins: { "@neocord": plugin }`. Neither sets a parser.
+Each config registers the plugin under `plugins: { "neocord": plugin }`. Neither sets a parser.
 
 ## Settings
 

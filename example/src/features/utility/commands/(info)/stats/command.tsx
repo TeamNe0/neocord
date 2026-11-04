@@ -1,4 +1,4 @@
-import { Bold, Container, Heading, List, ListItem, TextDisplay } from "@neocord/react";
+import { Bold, Container, Heading, List, ListItem, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 function megabytes(bytes: number): string {

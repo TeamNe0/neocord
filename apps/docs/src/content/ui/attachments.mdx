@@ -1,7 +1,7 @@
 `Thumbnail`, `MediaItem` and `File` take their content through `src`. Binary data is collected into the message's `files` automatically, so you do not need to build attachments yourself.
 
 ```tsx title="src/features/general/commands/export/command.tsx"
-import { Container, File, Heading, MediaGallery, MediaItem } from "@neocord/react";
+import { Container, File, Heading, MediaGallery, MediaItem } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({
@@ -81,7 +81,7 @@ A string `attachment://` reference is not checked against `files`. It must name 
 An `option.attachment` value is a discord.js `Attachment`, so its `url` works as a string `src`:
 
 ```tsx
-import { MediaGallery, MediaItem } from "@neocord/react";
+import { MediaGallery, MediaItem } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({
@@ -103,6 +103,6 @@ Discord's CDN links expire, so fetch the file and pass its bytes if you need the
 
 ## Limits
 
-`@neocord/react` checks URL lengths (2048), description lengths (1024), and gallery size (1 to 10 items). It does not check file sizes. Discord rejects uploads above the limit for the guild, and that error reaches your [error view](/docs/handlers/error-boundaries).
+`@teamneo/neocord-react` checks URL lengths (2048), description lengths (1024), and gallery size (1 to 10 items). It does not check file sizes. Discord rejects uploads above the limit for the guild, and that error reaches your [error view](/docs/handlers/error-boundaries).
 
 Descriptions are alt text. Set them on images so screen reader users on Discord know what they show.

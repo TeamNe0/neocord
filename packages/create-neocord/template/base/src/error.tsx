@@ -1,4 +1,4 @@
-import { Container, Heading, Subtext } from "@neocord/react";
+import { Container, Heading, Subtext } from "@teamneo/neocord-react";
 
 export default function ErrorView() {
   return (

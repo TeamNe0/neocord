@@ -6,7 +6,7 @@ import {
   parseSegment,
   type RouteKind,
   type Router,
-} from "@neocord/routing";
+} from "@teamneo/neocord-routing";
 import type { LocalizationMap } from "discord.js";
 import type { IntentName, NeocordConfig } from "../config.ts";
 import { parseDuration } from "../duration.ts";

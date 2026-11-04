@@ -1,4 +1,4 @@
-import { ActionRow, Bold, Button, Heading, TextDisplay, UserMention } from "@neocord/react";
+import { ActionRow, Bold, Button, Heading, TextDisplay, UserMention } from "@teamneo/neocord-react";
 import type { User } from "discord.js";
 
 export function BanConfirm({ user }: { user: User }) {

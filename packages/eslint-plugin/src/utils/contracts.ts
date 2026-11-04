@@ -1,4 +1,4 @@
-import { DEFINE_HELPERS, type FileClassification } from "@neocord/routing";
+import { DEFINE_HELPERS, type FileClassification } from "@teamneo/neocord-routing";
 
 export function expectedHelper(classification: FileClassification): string | null {
   switch (classification.type) {

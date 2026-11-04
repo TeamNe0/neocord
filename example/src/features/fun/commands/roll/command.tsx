@@ -1,4 +1,4 @@
-import { Bold, Container, Heading, TextDisplay } from "@neocord/react";
+import { Bold, Container, Heading, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 import { randomInt } from "node:crypto";
 

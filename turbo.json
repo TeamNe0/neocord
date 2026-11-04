@@ -14,7 +14,7 @@
     "neocord#typecheck": {
       "dependsOn": ["build"]
     },
-    "@neocord/docs#test": {
+    "@teamneo/neocord-docs#test": {
       "dependsOn": ["build"]
     },
     "lint": {

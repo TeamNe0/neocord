@@ -1,4 +1,4 @@
-import { Message, TextDisplay } from "@neocord/react";
+import { Message, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 import { QuizCard } from "../../_components/QuizCard";
 import { findQuestion, matchTopics } from "../../_lib/quiz";

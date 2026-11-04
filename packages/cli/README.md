@@ -1,9 +1,9 @@
-# @neocord/cli
+# @teamneo/neocord-cli
 
 The `neocord` command. It scans your file routes, generates code and types, bundles the bot, and runs it.
 
 ```bash
-bun add -d @neocord/cli
+bun add -d @teamneo/neocord-cli
 ```
 
 ## Commands
@@ -42,7 +42,7 @@ The bot runs on the runtime named by `runtime` in `neocord.config`. With `auto`,
 ## Programmatic API
 
 ```ts
-import { generate, loadConfig, loadEnvFiles, scanProject } from "@neocord/cli";
+import { generate, loadConfig, loadEnvFiles, scanProject } from "@teamneo/neocord-cli";
 
 const { config, file } = await loadConfig({ root });
 const scan = await scanProject({ root, sourceDir: config.sourceDir, featuresDir: config.featuresDir });

@@ -1,4 +1,4 @@
-import { Bold, Container, Heading, Link, Subtext, TextDisplay } from "@neocord/react";
+import { Bold, Container, Heading, Link, Subtext, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 import { Suspense, use } from "react";
 import { countCases } from "~/features/moderation/_lib/cases";

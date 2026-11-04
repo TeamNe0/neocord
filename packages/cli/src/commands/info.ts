@@ -11,14 +11,14 @@ export interface InfoCommandOptions {
   cliVersion: string;
 }
 
-const REPORTED_PACKAGES = ["neocord", "@neocord/react", "@neocord/routing", "discord.js", "react"] as const;
+const REPORTED_PACKAGES = ["neocord", "@teamneo/neocord-react", "@teamneo/neocord-routing", "discord.js", "react"] as const;
 
 export async function runInfo(options: InfoCommandOptions, ui: Ui): Promise<number> {
   const start = resolveCwd(options.cwd);
   const location = locateProject(start);
   const searchRoot = location?.root ?? start;
 
-  const rows: [string, string][] = [["@neocord/cli", options.cliVersion]];
+  const rows: [string, string][] = [["@teamneo/neocord-cli", options.cliVersion]];
   for (const name of REPORTED_PACKAGES) {
     rows.push([name, readInstalledVersion(searchRoot, name) ?? "not installed"]);
   }

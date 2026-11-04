@@ -1,4 +1,4 @@
-import { COMMAND_SEGMENT_PATTERN } from "@neocord/routing";
+import { COMMAND_SEGMENT_PATTERN } from "@teamneo/neocord-routing";
 import {
   findProperty,
   hasSpread,

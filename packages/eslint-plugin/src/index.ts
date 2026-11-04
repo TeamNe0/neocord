@@ -93,7 +93,7 @@ const RECOMMENDED_SEVERITIES: Record<NeocordRuleName, NeocordSeverity> = {
   "no-mass-mentions": "warn",
 };
 
-const NAMESPACE = "@neocord";
+const NAMESPACE = "neocord";
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
   name: string;
   version: string;
@@ -113,13 +113,13 @@ const plugin: NeocordPlugin = {
 };
 
 plugin.configs.recommended = {
-  name: "@neocord/recommended",
+  name: "neocord/recommended",
   plugins: { [NAMESPACE]: plugin },
   rules: scopedRules((name) => RECOMMENDED_SEVERITIES[name]),
 };
 
 plugin.configs.strict = {
-  name: "@neocord/strict",
+  name: "neocord/strict",
   plugins: { [NAMESPACE]: plugin },
   rules: scopedRules(() => "error"),
 };

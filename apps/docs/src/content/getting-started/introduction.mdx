@@ -5,7 +5,7 @@ neocord is a framework for Discord bots. You write commands, buttons, selects, m
 A discord.js bot usually starts with a registry of handlers, a switch on `customId`, a script to deploy commands, and a message builder for every reply. neocord replaces each of those with a convention:
 
 - **The file path is the route.** `commands/ping/command.tsx` is `/ping`, and `buttons/refresh/button.tsx` handles the button whose custom id is `general/refresh`. There is nothing to register.
-- **JSX is the message.** `@neocord/react` is a real React renderer. Function components, context, hooks and `<Suspense>` work, the output is Discord's Components V2 JSON, and Discord's limits are checked at render time.
+- **JSX is the message.** `@teamneo/neocord-react` is a real React renderer. Function components, context, hooks and `<Suspense>` work, the output is Discord's Components V2 JSON, and Discord's limits are checked at render time.
 - **Routes are typed.** The CLI generates types from your files, so `<Button route="general/refresh" />` fails to compile if that file does not exist, and `params` is required exactly when the route has params.
 - **Replies have one owner.** A single state machine handles reply, edit, follow-up and defer, so an automatic defer cannot race a reply that is in flight.
 
@@ -14,7 +14,7 @@ A discord.js bot usually starts with a registry of handlers, a switch on `custom
 Two files make a command with a button. The command is in `src/features/general/commands/about/command.tsx`:
 
 ```tsx title="src/features/general/commands/about/command.tsx"
-import { ActionRow, Button, Container, Heading, TextDisplay } from "@neocord/react";
+import { ActionRow, Button, Container, Heading, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({
@@ -36,7 +36,7 @@ export default defineCommand({
 The button handler is in `src/features/general/buttons/refresh/button.tsx`. Its first argument must match the path, and returning a node updates the message the button is on:
 
 ```tsx title="src/features/general/buttons/refresh/button.tsx"
-import { ActionRow, Button, Container, Heading, TextDisplay } from "@neocord/react";
+import { ActionRow, Button, Container, Heading, TextDisplay } from "@teamneo/neocord-react";
 import { defineButton } from "neocord";
 
 export default defineButton("general/refresh", {
@@ -71,10 +71,10 @@ In Discord, `/about` shows this:
 | Package | Purpose |
 | --- | --- |
 | `neocord` | The `define*` helpers, handler contexts, bot runtime, sharding manager, command deploy and testing helpers. |
-| `@neocord/react` | The React renderer that turns JSX into Discord message and modal payloads. |
-| `@neocord/cli` | The `neocord` binary. Scans routes, generates code and types, bundles and launches. |
-| `@neocord/routing` | File conventions, route ids, and custom id building and matching. |
-| `@neocord/eslint-plugin` | Rules for what each file must export, plus best practices. |
+| `@teamneo/neocord-react` | The React renderer that turns JSX into Discord message and modal payloads. |
+| `@teamneo/neocord-cli` | The `neocord` binary. Scans routes, generates code and types, bundles and launches. |
+| `@teamneo/neocord-routing` | File conventions, route ids, and custom id building and matching. |
+| `@teamneo/neocord-eslint-plugin` | Rules for what each file must export, plus best practices. |
 | `create-neocord` | The scaffolder behind `bun create neocord`. |
 
 ## Where to go next

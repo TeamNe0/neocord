@@ -200,7 +200,7 @@ Other tooling messages:
 
 | Message | Fix |
 | --- | --- |
-| `ESLint is not installed in this project.` | Run `bun add -d eslint @neocord/eslint-plugin`. See [ESLint](/docs/eslint). |
+| `ESLint is not installed in this project.` | Run `bun add -d eslint @teamneo/neocord-eslint-plugin`. See [ESLint](/docs/eslint). |
 | `Could not find tsc in this project.` | Run `bun add -d typescript`. `neocord build --typecheck` looks for `@typescript/native` first, then `typescript`. |
 
 The plugin supports flat config only, on ESLint 9 and 10. If path-based rules do nothing in a monorepo, set `sourceDir` relative to where ESLint runs. See [ESLint](/docs/eslint).
@@ -230,7 +230,7 @@ If `ctx.app` has no properties, the same fix applies, and you also need a `src/c
 
 ### Can I use embeds?
 
-No. `@neocord/react` renders Components V2 only, and every message it produces has the `IsComponentsV2` flag. Discord does not allow embeds on those messages. Use `Container`, which has an `accentColor`, in place of an embed. See [UI overview](/docs/ui).
+No. `@teamneo/neocord-react` renders Components V2 only, and every message it produces has the `IsComponentsV2` flag. Discord does not allow embeds on those messages. Use `Container`, which has an `accentColor`, in place of an embed. See [UI overview](/docs/ui).
 
 ### Can I use discord.js directly?
 
@@ -258,7 +258,7 @@ No. Everything runs on Node too. `neocord test` is the one exception to check: i
 
 ### Which Node version do I need?
 
-`@neocord/cli` declares Node 22.22 or later. `neocord`, `@neocord/react`, `@neocord/routing`, `@neocord/eslint-plugin` and `create-neocord` declare Node 22.12 or later.
+`@teamneo/neocord-cli` declares Node 22.22 or later. `neocord`, `@teamneo/neocord-react`, `@teamneo/neocord-routing`, `@teamneo/neocord-eslint-plugin` and `create-neocord` declare Node 22.12 or later.
 
 ### Why does `ctx.guild` have a type that includes null?
 

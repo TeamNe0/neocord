@@ -1,7 +1,7 @@
 When a handler throws, neocord logs the error and shows an ephemeral message. An `error.tsx` file lets you decide what that message says. The scaffolder creates one at `src/error.tsx`.
 
 ```tsx title="src/error.tsx"
-import { Container, Heading, Subtext } from "@neocord/react";
+import { Container, Heading, Subtext } from "@teamneo/neocord-react";
 
 export default function ErrorView() {
   return (
@@ -23,7 +23,7 @@ The component receives `ErrorProps`.
 | `ctx` | `AnyContext` | The context of the route that failed. |
 
 ```tsx title="src/features/moderation/error.tsx"
-import { Code, Container, Heading, TextDisplay, escapeMarkdown } from "@neocord/react";
+import { Code, Container, Heading, TextDisplay, escapeMarkdown } from "@teamneo/neocord-react";
 import type { ErrorProps } from "neocord";
 
 export default function ModerationError({ error, ctx }: ErrorProps) {
@@ -56,7 +56,7 @@ Each of these reaches the error view:
 - A throw in a handler, including `submit` on a modal.
 - A throw in middleware.
 - A render error in the node a handler returned or sent.
-- A limit error from `@neocord/react`, such as more than 40 components.
+- A limit error from `@teamneo/neocord-react`, such as more than 40 components.
 - A throw in a live component's `onClick` or `onSelect`.
 
 These do not:
@@ -88,7 +88,7 @@ Error views are rendered once and are not live, so `onClick` and `onSelect` do n
 
 ## React error boundaries
 
-`error.tsx` is not a React error boundary. It runs after the render or handler has failed. A class component with `componentDidCatch` inside your tree also works, because `@neocord/react` is a real React renderer. It catches render errors below it, so the rest of the message can still be sent.
+`error.tsx` is not a React error boundary. It runs after the render or handler has failed. A class component with `componentDidCatch` inside your tree also works, because `@teamneo/neocord-react` is a real React renderer. It catches render errors below it, so the rest of the message can still be sent.
 
 ## Testing
 

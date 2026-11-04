@@ -36,8 +36,8 @@
     "check:package": "publint && attw --pack . --profile esm-only"
   },
   "dependencies": {
-    "@neocord/react": "workspace:^",
-    "@neocord/routing": "workspace:^"
+    "@teamneo/neocord-react": "workspace:^",
+    "@teamneo/neocord-routing": "workspace:^"
   },
   "peerDependencies": {
     "discord.js": "^14.28.0",
@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",
-    "@neocord/tsconfig": "workspace:*",
+    "@teamneo/neocord-tsconfig": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

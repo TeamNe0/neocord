@@ -82,7 +82,7 @@ describe("renderTypes", () => {
     const { root } = fixture(STANDARD_FILES);
     expect(renderTypes(await scanProject({ root }))).toBe(
       [
-        'declare module "@neocord/react" {',
+        'declare module "@teamneo/neocord-react" {',
         "  interface RegisteredRoutes {",
         '    buttons: "general/refresh" | "moderation/confirm-ban/[userId]" | "moderation/pages/[...rest]";',
         '    selects: "moderation/pick-role";',
@@ -139,8 +139,8 @@ describe("renderTypes", () => {
       "}",
       "",
     ].join("\n"),
-    "node_modules/@neocord/react/package.json": JSON.stringify({ name: "@neocord/react", types: "./index.d.ts" }),
-    "node_modules/@neocord/react/index.d.ts": [
+    "node_modules/@teamneo/neocord-react/package.json": JSON.stringify({ name: "@teamneo/neocord-react", types: "./index.d.ts" }),
+    "node_modules/@teamneo/neocord-react/index.d.ts": [
       "export interface RegisteredRoutes {}",
       "export type ButtonRoute = RegisteredRoutes extends { buttons: infer R extends string } ? R : string;",
       "export type ModalRoute = RegisteredRoutes extends { modals: infer R extends string } ? R : string;",
@@ -149,7 +149,7 @@ describe("renderTypes", () => {
   };
 
   const USAGE = [
-    'import type { ButtonRoute, ModalRoute } from "@neocord/react";',
+    'import type { ButtonRoute, ModalRoute } from "@teamneo/neocord-react";',
     'import type { AppContext } from "neocord";',
     'export const route: ButtonRoute = "a/go/[id]";',
     'export const modal: [ModalRoute] extends [never] ? "empty" : "filled" = "empty";',

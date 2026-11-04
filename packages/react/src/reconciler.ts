@@ -74,7 +74,7 @@ const hostConfig: ReactReconciler.HostConfig<
   warnsIfNotActing: false,
   noTimeout: NO_TIMEOUT,
   rendererVersion: "0.1.0",
-  rendererPackageName: "@neocord/react",
+  rendererPackageName: "@teamneo/neocord-react",
   extraDevToolsConfig: null,
   NotPendingTransition: null,
   HostTransitionContext: createContext<null>(null),

@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, test } from "bun:test";
-import { ActionRow, Button, Label, StringSelect, TextDisplay, TextInput } from "@neocord/react";
+import { ActionRow, Button, Label, StringSelect, TextDisplay, TextInput } from "@teamneo/neocord-react";
 import { ChannelType, MessageFlags, type Guild, type GuildMember, type Role, type TextChannel, type User } from "discord.js";
 import { useState, type ReactNode } from "react";
 import {

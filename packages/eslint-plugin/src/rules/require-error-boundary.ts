@@ -1,4 +1,4 @@
-import type { FileClassification } from "@neocord/routing";
+import type { FileClassification } from "@teamneo/neocord-routing";
 import { scanProject } from "../utils/project.ts";
 import { createRule } from "../utils/rule.ts";
 

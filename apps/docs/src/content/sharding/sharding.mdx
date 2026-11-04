@@ -91,7 +91,7 @@ Every handler, event and task context has `ctx.shards`:
 With no manager, these run against the local client and JSON-serialise the result the same way, so each returns an array with one entry.
 
 ```tsx title="src/features/general/commands/stats/command.tsx"
-import { Container, Heading, TextDisplay } from "@neocord/react";
+import { Container, Heading, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({
@@ -151,7 +151,7 @@ The runtime comes from `runtime` in the config. With `"auto"`, the default, it i
 | Bun | `bun --no-env-file <bundle>`, so the CLI's env file order applies and Bun does not load env files itself. |
 | Node | `node --enable-source-maps <bundle>`. |
 
-Published `neocord` code runs on Node 22.12 or later and on Bun. The `neocord` CLI package, `@neocord/cli`, requires Node 22.22 or later when you run it with Node.
+Published `neocord` code runs on Node 22.12 or later and on Bun. The `neocord` CLI package, `@teamneo/neocord-cli`, requires Node 22.22 or later when you run it with Node.
 
 ## What each shard keeps to itself
 

@@ -1,4 +1,4 @@
-# @neocord/eslint-plugin
+# @teamneo/neocord-eslint-plugin
 
 ESLint rules for [neocord](https://neocord.dev) projects. They check what each routed file has to export, catch Discord limits before you deploy, and give best practice advice.
 
@@ -7,13 +7,13 @@ All rules read the AST only, so they need no type information and work with any 
 ## Setup
 
 ```sh
-bun add -d eslint @neocord/eslint-plugin @typescript-eslint/parser
+bun add -d eslint @teamneo/neocord-eslint-plugin @typescript-eslint/parser
 ```
 
 Then create `eslint.config.js`:
 
 ```js
-import neocord from "@neocord/eslint-plugin";
+import neocord from "@teamneo/neocord-eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 
 export default [
@@ -40,7 +40,7 @@ To change one rule, add it after the config:
 ```js
 export default [
   neocord.configs.recommended,
-  { rules: { "@neocord/no-process-env": "off" } },
+  { rules: { "neocord/no-process-env": "off" } },
 ];
 ```
 
@@ -86,8 +86,8 @@ Severity columns show `recommended` / `strict`. Rules marked with a wrench have 
 
 | Rule | Severity | | Description |
 | --- | --- | --- | --- |
-| [`no-embed-builders`](https://neocord.dev/docs/eslint/no-embed-builders) | warn / error | | Forbids discord.js builders and raw `embeds` or `components` in send calls. Use `@neocord/react`. |
-| [`valid-component-nesting`](https://neocord.dev/docs/eslint/valid-component-nesting) | error / error | | Checks the static JSX structure of `@neocord/react` components, including aliased imports. Custom components and expressions are skipped. |
+| [`no-embed-builders`](https://neocord.dev/docs/eslint/no-embed-builders) | warn / error | | Forbids discord.js builders and raw `embeds` or `components` in send calls. Use `@teamneo/neocord-react`. |
+| [`valid-component-nesting`](https://neocord.dev/docs/eslint/valid-component-nesting) | error / error | | Checks the static JSX structure of `@teamneo/neocord-react` components, including aliased imports. Custom components and expressions are skipped. |
 | [`prefer-route-prop`](https://neocord.dev/docs/eslint/prefer-route-prop) | warn / error | | Recommends `route` over a literal `customId` on buttons and selects. Modal fields are exempt. |
 | [`no-text-in-action-row`](https://neocord.dev/docs/eslint/no-text-in-action-row) | error / error | | Forbids text directly inside `ActionRow`, `MediaGallery` and selects. |
 

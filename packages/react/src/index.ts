@@ -1,6 +1,6 @@
 import { escapeMarkdown as escapeDiscordMarkdown } from "discord.js";
 
-export { buildCustomId, type RouteParams } from "@neocord/routing";
+export { buildCustomId, type RouteParams } from "@teamneo/neocord-routing";
 export { createLiveRoot, useLiveInteraction } from "./live.ts";
 export { render, renderAsync, renderModal } from "./render.ts";
 export type * from "./types.ts";

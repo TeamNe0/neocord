@@ -51,10 +51,10 @@ function isRawUi(property: string, value: AstNode): boolean {
 export default createRule({
   name: "no-embed-builders",
   type: "suggestion",
-  description: "Disallow discord.js component builders and raw payloads in favour of @neocord/react.",
+  description: "Disallow discord.js component builders and raw payloads in favour of @teamneo/neocord-react.",
   messages: {
-    builder: "Do not use {{name}}. Render JSX with @neocord/react instead.",
-    rawPayload: 'Do not pass raw "{{property}}". Return JSX from the handler or pass it to ctx.reply, using @neocord/react.',
+    builder: "Do not use {{name}}. Render JSX with @teamneo/neocord-react instead.",
+    rawPayload: 'Do not pass raw "{{property}}". Return JSX from the handler or pass it to ctx.reply, using @teamneo/neocord-react.',
   },
   create(kit) {
     return {

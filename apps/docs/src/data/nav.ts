@@ -170,7 +170,7 @@ export const NAV: NavGroup[] = [
       {
         path: "/docs/ui",
         title: "UI overview",
-        description: "How the @neocord/react renderer turns JSX into Components V2 payloads, and why it has no embeds.",
+        description: "How the @teamneo/neocord-react renderer turns JSX into Components V2 payloads, and why it has no embeds.",
         file: "ui/overview",
       },
       {
@@ -217,7 +217,7 @@ export const NAV: NavGroup[] = [
       },
       {
         path: "/docs/ui/standalone",
-        title: "Using @neocord/react standalone",
+        title: "Using @teamneo/neocord-react standalone",
         description: "Use the renderer with plain discord.js and no neocord runtime.",
         file: "ui/standalone",
       },
@@ -280,7 +280,7 @@ export const NAV: NavGroup[] = [
       {
         path: "/docs/eslint",
         title: "ESLint",
-        description: "Set up @neocord/eslint-plugin, choose a config, and see what every rule checks.",
+        description: "Set up @teamneo/neocord-eslint-plugin, choose a config, and see what every rule checks.",
         file: "tooling/eslint",
         children: ESLINT_RULE_INDEX.map((rule) => ({
           path: `/docs/eslint/${rule.name}`,
@@ -372,20 +372,20 @@ export const NAV: NavGroup[] = [
       },
       {
         path: "/docs/api/react",
-        title: "@neocord/react",
-        description: "API reference for @neocord/react: render functions, live roots, components and types.",
+        title: "@teamneo/neocord-react",
+        description: "API reference for @teamneo/neocord-react: render functions, live roots, components and types.",
         file: "api/react",
       },
       {
         path: "/docs/api/routing",
-        title: "@neocord/routing",
-        description: "API reference for @neocord/routing: classifyFile, buildCustomId, createRouter and route types.",
+        title: "@teamneo/neocord-routing",
+        description: "API reference for @teamneo/neocord-routing: classifyFile, buildCustomId, createRouter and route types.",
         file: "api/routing",
       },
       {
         path: "/docs/api/eslint-plugin",
-        title: "@neocord/eslint-plugin",
-        description: "API reference for @neocord/eslint-plugin: configs, settings, rules and exported types.",
+        title: "@teamneo/neocord-eslint-plugin",
+        description: "API reference for @teamneo/neocord-eslint-plugin: configs, settings, rules and exported types.",
         file: "api/eslint-plugin",
       },
       {

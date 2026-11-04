@@ -11,7 +11,7 @@ import {
   Timestamp,
   UserMention,
   escapeMarkdown,
-} from "@neocord/react";
+} from "@teamneo/neocord-react";
 import type { ModerationCase } from "~/db/schema";
 import type { CaseFilter } from "../_lib/cases";
 

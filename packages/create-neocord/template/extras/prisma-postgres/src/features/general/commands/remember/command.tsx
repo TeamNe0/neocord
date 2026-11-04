@@ -1,4 +1,4 @@
-import { Container, Heading, Subtext, TextDisplay } from "@neocord/react";
+import { Container, Heading, Subtext, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({

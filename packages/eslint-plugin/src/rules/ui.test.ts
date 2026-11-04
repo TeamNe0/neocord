@@ -18,7 +18,7 @@ const filename = "src/ui.tsx";
 const imports = `import {
   ActionRow, Button, Checkbox, CheckboxGroup, Container, FileUpload, Label, MediaGallery, MediaItem, Message, Modal,
   Option, RadioGroup, RoleSelect, Section, StringSelect, TextDisplay, TextInput, Thumbnail, UserSelect, Bold,
-} from "@neocord/react";\n`;
+} from "@teamneo/neocord-react";\n`;
 
 function jsx(code: string): { filename: string; code: string } {
   return { filename, code: `${imports}const node = ${code};` };
@@ -32,7 +32,7 @@ const buttons = (count: number) => "<Button />".repeat(count);
 
 tester.run("no-embed-builders", noEmbedBuilders, {
   valid: [
-    { filename, code: 'import { Message } from "@neocord/react";' },
+    { filename, code: 'import { Message } from "@teamneo/neocord-react";' },
     { filename, code: 'import { Client, AttachmentBuilder, SlashCommandBuilder } from "discord.js";' },
     { filename, code: 'import type { EmbedBuilder } from "discord.js";' },
     { filename, code: 'import { type ButtonBuilder } from "discord.js";' },
@@ -116,10 +116,10 @@ tester.run("valid-component-nesting", validComponentNesting, {
     jsx("<ActionRow><Custom /><StringSelect /></ActionRow>"),
     { filename, code: 'import { Button } from "./mine"; const node = <Message><Button /></Message>;' },
     { filename, code: "const node = <Message><Button /></Message>;" },
-    { filename, code: 'import { Fragment } from "react"; import { ActionRow, Button } from "@neocord/react"; const node = <ActionRow><Fragment><Button /></Fragment></ActionRow>;' },
-    { filename, code: 'import { Button as B, ActionRow as Row } from "@neocord/react"; const node = <Row><B /></Row>;' },
-    { filename, code: 'import * as N from "@neocord/react"; const node = <N.ActionRow><N.Button /></N.ActionRow>;' },
-    { filename, code: 'import { Button, Container } from "@neocord/react"; function F({ Container }) { return <Container><Button /></Container>; }' },
+    { filename, code: 'import { Fragment } from "react"; import { ActionRow, Button } from "@teamneo/neocord-react"; const node = <ActionRow><Fragment><Button /></Fragment></ActionRow>;' },
+    { filename, code: 'import { Button as B, ActionRow as Row } from "@teamneo/neocord-react"; const node = <Row><B /></Row>;' },
+    { filename, code: 'import * as N from "@teamneo/neocord-react"; const node = <N.ActionRow><N.Button /></N.ActionRow>;' },
+    { filename, code: 'import { Button, Container } from "@teamneo/neocord-react"; function F({ Container }) { return <Container><Button /></Container>; }' },
   ],
   invalid: [
     invalid("<Message><Button /></Message>", "misplaced"),
@@ -144,12 +144,12 @@ tester.run("valid-component-nesting", validComponentNesting, {
     invalid("<Message><Message /></Message>", "messageNotRoot"),
     {
       filename,
-      code: 'import { Button as B, Message as M } from "@neocord/react"; const node = <M><B /></M>;',
+      code: 'import { Button as B, Message as M } from "@teamneo/neocord-react"; const node = <M><B /></M>;',
       errors: [{ messageId: "misplaced", data: { component: "Button", parent: "Message", allowed: "<ActionRow> or the accessory prop of <Section>" } }],
     },
     {
       filename,
-      code: 'import * as N from "@neocord/react"; const node = <N.Message><N.Button /></N.Message>;',
+      code: 'import * as N from "@teamneo/neocord-react"; const node = <N.Message><N.Button /></N.Message>;',
       errors: [{ messageId: "misplaced" }],
     },
   ],
@@ -177,7 +177,7 @@ tester.run("prefer-route-prop", preferRouteProp, {
     { ...jsx('<ActionRow><RoleSelect customId="pick" /></ActionRow>'), errors: [{ messageId: "preferRoute" }] },
     {
       filename,
-      code: 'import { Button as B } from "@neocord/react"; const node = <B customId="x" />;',
+      code: 'import { Button as B } from "@teamneo/neocord-react"; const node = <B customId="x" />;',
       errors: [{ messageId: "preferRoute", data: { component: "Button" } }],
     },
   ],

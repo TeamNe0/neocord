@@ -40,7 +40,7 @@ bun run changeset
 
 All published packages share one version. When changesets land on `main`, the release workflow opens a version pull request. Merging it publishes to npm with `bun publish`, which resolves `workspace:` and `catalog:` versions.
 
-The workflow needs an `NPM_TOKEN` repository secret with publish rights to the `@neocord` scope and the `neocord` and `create-neocord` package names.
+The workflow needs an `NPM_TOKEN` repository secret with publish rights to the `@teamneo` scope and the `neocord` and `create-neocord` package names.
 
 ## TypeScript 7
 

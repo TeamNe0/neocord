@@ -4,8 +4,8 @@ import { addDependencies, addDevDependencies, copyTemplate, type Installer, repl
 export const baseInstaller: Installer = async (context) => {
   await copyTemplate(context, "base");
 
-  addDependencies(context, ["@neocord/react", "@t3-oss/env-core", "discord.js", "neocord", "react", "zod"]);
-  addDevDependencies(context, ["@neocord/cli", "@types/node", "@types/react"]);
+  addDependencies(context, ["@teamneo/neocord-react", "@t3-oss/env-core", "discord.js", "neocord", "react", "zod"]);
+  addDevDependencies(context, ["@teamneo/neocord-cli", "@types/node", "@types/react"]);
 
   if (context.options.eslint) {
     addDevDependencies(context, ["@typescript/native", "typescript"]);

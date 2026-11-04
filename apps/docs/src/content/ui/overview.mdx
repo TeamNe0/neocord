@@ -1,7 +1,7 @@
-`@neocord/react` is a React renderer built on `react-reconciler`, in the same way `react-dom` renders to the browser. Your components render to a tree of host elements, and that tree is serialised to Discord's Components V2 JSON and checked against Discord's limits.
+`@teamneo/neocord-react` is a React renderer built on `react-reconciler`, in the same way `react-dom` renders to the browser. Your components render to a tree of host elements, and that tree is serialised to Discord's Components V2 JSON and checked against Discord's limits.
 
 ```tsx
-import { ActionRow, Bold, Button, Container, Heading } from "@neocord/react";
+import { ActionRow, Bold, Button, Container, Heading } from "@teamneo/neocord-react";
 
 function Welcome({ name }: { name: string }) {
   return (
@@ -31,7 +31,7 @@ function Welcome({ name }: { name: string }) {
 ## How the renderer works
 
 1. React renders your function components. Hooks, context and `<Suspense>` work as they do anywhere else.
-2. The committed tree contains only host elements, which the components from `@neocord/react` produce.
+2. The committed tree contains only host elements, which the components from `@teamneo/neocord-react` produce.
 3. The serialiser walks that tree. It collapses text, resolves custom ids, collects binary attachments, and validates each component.
 4. The result is a `RenderResult` that discord.js accepts directly.
 
@@ -50,7 +50,7 @@ In a neocord handler you do not touch `RenderResult`. You return a node, and the
 
 Every message is sent with the `IsComponentsV2` flag. Discord does not allow `content` or `embeds` on those messages, and in exchange the whole message is made of components. A `Container` with an accent colour takes the place of an embed, and it can hold text, images, files, sections and buttons in any order.
 
-`@neocord/react` has no embed component. The [`no-embed-builders`](/docs/eslint/no-embed-builders) rule warns when a project uses `EmbedBuilder` or other discord.js builders.
+`@teamneo/neocord-react` has no embed component. The [`no-embed-builders`](/docs/eslint/no-embed-builders) rule warns when a project uses `EmbedBuilder` or other discord.js builders.
 
 ## Component groups
 
@@ -95,7 +95,7 @@ Plain strings are not escaped. Wrap user input in `escapeMarkdown` so a username
 </Callout>
 
 ```tsx
-import { escapeMarkdown, TextDisplay } from "@neocord/react";
+import { escapeMarkdown, TextDisplay } from "@teamneo/neocord-react";
 
 <TextDisplay>Hello {escapeMarkdown(user.globalName ?? user.username)}</TextDisplay>;
 ```

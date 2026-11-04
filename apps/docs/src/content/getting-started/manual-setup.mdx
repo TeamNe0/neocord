@@ -1,6 +1,6 @@
 This page builds the same project as [`create-neocord`](/docs/quick-start), one file at a time. Every file is shown in full, so you can follow this page on its own and finish with a working bot.
 
-You need [Bun](https://bun.com/docs/installation) or Node. `neocord` and `@neocord/react` declare Node 22.12 or later, and `@neocord/cli` declares Node 22.22 or later, so use Node 22.22 or later if you run the CLI on Node.
+You need [Bun](https://bun.com/docs/installation) or Node. `neocord` and `@teamneo/neocord-react` declare Node 22.12 or later, and `@teamneo/neocord-cli` declares Node 22.22 or later, so use Node 22.22 or later if you run the CLI on Node.
 
 ## Create the folder
 
@@ -29,16 +29,16 @@ Create `package.json` with these scripts and dependencies:
     "lint": "neocord lint"
   },
   "dependencies": {
-    "@neocord/react": "^0.1.0",
     "@t3-oss/env-core": "^0.13.11",
+    "@teamneo/neocord-react": "^0.1.0",
     "discord.js": "^14.28.1",
     "neocord": "^0.1.0",
     "react": "^19.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@neocord/cli": "^0.1.0",
-    "@neocord/eslint-plugin": "^0.1.0",
+    "@teamneo/neocord-cli": "^0.1.0",
+    "@teamneo/neocord-eslint-plugin": "^0.1.0",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@typescript-eslint/parser": "^8.72.1",
@@ -55,11 +55,11 @@ Create `package.json` with these scripts and dependencies:
 | Package | Why it is here |
 | --- | --- |
 | `neocord` | The `define*` helpers and the bot runtime. |
-| `@neocord/react` | The JSX components and renderer. |
+| `@teamneo/neocord-react` | The JSX components and renderer. |
 | `discord.js`, `react` | Peer dependencies. neocord needs discord.js 14.28 or later and React 19.3 or later. |
 | `@t3-oss/env-core`, `zod` | Environment validation in `src/env.ts`. |
-| `@neocord/cli` | The `neocord` binary. |
-| `@neocord/eslint-plugin`, `eslint`, `@typescript-eslint/parser` | Linting. |
+| `@teamneo/neocord-cli` | The `neocord` binary. |
+| `@teamneo/neocord-eslint-plugin`, `eslint`, `@typescript-eslint/parser` | Linting. |
 | `@types/node`, `@types/react` | Types for Node and React. |
 | `@typescript/native`, `typescript` | The type checker. See the next section. |
 
@@ -77,7 +77,7 @@ The two TypeScript entries are aliases, and both are deliberate:
 - `@typescript/native` installs TypeScript 7, the native compiler. It provides the `tsc` command, so `tsc --noEmit` and `neocord build --typecheck` use it.
 - `typescript` installs TypeScript 6 under the name `typescript`, because typescript-eslint needs the TypeScript 6 API and imports the package called `typescript`.
 
-This is Microsoft's documented side-by-side setup. If you do not use ESLint, you need only one entry: remove `@typescript/native` and set `"typescript": "npm:typescript@^7.0.2"`. You can then also remove `@neocord/eslint-plugin`, `@typescript-eslint/parser`, `eslint` and the `lint` script, which is what `create-neocord --no-eslint` does.
+This is Microsoft's documented side-by-side setup. If you do not use ESLint, you need only one entry: remove `@typescript/native` and set `"typescript": "npm:typescript@^7.0.2"`. You can then also remove `@teamneo/neocord-eslint-plugin`, `@typescript-eslint/parser`, `eslint` and the `lint` script, which is what `create-neocord --no-eslint` does.
 
 ## Install
 
@@ -199,7 +199,7 @@ export default defineConfig({
 ## ESLint
 
 ```js title="eslint.config.js"
-import neocord from "@neocord/eslint-plugin";
+import neocord from "@teamneo/neocord-eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 export default [
   { ignores: [".neocord/**", "dist/**"] },
@@ -215,7 +215,7 @@ The plugin does not set a parser, so the config adds one. See [ESLint](/docs/esl
 A folder under `commands` in a feature is a slash command. This file is `/ping`:
 
 ```tsx title="src/features/general/commands/ping/command.tsx"
-import { Message } from "@neocord/react";
+import { Message } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({
@@ -236,7 +236,7 @@ The feature is `general`, which is not part of the command name, because slash c
 Folders that start with `_` are private and never become routes, so they are the place for shared code:
 
 ```tsx title="src/features/general/_components/Stat.tsx"
-import { Bold, TextDisplay } from "@neocord/react";
+import { Bold, TextDisplay } from "@teamneo/neocord-react";
 
 export interface StatProps {
   label: string;
@@ -257,7 +257,7 @@ export function Stat({ label, value }: StatProps) {
 This command shows a message with a button. The button's `route` is the id of the handler file:
 
 ```tsx title="src/features/general/commands/about/command.tsx"
-import { ActionRow, Button, Container, Heading } from "@neocord/react";
+import { ActionRow, Button, Container, Heading } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 import { Stat } from "../../_components/Stat";
 
@@ -283,7 +283,7 @@ export default defineCommand({
 This file handles the click. A button's route id is `<feature>/<path>`, so the first argument is `general/refresh`, and the node it returns updates the message:
 
 ```tsx title="src/features/general/buttons/refresh/button.tsx"
-import { ActionRow, Button, Container, Heading } from "@neocord/react";
+import { ActionRow, Button, Container, Heading } from "@teamneo/neocord-react";
 import { defineButton } from "neocord";
 import { Stat } from "../../_components/Stat";
 
@@ -312,7 +312,7 @@ These are optional, but the scaffolder adds them and they show two more conventi
 `src/error.tsx` is shown ephemerally when a handler under it throws:
 
 ```tsx title="src/error.tsx"
-import { Container, Heading, Subtext } from "@neocord/react";
+import { Container, Heading, Subtext } from "@teamneo/neocord-react";
 
 export default function ErrorView() {
   return (

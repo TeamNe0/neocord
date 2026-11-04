@@ -266,7 +266,7 @@ MySQL 8 servers without TLS also need `?allowPublicKeyRetrieval=true` at the end
 This is the template's `/remember` command, the same for every dialect. `ctx.app.db` is typed through the [generated types](/docs/type-safety#registeredapp), so run `neocord typegen` after creating `src/context.ts`.
 
 ```tsx title="src/features/general/commands/remember/command.tsx"
-import { Container, Heading, Subtext, TextDisplay } from "@neocord/react";
+import { Container, Heading, Subtext, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({

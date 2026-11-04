@@ -1,9 +1,9 @@
-# @neocord/react
+# @teamneo/neocord-react
 
-Compose Discord messages and modals with React. `@neocord/react` is a real renderer built on `react-reconciler`, so function components, context, hooks and `<Suspense>` all work. The committed tree is serialised to Discord's Components V2 JSON and validated against Discord's limits, with errors that name the offending component.
+Compose Discord messages and modals with React. `@teamneo/neocord-react` is a real renderer built on `react-reconciler`, so function components, context, hooks and `<Suspense>` all work. The committed tree is serialised to Discord's Components V2 JSON and validated against Discord's limits, with errors that name the offending component.
 
 ```sh
-bun add @neocord/react react discord.js
+bun add @teamneo/neocord-react react discord.js
 ```
 
 Requires React 19.3 or later, discord.js 14.28 or later, and Node 22.12 or later or Bun.
@@ -11,7 +11,7 @@ Requires React 19.3 or later, discord.js 14.28 or later, and Node 22.12 or later
 ## Rendering a message
 
 ```tsx
-import { ActionRow, Bold, Button, Container, Heading, Message, render } from "@neocord/react";
+import { ActionRow, Bold, Button, Container, Heading, Message, render } from "@teamneo/neocord-react";
 
 function Welcome({ name }: { name: string }) {
   return (
@@ -160,7 +160,7 @@ Selects use the same addressing, with `onSelect` instead of `onClick`:
 ## Modals
 
 ```tsx
-import { Label, Modal, renderModal, TextInput } from "@neocord/react";
+import { Label, Modal, renderModal, TextInput } from "@teamneo/neocord-react";
 
 await interaction.showModal(
   renderModal(
@@ -181,7 +181,7 @@ await interaction.showModal(
 `route` and `params` are checked against the `RegisteredRoutes` interface, which the neocord CLI generates:
 
 ```ts
-declare module "@neocord/react" {
+declare module "@teamneo/neocord-react" {
   interface RegisteredRoutes {
     buttons: "moderation/confirm-ban/[userId]" | "settings/open";
     selects: "settings/theme";
@@ -190,14 +190,14 @@ declare module "@neocord/react" {
 }
 ```
 
-`params` is then required exactly when a route has params, and forbidden otherwise. With nothing registered, `route` is a `string` and `params` is an optional record. `buildCustomId` and the `RouteParams` type are re-exported from `@neocord/routing`.
+`params` is then required exactly when a route has params, and forbidden otherwise. With nothing registered, `route` is a `string` and `params` is an optional record. `buildCustomId` and the `RouteParams` type are re-exported from `@teamneo/neocord-routing`.
 
 ## Live sessions
 
 `onClick` and `onSelect` need a live root, because a handler can only run while its tree is mounted. One-shot `render` throws if it meets one.
 
 ```tsx
-import { ActionRow, Button, createLiveRoot, TextDisplay, useLiveInteraction } from "@neocord/react";
+import { ActionRow, Button, createLiveRoot, TextDisplay, useLiveInteraction } from "@teamneo/neocord-react";
 
 function Counter() {
   const [count, setCount] = useState(0);

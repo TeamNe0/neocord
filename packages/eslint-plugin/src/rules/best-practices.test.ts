@@ -372,7 +372,7 @@ tester.run("no-mass-mentions", noMassMentions, {
     "const node = <Message>Hello everyone</Message>;",
     'const text = "@everyone";',
     'const node = <X label="@everyone" />;',
-    'import { Code } from "@neocord/react"; const node = <Code>@everyone</Code>;',
+    'import { Code } from "@teamneo/neocord-react"; const node = <Code>@everyone</Code>;',
     "const node = <Message>{name}</Message>;",
   ],
   invalid: [

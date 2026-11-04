@@ -1,7 +1,7 @@
 The file-system routing conventions behind neocord. The CLI, the runtime, the React renderer and the ESLint plugin all share this package, so a file means the same thing to each of them. It has no dependencies, and you rarely need to install it directly.
 
 ```pm
-add @neocord/routing
+add @teamneo/neocord-routing
 ```
 
 ## classifyFile
@@ -18,7 +18,7 @@ interface ClassifyOptions {
 Describes what a file is. This function is the source of truth for the conventions. `sourceDir` defaults to `"src"`, and `featuresDir` to `"<sourceDir>/features"`.
 
 ```ts
-import { classifyFile } from "@neocord/routing";
+import { classifyFile } from "@teamneo/neocord-routing";
 
 const result = classifyFile("src/features/moderation/buttons/confirm-ban/[userId]/button.tsx");
 ```
@@ -162,7 +162,7 @@ function buildCustomId(route: string, params?: Record<string, unknown>): string;
 Fills in a route's params to make a custom id. Values must be a string, number or bigint, and are URI encoded. A `[...rest]` param takes a non-empty array.
 
 ```ts
-import { buildCustomId } from "@neocord/routing";
+import { buildCustomId } from "@teamneo/neocord-routing";
 
 const id = buildCustomId("moderation/confirm-ban/[userId]", { userId: "123" });
 ```
@@ -229,7 +229,7 @@ interface RouteMatch<T> {
 Matches custom ids to routes. Static segments win over `[param]` segments, which win over `[...catchAll]` segments. Values are URI decoded.
 
 ```ts
-import { createRouter } from "@neocord/routing";
+import { createRouter } from "@teamneo/neocord-routing";
 
 const router = createRouter<string>();
 router.add("moderation/confirm-ban/[userId]", "handler");

@@ -1,4 +1,4 @@
-import { createLiveRoot, render, Message, TextDisplay, type LiveRoot, type RenderResult } from "@neocord/react";
+import { createLiveRoot, render, Message, TextDisplay, type LiveRoot, type RenderResult } from "@teamneo/neocord-react";
 import {
   ComponentType,
   MessageFlags,

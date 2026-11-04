@@ -14,7 +14,7 @@ export async function runLint(options: LintCommandOptions): Promise<number> {
   const bin = resolvePackageBin(root, "eslint");
   if (bin === null) {
     throw new CliError("ESLint is not installed in this project.", {
-      hint: "Install it with: bun add -d eslint @neocord/eslint-plugin",
+      hint: "Install it with: bun add -d eslint @teamneo/neocord-eslint-plugin",
     });
   }
   const { env } = loadEnvFiles({ root, mode: "development", skipValidation: true });

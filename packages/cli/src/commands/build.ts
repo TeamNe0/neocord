@@ -1,4 +1,4 @@
-import type { RouteKind } from "@neocord/routing";
+import type { RouteKind } from "@teamneo/neocord-routing";
 import { relativePosix } from "../project/paths.ts";
 import { buildProject, openProject, syncProject } from "../project/pipeline.ts";
 import type { ScannedRoute } from "../project/scan.ts";

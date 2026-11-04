@@ -106,7 +106,7 @@ function routeUnion(scan: ProjectScan, kind: "button" | "select" | "modal"): str
 
 export function renderTypes(scan: ProjectScan): string {
   const lines = [
-    'declare module "@neocord/react" {',
+    'declare module "@teamneo/neocord-react" {',
     "  interface RegisteredRoutes {",
     `    buttons: ${routeUnion(scan, "button")};`,
     `    selects: ${routeUnion(scan, "select")};`,

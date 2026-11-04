@@ -1,4 +1,4 @@
-import { Subtext, TextDisplay } from "@neocord/react";
+import { Subtext, TextDisplay } from "@teamneo/neocord-react";
 
 export default function JokeLoading() {
   return (

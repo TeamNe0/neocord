@@ -20,7 +20,7 @@ neocord's types come from two places. Some are inferred from literals you write,
 `neocord typegen` writes `.neocord/types.d.ts`. `neocord dev`, `neocord build` and `neocord test` also write it. For a project with one button, one modal and a context file, it looks like this:
 
 ```ts title=".neocord/types.d.ts"
-declare module "@neocord/react" {
+declare module "@teamneo/neocord-react" {
   interface RegisteredRoutes {
     buttons: "moderation/confirm-ban/[userId]";
     selects: never;
@@ -57,7 +57,7 @@ The `.neocord` folder is generated and ignored by git. In a fresh clone or in CI
 
 ## RegisteredRoutes
 
-`@neocord/react` exports an empty interface, and the types of `route` read from it:
+`@teamneo/neocord-react` exports an empty interface, and the types of `route` read from it:
 
 ```ts
 export interface RegisteredRoutes {}
@@ -114,10 +114,10 @@ export default defineButton("moderation/page/[id]/[...rest]", {
 
 Here `ctx.params.id` is a `string` and `ctx.params.rest` is a `string[]`.
 
-The literal has to match the path. The [`route-matches-path`](/docs/eslint/route-matches-path) ESLint rule keeps it correct and has an autofix, and `validateManifest` rejects a mismatch at startup. The `RouteParams` type from `@neocord/react` and `@neocord/routing` gives you the same inference in your own code:
+The literal has to match the path. The [`route-matches-path`](/docs/eslint/route-matches-path) ESLint rule keeps it correct and has an autofix, and `validateManifest` rejects a mismatch at startup. The `RouteParams` type from `@teamneo/neocord-react` and `@teamneo/neocord-routing` gives you the same inference in your own code:
 
 ```ts
-import type { RouteParams } from "@neocord/react";
+import type { RouteParams } from "@teamneo/neocord-react";
 
 type Params = RouteParams<"mod/[id]/[...rest]">;
 ```
@@ -127,6 +127,6 @@ type Params = RouteParams<"mod/[id]/[...rest]">;
 Types do not reach everything, so these are also checked at runtime:
 
 - `validateManifest` runs in `neocord build`, `neocord deploy`, `neocord test` and at startup. It checks brands, route literals, names, descriptions and intent requirements.
-- `@neocord/react` validates every message against Discord's limits when it renders.
+- `@teamneo/neocord-react` validates every message against Discord's limits when it renders.
 - `buildCustomId` throws a `CustomIdError` if a filled-in route exceeds Discord's 100 characters.
 - [`src/env.ts`](/docs/type-safety/environment) validates environment variables when it loads.

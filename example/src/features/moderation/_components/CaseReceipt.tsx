@@ -1,4 +1,4 @@
-import { Bold, Heading, TextDisplay, Timestamp, UserMention, escapeMarkdown } from "@neocord/react";
+import { Bold, Heading, TextDisplay, Timestamp, UserMention, escapeMarkdown } from "@teamneo/neocord-react";
 import type { ModerationCase } from "~/db/schema";
 
 const TITLES: Record<ModerationCase["type"], string> = {

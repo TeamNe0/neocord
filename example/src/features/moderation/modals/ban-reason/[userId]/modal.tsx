@@ -1,4 +1,4 @@
-import { Label, Option, RadioGroup, TextInput } from "@neocord/react";
+import { Label, Option, RadioGroup, TextInput } from "@teamneo/neocord-react";
 import { defineModal } from "neocord";
 import { z } from "zod";
 import { CaseReceipt } from "../../../_components/CaseReceipt";

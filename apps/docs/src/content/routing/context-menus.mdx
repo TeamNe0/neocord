@@ -3,7 +3,7 @@ Context menu commands appear when someone right-clicks a user or a message. A us
 ## User commands
 
 ```tsx title="src/features/moderation/user-commands/report/command.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineUserCommand } from "neocord";
 
 export default defineUserCommand({
@@ -24,7 +24,7 @@ export default defineUserCommand({
 ## Message commands
 
 ```tsx title="src/features/moderation/message-commands/quote/command.tsx"
-import { Quote, TextDisplay, escapeMarkdown } from "@neocord/react";
+import { Quote, TextDisplay, escapeMarkdown } from "@teamneo/neocord-react";
 import { defineMessageCommand } from "neocord";
 
 export default defineMessageCommand({

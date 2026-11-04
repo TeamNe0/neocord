@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 import { runCommand } from "neocord/testing";
 import RootError from "./error";

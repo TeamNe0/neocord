@@ -8,7 +8,7 @@ import {
   Timestamp,
   render,
   type RenderResult,
-} from "@neocord/react";
+} from "@teamneo/neocord-react";
 import type {
   AnySelectMenuInteraction,
   AutocompleteInteraction,

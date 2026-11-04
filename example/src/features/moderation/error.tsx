@@ -1,4 +1,4 @@
-import { Code, Container, Heading, Subtext, TextDisplay, escapeMarkdown } from "@neocord/react";
+import { Code, Container, Heading, Subtext, TextDisplay, escapeMarkdown } from "@teamneo/neocord-react";
 import type { ErrorProps } from "neocord";
 
 export default function ModerationError({ error, ctx }: ErrorProps) {

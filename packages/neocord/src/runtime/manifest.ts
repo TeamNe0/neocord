@@ -1,4 +1,4 @@
-import { createRouter, type RouteKind, type Router } from "@neocord/routing";
+import { createRouter, type RouteKind, type Router } from "@teamneo/neocord-routing";
 import type { ComponentType } from "react";
 import type { IntentName, PartialName } from "../config.ts";
 import { parseDuration } from "../duration.ts";

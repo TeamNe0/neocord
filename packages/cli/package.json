@@ -1,5 +1,5 @@
 {
-  "name": "@neocord/cli",
+  "name": "@teamneo/neocord-cli",
   "version": "0.1.0",
   "description": "The neocord command: develop, build, launch, deploy and test Discord bots.",
   "type": "module",
@@ -30,7 +30,7 @@
     "check:package": "publint && attw --pack . --profile esm-only"
   },
   "dependencies": {
-    "@neocord/routing": "workspace:^",
+    "@teamneo/neocord-routing": "workspace:^",
     "chokidar": "catalog:",
     "commander": "catalog:",
     "dotenv": "catalog:",
@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",
-    "@neocord/tsconfig": "workspace:*",
+    "@teamneo/neocord-tsconfig": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:",

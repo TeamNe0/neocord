@@ -268,7 +268,7 @@ export function Landing() {
       <section className="landing-section" aria-labelledby="jsx-heading">
         <h2 id="jsx-heading">JSX in, Components V2 out</h2>
         <p className="landing-text">
-          <code>@neocord/react</code> is a real React renderer. Options infer their types, and Discord's limits are checked when
+          <code>@teamneo/neocord-react</code> is a real React renderer. Options infer their types, and Discord's limits are checked when
           the message renders, with errors that name the component.
         </p>
         <div className="jsx-compare">

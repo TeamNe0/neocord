@@ -23,7 +23,7 @@ What each part does:
 
 - `SKIP_ENV_VALIDATION=true` lets `src/env.ts` load during the build, when the image has no secrets. It applies only to that step, so the running container still validates its environment.
 - The build stage bundles the bot into `.neocord/build`. Bundles keep packages external, so the runtime stage copies all of `/app`, including `node_modules`.
-- `@neocord/cli` is a dev dependency of the project, and `start` needs it, so dev dependencies are kept in the image.
+- `@teamneo/neocord-cli` is a dev dependency of the project, and `start` needs it, so dev dependencies are kept in the image.
 - The container runs as the unprivileged `bun` user, and owns `/app`, because `neocord start` writes its bundled config to `.neocord/cache` and `neocord deploy` writes `.neocord/deploy.json`.
 
 ### With Prisma
@@ -95,4 +95,4 @@ With SQLite, the database file must outlive the container. Mount a volume and po
 
 ## Using Node instead
 
-The template's image uses Bun, because `bun --bun run` makes the CLI itself run under Bun, and `runtime: "auto"` then picks Bun for the bot. For a Node image, start from an official Node image that satisfies `@neocord/cli`'s requirement of Node 22.22 or later, and use `npm ci` and `npm run` with your own lockfile.
+The template's image uses Bun, because `bun --bun run` makes the CLI itself run under Bun, and `runtime: "auto"` then picks Bun for the bot. For a Node image, start from an official Node image that satisfies `@teamneo/neocord-cli`'s requirement of Node 22.22 or later, and use `npm ci` and `npm run` with your own lockfile.

@@ -1,4 +1,4 @@
-import { Container, Heading, Subtext, TextDisplay } from "@neocord/react";
+import { Container, Heading, Subtext, TextDisplay } from "@teamneo/neocord-react";
 import { eq } from "drizzle-orm";
 import { defineCommand, option } from "neocord";
 import { notes } from "~/db/schema";

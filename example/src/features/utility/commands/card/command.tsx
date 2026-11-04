@@ -1,4 +1,4 @@
-import { Container, File, Heading, MediaGallery, MediaItem, Section, Subtext, TextDisplay, Thumbnail, escapeMarkdown } from "@neocord/react";
+import { Container, File, Heading, MediaGallery, MediaItem, Section, Subtext, TextDisplay, Thumbnail, escapeMarkdown } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 import { createGradientPng, type Rgb } from "../../_lib/png";
 

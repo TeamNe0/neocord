@@ -1,5 +1,5 @@
 {
-  "extends": "@neocord/tsconfig/app.json",
+  "extends": "@teamneo/neocord-tsconfig/app.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client", "node", "mdx"]

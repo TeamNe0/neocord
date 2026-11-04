@@ -1,7 +1,7 @@
 A `loading.tsx` file gives a slow command a visible placeholder. Its UI is sent as the reply right away, and the handler's result replaces it.
 
 ```tsx title="src/features/reports/loading.tsx"
-import { Subtext } from "@neocord/react";
+import { Subtext } from "@teamneo/neocord-react";
 
 export default function Loading() {
   return <Subtext>Working on it.</Subtext>;
@@ -9,7 +9,7 @@ export default function Loading() {
 ```
 
 ```tsx title="src/features/reports/commands/report/command.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({

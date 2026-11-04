@@ -4,10 +4,10 @@
   "fixed": [
     [
       "neocord",
-      "@neocord/routing",
-      "@neocord/react",
-      "@neocord/cli",
-      "@neocord/eslint-plugin",
+      "@teamneo/neocord-routing",
+      "@teamneo/neocord-react",
+      "@teamneo/neocord-cli",
+      "@teamneo/neocord-eslint-plugin",
       "create-neocord"
     ]
   ],

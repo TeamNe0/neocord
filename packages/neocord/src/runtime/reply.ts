@@ -1,4 +1,4 @@
-import type { ModalRenderResult, RenderResult } from "@neocord/react";
+import type { ModalRenderResult, RenderResult } from "@teamneo/neocord-react";
 import {
   MessageFlags,
   MessageFlagsBitField,

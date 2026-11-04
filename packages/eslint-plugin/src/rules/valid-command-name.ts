@@ -1,4 +1,4 @@
-import { COMMAND_SEGMENT_PATTERN, MAX_COMMAND_DEPTH } from "@neocord/routing";
+import { COMMAND_SEGMENT_PATTERN, MAX_COMMAND_DEPTH } from "@teamneo/neocord-routing";
 import { createRule } from "../utils/rule.ts";
 
 export default createRule({

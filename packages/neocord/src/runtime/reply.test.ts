@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ComponentType, MessageFlags, RESTJSONErrorCodes, type Message, type RepliableInteraction } from "discord.js";
-import type { RenderResult } from "@neocord/react";
+import type { RenderResult } from "@teamneo/neocord-react";
 import { createLogger, type LogMethod } from "../logger.ts";
 import { createFakeInteraction, mockMessage, type ApiHook, type FakeKind, type Recording } from "../testing/fakes.ts";
 import { createResponder, toEditPayload, type ResponderOptions } from "./reply.ts";

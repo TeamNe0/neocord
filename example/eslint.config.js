@@ -1,4 +1,4 @@
-import neocord from "@neocord/eslint-plugin";
+import neocord from "@teamneo/neocord-eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 
 export default [

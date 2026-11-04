@@ -5,7 +5,7 @@ A button has two halves: the `<Button>` in a message, and the `button.tsx` file 
 Send the button from any handler:
 
 ```tsx title="src/features/moderation/commands/ban/command.tsx"
-import { ActionRow, Button, Container, TextDisplay } from "@neocord/react";
+import { ActionRow, Button, Container, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({
@@ -31,7 +31,7 @@ export default defineCommand({
 Then handle it. The first argument must be the file's route id:
 
 ```tsx title="src/features/moderation/buttons/confirm-ban/[userId]/button.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineButton } from "neocord";
 
 export default defineButton("moderation/confirm-ban/[userId]", {

@@ -1,4 +1,4 @@
-import { List, ListItem, RoleMention, Subtext, TextDisplay } from "@neocord/react";
+import { List, ListItem, RoleMention, Subtext, TextDisplay } from "@teamneo/neocord-react";
 import { defineSelect } from "neocord";
 
 export default defineSelect("fun/role-picker", {

@@ -1,7 +1,7 @@
-Any function component works, because `@neocord/react` is a real React renderer. Split messages into components the way you would in a web app, and keep them in a private folder that starts with `_`.
+Any function component works, because `@teamneo/neocord-react` is a real React renderer. Split messages into components the way you would in a web app, and keep them in a private folder that starts with `_`.
 
 ```tsx title="src/features/general/_components/Stat.tsx"
-import { Bold, TextDisplay } from "@neocord/react";
+import { Bold, TextDisplay } from "@teamneo/neocord-react";
 
 export interface StatProps {
   label: string;
@@ -18,7 +18,7 @@ export function Stat({ label, value }: StatProps) {
 ```
 
 ```tsx title="src/features/general/commands/about/command.tsx"
-import { ActionRow, Button, Container, Heading } from "@neocord/react";
+import { ActionRow, Button, Container, Heading } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 import { Stat } from "../../_components/Stat";
 
@@ -68,7 +68,7 @@ The nesting rules apply to what a component renders, not to where you write it. 
 `useContext()` from `neocord` returns the current interaction context in any component rendered by neocord. Use it to avoid passing `ctx` down through props.
 
 ```tsx
-import { Subtext } from "@neocord/react";
+import { Subtext } from "@teamneo/neocord-react";
 import { useContext } from "neocord";
 
 export function RequestedBy() {
@@ -90,7 +90,7 @@ const ctx = useContext<CommandContext>();
 React's own context works too. Rename one of the imports if you need both hooks in a file.
 
 ```tsx
-import { Container } from "@neocord/react";
+import { Container } from "@teamneo/neocord-react";
 import { createContext, use, type ReactNode } from "react";
 
 const AccentContext = createContext<"blurple" | "red">("blurple");
@@ -120,7 +120,7 @@ export function DangerCard({ children }: { children: ReactNode }) {
 Handlers can return a tree that suspends. neocord waits until everything has resolved before it sends the message, so the `fallback` of a `<Suspense>` boundary is not what the user sees. Use [`loading.tsx`](/docs/handlers/loading) for a visible placeholder.
 
 ```tsx
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { Suspense, use } from "react";
 
 function Profile({ user }: { user: Promise<{ name: string }> }) {
@@ -154,10 +154,10 @@ A class component with `componentDidCatch` or `getDerivedStateFromError` catches
 
 ## Testing components
 
-Test a component with the `layouts` option of the [test helpers](/docs/testing), or render it directly with `render` from `@neocord/react` if it does not call `useContext` from `neocord`:
+Test a component with the `layouts` option of the [test helpers](/docs/testing), or render it directly with `render` from `@teamneo/neocord-react` if it does not call `useContext` from `neocord`:
 
 ```tsx
-import { render } from "@neocord/react";
+import { render } from "@teamneo/neocord-react";
 
 const result = render(<Stat label="Servers" value={3} />);
 ```

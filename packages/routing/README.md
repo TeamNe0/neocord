@@ -1,17 +1,17 @@
-# @neocord/routing
+# @teamneo/neocord-routing
 
 The file-system routing conventions behind [neocord](https://www.npmjs.com/package/neocord). The CLI, the runtime, the React renderer and the ESLint plugin all share this package, so a file means the same thing to each of them.
 
 You rarely need to install it directly. Other tools can use it to understand a neocord project.
 
 ```bash
-bun add @neocord/routing
+bun add @teamneo/neocord-routing
 ```
 
 ## Classify a file
 
 ```ts
-import { classifyFile } from "@neocord/routing";
+import { classifyFile } from "@teamneo/neocord-routing";
 
 classifyFile("src/features/moderation/buttons/confirm-ban/[userId]/button.tsx");
 ```
@@ -37,7 +37,7 @@ The result describes the file:
 ## Build custom ids
 
 ```ts
-import { buildCustomId } from "@neocord/routing";
+import { buildCustomId } from "@teamneo/neocord-routing";
 
 buildCustomId("moderation/confirm-ban/[userId]", { userId: "123" });
 ```
@@ -47,7 +47,7 @@ This returns `moderation/confirm-ban/123`. Values are URI encoded, and an id lon
 ## Match custom ids
 
 ```ts
-import { createRouter } from "@neocord/routing";
+import { createRouter } from "@teamneo/neocord-routing";
 
 const router = createRouter<string>();
 router.add("moderation/confirm-ban/[userId]", "handler");
@@ -60,7 +60,7 @@ This returns `{ route: "handler", params: { userId: "123" } }`. Static segments 
 ## Infer params
 
 ```ts
-import type { RouteParams } from "@neocord/routing";
+import type { RouteParams } from "@teamneo/neocord-routing";
 
 type Params = RouteParams<"mod/[id]/[...rest]">;
 ```

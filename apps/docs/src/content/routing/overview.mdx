@@ -21,7 +21,7 @@ The route id is `moderation/confirm-ban/[userId]`. A button sent with `userId` s
 The file's default export must be the matching helper, and its first argument must be the route id:
 
 ```tsx title="src/features/moderation/buttons/confirm-ban/[userId]/button.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineButton } from "neocord";
 
 export default defineButton("moderation/confirm-ban/[userId]", {

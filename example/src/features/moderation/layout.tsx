@@ -1,4 +1,4 @@
-import { Container } from "@neocord/react";
+import { Container } from "@teamneo/neocord-react";
 import type { LayoutProps } from "neocord";
 
 export default function ModerationLayout({ children }: LayoutProps) {

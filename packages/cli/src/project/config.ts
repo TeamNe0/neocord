@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build, type BuildFailure } from "esbuild";
-import { normalizePath } from "@neocord/routing";
+import { normalizePath } from "@teamneo/neocord-routing";
 import { CliError, errorMessage } from "../errors.ts";
 import { findConfigFile, projectPaths, toPosix } from "./paths.ts";
 

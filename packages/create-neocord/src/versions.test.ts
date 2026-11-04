@@ -32,9 +32,9 @@ describe("dependency versions", () => {
 
   test("framework versions track the workspace packages", () => {
     const directories = {
-      "@neocord/cli": "cli",
-      "@neocord/eslint-plugin": "eslint-plugin",
-      "@neocord/react": "react",
+      "@teamneo/neocord-cli": "cli",
+      "@teamneo/neocord-eslint-plugin": "eslint-plugin",
+      "@teamneo/neocord-react": "react",
       neocord: "neocord",
     } as const;
     for (const [name, directory] of Object.entries(directories)) {

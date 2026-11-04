@@ -1,4 +1,4 @@
-import { Quote, TextDisplay, escapeMarkdown } from "@neocord/react";
+import { Quote, TextDisplay, escapeMarkdown } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 import { fetchJoke } from "../../_lib/jokes";
 

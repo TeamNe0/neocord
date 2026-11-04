@@ -14,9 +14,9 @@ export const catalogVersions = {
 } as const;
 
 export const frameworkVersions = {
-  "@neocord/cli": "^0.1.0",
-  "@neocord/eslint-plugin": "^0.1.0",
-  "@neocord/react": "^0.1.0",
+  "@teamneo/neocord-cli": "^0.1.0",
+  "@teamneo/neocord-eslint-plugin": "^0.1.0",
+  "@teamneo/neocord-react": "^0.1.0",
   neocord: "^0.1.0",
 } as const;
 

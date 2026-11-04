@@ -1,4 +1,4 @@
-import { Message } from "@neocord/react";
+import { Message } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({

@@ -1,5 +1,5 @@
 {
-  "name": "@neocord/eslint-plugin",
+  "name": "@teamneo/neocord-eslint-plugin",
   "version": "0.1.0",
   "description": "ESLint rules that enforce neocord file conventions and Discord bot best practices.",
   "type": "module",
@@ -28,14 +28,14 @@
     "check:package": "publint && attw --pack . --profile esm-only"
   },
   "dependencies": {
-    "@neocord/routing": "workspace:^"
+    "@teamneo/neocord-routing": "workspace:^"
   },
   "peerDependencies": {
     "eslint": "^9.0.0 || ^10.0.0"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",
-    "@neocord/tsconfig": "workspace:*",
+    "@teamneo/neocord-tsconfig": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript-eslint/parser": "catalog:",

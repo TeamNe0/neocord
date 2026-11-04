@@ -9,7 +9,7 @@ import {
   RouteConflictError,
   type RouteKind,
   type SegmentKind,
-} from "@neocord/routing";
+} from "@teamneo/neocord-routing";
 import { CliError } from "../errors.ts";
 import { compareStrings } from "./paths.ts";
 

@@ -6,7 +6,7 @@ A neocord bot connects out to Discord's gateway over a WebSocket and stays conne
 | --- | --- |
 | A process that stays running | The gateway connection, tasks and live sessions all live in memory. |
 | Outbound access to Discord | The bot opens a WebSocket to the gateway and calls the REST API over HTTPS. |
-| Bun, or Node 22.22 or later | `@neocord/cli` declares `node >=22.22.0`, and `neocord start` is how a bot runs. The runtime packages declare `node >=22.12.0`. |
+| Bun, or Node 22.22 or later | `@teamneo/neocord-cli` declares `node >=22.22.0`, and `neocord start` is how a bot runs. The runtime packages declare `node >=22.12.0`. |
 | Environment variables | At least `DISCORD_TOKEN`. See [Environment variables](/docs/type-safety/environment). |
 
 The bot does not need any of these:

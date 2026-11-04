@@ -1,4 +1,4 @@
-import { ActionRow, Bold, Container, Heading, Option, StringSelect, TextDisplay } from "@neocord/react";
+import { ActionRow, Bold, Container, Heading, Option, StringSelect, TextDisplay } from "@teamneo/neocord-react";
 import { useState } from "react";
 import type { QuizQuestion } from "../_lib/quiz";
 

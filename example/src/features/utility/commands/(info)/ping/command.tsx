@@ -1,4 +1,4 @@
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({

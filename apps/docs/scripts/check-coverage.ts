@@ -138,9 +138,9 @@ function checkReactComponents(): void {
     const names = [...code.matchAll(/export function (\w+)/g)].flatMap((match) => (match[1] ? [match[1]] : []));
     check(names.length > 0, `Found no components in packages/react/src/components/${source}.tsx.`);
     for (const name of names) {
-      check(content.includes(`\`${name}\``), `@neocord/react component ${name} is not documented on ${page}.`);
-      check(content.includes(`### \`${name}\``), `@neocord/react component ${name} has no heading on ${page}.`);
-      check(api.includes(name), `@neocord/react component ${name} is not in the API reference.`);
+      check(content.includes(`\`${name}\``), `@teamneo/neocord-react component ${name} is not documented on ${page}.`);
+      check(content.includes(`### \`${name}\``), `@teamneo/neocord-react component ${name} has no heading on ${page}.`);
+      check(api.includes(name), `@teamneo/neocord-react component ${name} is not in the API reference.`);
     }
   }
 }

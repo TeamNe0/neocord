@@ -6,15 +6,15 @@ neocord is a file-routed framework for Discord bots, built on discord.js and Rea
 
 | Path | Name | Published | Purpose |
 | --- | --- | --- | --- |
-| `packages/routing` | `@neocord/routing` | yes | File conventions, route ids, custom id building and matching. No dependencies. |
-| `packages/react` | `@neocord/react` | yes | React renderer that turns JSX into Discord message and modal payloads. |
+| `packages/routing` | `@teamneo/neocord-routing` | yes | File conventions, route ids, custom id building and matching. No dependencies. |
+| `packages/react` | `@teamneo/neocord-react` | yes | React renderer that turns JSX into Discord message and modal payloads. |
 | `packages/neocord` | `neocord` | yes | `define*` helpers, handler contexts, bot runtime, sharding manager, command deploy, testing helpers. |
-| `packages/cli` | `@neocord/cli` | yes | The `neocord` binary. Scans routes, generates code and types, bundles, launches. |
-| `packages/eslint-plugin` | `@neocord/eslint-plugin` | yes | Rules for what each file must export, plus best practices. |
+| `packages/cli` | `@teamneo/neocord-cli` | yes | The `neocord` binary. Scans routes, generates code and types, bundles, launches. |
+| `packages/eslint-plugin` | `@teamneo/neocord-eslint-plugin` | yes | Rules for what each file must export, plus best practices. |
 | `packages/create-neocord` | `create-neocord` | yes | `bun create neocord` scaffolder. |
-| `packages/tsconfig` | `@neocord/tsconfig` | no | Shared compiler options. |
-| `apps/docs` | `@neocord/docs` | deployed | Vite + React documentation site. |
-| `example` | `@neocord/example` | no | Example bot exercising the whole framework. |
+| `packages/tsconfig` | `@teamneo/neocord-tsconfig` | no | Shared compiler options. |
+| `apps/docs` | `@teamneo/neocord-docs` | deployed | Vite + React documentation site. |
+| `example` | `@teamneo/neocord-example` | no | Example bot exercising the whole framework. |
 
 Dependency direction: `routing` ← `react` ← `neocord` ← `cli` (peer). `eslint-plugin` depends only on `routing`. Nothing depends on `create-neocord`.
 
@@ -54,7 +54,7 @@ src/
       _lib/anything.ts               folders and files starting with _ are private
 ```
 
-`classifyFile` in `@neocord/routing` is the source of truth. The rules:
+`classifyFile` in `@teamneo/neocord-routing` is the source of truth. The rules:
 
 - Folders named `(group)` organise files without changing the route.
 - `[param]` is one dynamic segment, `[...rest]` catches the remainder.
@@ -63,7 +63,7 @@ src/
 - Custom ids starting with `~` are reserved for live sessions.
 - `middleware`, `layout`, `error` and `loading` files apply to everything beneath them. Middleware and layouts compose from root to leaf. For `error` and `loading`, the closest one wins.
 
-## `@neocord/react`
+## `@teamneo/neocord-react`
 
 A real React renderer built on `react-reconciler`, so function components, context, hooks and `<Suspense>` work. Components return host elements. The committed host tree is serialised to Discord payloads and validated with Discord's limits.
 
@@ -72,7 +72,7 @@ render(node, options?: { live?: never }): RenderResult
 renderAsync(node): Promise<RenderResult>
 renderModal(node, { customId, title }): ModalRenderResult
 createLiveRoot({ sessionId, onUpdate }): LiveRoot
-buildCustomId, type RouteParams             re-exported from @neocord/routing
+buildCustomId, type RouteParams             re-exported from @teamneo/neocord-routing
 escapeMarkdown(text)
 useLiveInteraction()
 ```
@@ -122,7 +122,7 @@ export interface RegisteredRoutes {}
 type ButtonRoute = RegisteredRoutes extends { buttons: infer R extends string } ? R : string;
 ```
 
-The generated declaration file contains `declare module "@neocord/react" { interface RegisteredRoutes { buttons: "a" | "b"; selects: ...; modals: ... } }`.
+The generated declaration file contains `declare module "@teamneo/neocord-react" { interface RegisteredRoutes { buttons: "a" | "b"; selects: ...; modals: ... } }`.
 
 ### Live sessions
 
@@ -385,7 +385,7 @@ interface ManifestRoute {
 
 A `NeocordStartupError` is logged once. It still rejects, so callers can catch it, but an uncaught one exits 1 without a stack trace, including from generated entries that use top-level `await`. Under a manager the shard sends the message to the manager instead of logging it. A fatal gateway close code after login takes the same path, then stops and exits 1.
 
-## `@neocord/cli`
+## `@teamneo/neocord-cli`
 
 | Command | Behaviour |
 | --- | --- |
@@ -405,7 +405,7 @@ Env files load in Next.js order into the child process: `.env`, `.env.<mode>`, `
 
 `neocord build` records its start time and esbuild's metafile inputs in `.neocord/build/inputs.json`, leaving out `node_modules`. A build is stale when a recorded input changed or is gone, or when the source folder, the features folder, the config or `tsconfig.json` changed since then. If the file is missing or invalid, those four are compared against the artifact's time instead. `neocord deploy` rebuilds a stale build. `neocord start` only warns and still starts, because file times often differ after a checkout or deploy.
 
-## `@neocord/eslint-plugin`
+## `@teamneo/neocord-eslint-plugin`
 
 Flat config only, with `configs.recommended` and `configs.strict`. Rules read the AST only, so they do not need type information and work with any parser. See the docs site for the full rule list.
 

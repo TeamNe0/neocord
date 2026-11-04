@@ -1,4 +1,4 @@
-import { ActionRow, Button, Container, Heading } from "@neocord/react";
+import { ActionRow, Button, Container, Heading } from "@teamneo/neocord-react";
 import { defineButton } from "neocord";
 import { Stat } from "../../_components/Stat";
 

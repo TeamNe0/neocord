@@ -2,7 +2,7 @@ import { identifierName, isAstNode, staticString, type AstNode } from "./ast.ts"
 import type { RuleKit } from "./rule.ts";
 import { importBinding, isNamespaceLike } from "./scope.ts";
 
-export const REACT_PACKAGE = "@neocord/react";
+export const REACT_PACKAGE = "@teamneo/neocord-react";
 
 export const SELECT_COMPONENTS = new Set([
   "ChannelSelect",

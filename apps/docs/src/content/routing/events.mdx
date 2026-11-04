@@ -66,10 +66,10 @@ Event contexts have only what does not depend on an interaction:
 | `shards` | `ShardHelpers` | See [Sharding](/docs/sharding). |
 | `commands` | `readonly CommandInfo[]` | The bot's commands. See [Listing commands](/docs/handlers/context#listing-commands). |
 
-`execute` returns no UI. Middleware, layouts, `error.tsx` and `loading.tsx` do not apply to events. To send a message, use discord.js directly. `@neocord/react` still renders the payload, and `send` needs the flags replaced, because it does not accept the ephemeral flag:
+`execute` returns no UI. Middleware, layouts, `error.tsx` and `loading.tsx` do not apply to events. To send a message, use discord.js directly. `@teamneo/neocord-react` still renders the payload, and `send` needs the flags replaced, because it does not accept the ephemeral flag:
 
 ```tsx title="src/features/general/events/guildCreate.tsx"
-import { render, TextDisplay } from "@neocord/react";
+import { render, TextDisplay } from "@teamneo/neocord-react";
 import { MessageFlags } from "discord.js";
 import { defineEvent } from "neocord";
 

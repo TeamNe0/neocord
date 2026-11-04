@@ -1,4 +1,4 @@
-import type { HasParams, ParamValue, RouteParamInput } from "@neocord/routing";
+import type { HasParams, ParamValue, RouteParamInput } from "@teamneo/neocord-routing";
 import type {
   APIFileUploadComponent,
   APILabelComponent,

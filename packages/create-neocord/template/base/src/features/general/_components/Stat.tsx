@@ -1,4 +1,4 @@
-import { Bold, TextDisplay } from "@neocord/react";
+import { Bold, TextDisplay } from "@teamneo/neocord-react";
 
 export interface StatProps {
   label: string;

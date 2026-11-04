@@ -9,7 +9,7 @@ src/features/moderation/buttons/confirm-ban/[userId]/button.tsx
 The route id is `moderation/confirm-ban/[userId]`:
 
 ```tsx title="src/features/moderation/buttons/confirm-ban/[userId]/button.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineButton } from "neocord";
 
 export default defineButton("moderation/confirm-ban/[userId]", {
@@ -26,7 +26,7 @@ export default defineButton("moderation/confirm-ban/[userId]", {
 `[...rest]` catches every remaining segment and gives you an array. It must be the last segment:
 
 ```tsx title="src/features/wizard/buttons/step/[...path]/button.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineButton } from "neocord";
 
 export default defineButton("wizard/step/[...path]", {
@@ -62,10 +62,10 @@ await ctx.showModal("moderation/ban-reason/[userId]", { userId: user.id });
 
 ## The typed route prop
 
-The `neocord` CLI generates `.neocord/types.d.ts` from your files. It registers every button, select and modal route with `@neocord/react`:
+The `neocord` CLI generates `.neocord/types.d.ts` from your files. It registers every button, select and modal route with `@teamneo/neocord-react`:
 
 ```ts title=".neocord/types.d.ts"
-declare module "@neocord/react" {
+declare module "@teamneo/neocord-react" {
   interface RegisteredRoutes {
     buttons: "general/refresh" | "moderation/confirm-ban/[userId]";
     selects: "moderation/pick-role";
@@ -93,7 +93,7 @@ The types update when `neocord dev`, `neocord build`, `neocord test` or `neocord
 `buildCustomId` fills in the route and encodes each value with `encodeURIComponent`:
 
 ```ts
-import { buildCustomId } from "@neocord/react";
+import { buildCustomId } from "@teamneo/neocord-react";
 
 buildCustomId("moderation/confirm-ban/[userId]", { userId: "123" });
 ```
@@ -165,7 +165,7 @@ Prefer `route`, which the ESLint rule [`prefer-route-prop`](/docs/eslint/prefer-
 ## Inferring params yourself
 
 ```ts
-import type { RouteParams } from "@neocord/react";
+import type { RouteParams } from "@teamneo/neocord-react";
 
 type Params = RouteParams<"mod/[id]/[...rest]">;
 ```

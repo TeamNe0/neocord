@@ -1,4 +1,4 @@
-import { ActionRow, Bold, Button, Container, Heading, List, ListItem, Message, TextDisplay, escapeMarkdown, render } from "@neocord/react";
+import { ActionRow, Bold, Button, Container, Heading, List, ListItem, Message, TextDisplay, escapeMarkdown, render } from "@teamneo/neocord-react";
 import { useContext } from "neocord";
 import { useState } from "react";
 

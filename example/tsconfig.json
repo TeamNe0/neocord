@@ -1,5 +1,5 @@
 {
-  "extends": "@neocord/tsconfig/app.json",
+  "extends": "@teamneo/neocord-tsconfig/app.json",
   "compilerOptions": {
     "types": ["node", "bun"],
     "paths": {

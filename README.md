@@ -4,7 +4,7 @@ A file-routed framework for Discord bots, built on [discord.js](https://discord.
 
 ```tsx
 // src/features/moderation/commands/ban/command.tsx  ->  /ban
-import { ActionRow, Button, Container, Heading } from "@neocord/react";
+import { ActionRow, Button, Container, Heading } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({
@@ -53,11 +53,11 @@ To set up a project by hand, follow the manual setup guide in the [documentation
 | Package | Description |
 | --- | --- |
 | [`neocord`](./packages/neocord) | The framework: `define*` helpers, runtime, sharding, testing |
-| [`@neocord/react`](./packages/react) | React renderer for Discord messages and modals |
-| [`@neocord/cli`](./packages/cli) | The `neocord` command |
-| [`@neocord/eslint-plugin`](./packages/eslint-plugin) | File contract and best-practice rules |
+| [`@teamneo/neocord-react`](./packages/react) | React renderer for Discord messages and modals |
+| [`@teamneo/neocord-cli`](./packages/cli) | The `neocord` command |
+| [`@teamneo/neocord-eslint-plugin`](./packages/eslint-plugin) | File contract and best-practice rules |
 | [`create-neocord`](./packages/create-neocord) | Project scaffolder |
-| [`@neocord/routing`](./packages/routing) | Shared routing conventions |
+| [`@teamneo/neocord-routing`](./packages/routing) | Shared routing conventions |
 
 The [example bot](./example) uses every feature, and [`apps/docs`](./apps/docs) is the documentation site.
 

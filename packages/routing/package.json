@@ -1,5 +1,5 @@
 {
-  "name": "@neocord/routing",
+  "name": "@teamneo/neocord-routing",
   "version": "0.1.0",
   "description": "File-system routing conventions shared across the neocord framework.",
   "type": "module",
@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",
-    "@neocord/tsconfig": "workspace:*",
+    "@teamneo/neocord-tsconfig": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:",

@@ -1,4 +1,4 @@
-import { Subtext } from "@neocord/react";
+import { Subtext } from "@teamneo/neocord-react";
 import { useContext, type LayoutProps } from "neocord";
 
 export default function RootLayout({ children }: LayoutProps) {

@@ -1,5 +1,5 @@
 {
-  "name": "@neocord/example",
+  "name": "@teamneo/neocord-example",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -19,8 +19,8 @@
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
-    "@neocord/react": "workspace:*",
     "@t3-oss/env-core": "catalog:",
+    "@teamneo/neocord-react": "workspace:*",
     "discord.js": "catalog:",
     "drizzle-orm": "^0.45.4",
     "neocord": "workspace:*",
@@ -28,9 +28,9 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@neocord/cli": "workspace:*",
-    "@neocord/eslint-plugin": "workspace:*",
-    "@neocord/tsconfig": "workspace:*",
+    "@teamneo/neocord-cli": "workspace:*",
+    "@teamneo/neocord-eslint-plugin": "workspace:*",
+    "@teamneo/neocord-tsconfig": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

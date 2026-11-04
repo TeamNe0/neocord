@@ -11,7 +11,7 @@ Requires discord.js 14.28 or later, React 19.3 or later, and Node 22.12 or later
 ## Commands
 
 ```tsx
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({

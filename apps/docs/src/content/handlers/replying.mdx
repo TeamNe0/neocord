@@ -1,7 +1,7 @@
 A handler can return a node or call a method on `ctx`. Returning a node is the idiomatic form, because the runtime then picks the right Discord call. The `ctx` methods exist for when you need more than one message, or need to do work after responding.
 
 ```tsx title="src/features/general/commands/stats/command.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({

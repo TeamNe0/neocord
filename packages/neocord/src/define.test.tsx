@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, test } from "bun:test";
-import type { RouteParamsRecord } from "@neocord/react";
+import type { RouteParamsRecord } from "@teamneo/neocord-react";
 import {
   ChannelType,
   type Attachment,

@@ -1,4 +1,4 @@
-import type { ButtonRoute, ModalRoute } from "@neocord/react";
+import type { ButtonRoute, ModalRoute } from "@teamneo/neocord-react";
 import { defineButton, defineCommand, type AppContext, type InferAppContext } from "neocord";
 import { deployCommands, serializeCommands, startBot, startManager, validateManifest, type DeployResult, type Manifest, type ManifestIssue } from "neocord/runtime";
 import { mockUser, runCommand, type TestResult } from "neocord/testing";
@@ -10,7 +10,7 @@ declare module "neocord" {
   }
 }
 
-declare module "@neocord/react" {
+declare module "@teamneo/neocord-react" {
   interface RegisteredRoutes {
     buttons: "core/open/[id]" | "core/plain";
     selects: "core/pick";

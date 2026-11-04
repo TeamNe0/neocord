@@ -35,7 +35,7 @@ function placementHint(name: string): string {
 export default createRule({
   name: "valid-component-nesting",
   type: "problem",
-  description: "Check the static JSX structure of @neocord/react components.",
+  description: "Check the static JSX structure of @teamneo/neocord-react components.",
   messages: {
     misplaced: "<{{component}}> cannot be inside <{{parent}}>. It belongs in {{allowed}}.",
     messageNotRoot: "<Message> must be the root of the tree, not inside <{{parent}}>.",

@@ -1,4 +1,4 @@
-import { Container, TextDisplay } from "@neocord/react";
+import { Container, TextDisplay } from "@teamneo/neocord-react";
 
 export default function FunError() {
   return (

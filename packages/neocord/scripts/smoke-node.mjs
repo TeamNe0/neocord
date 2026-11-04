@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createElement, useState } from "react";
-import { ActionRow, Button, TextDisplay } from "@neocord/react";
+import { ActionRow, Button, TextDisplay } from "@teamneo/neocord-react";
 import { defineButton, defineCommand, defineConfig, defineModal, option, parseDuration } from "neocord";
 import { deployCommands, serializeCommands, startBot, startManager, validateManifest } from "neocord/runtime";
 import { mockMember, mockUser, renderModalOf, runButton, runCommand, runModal } from "neocord/testing";

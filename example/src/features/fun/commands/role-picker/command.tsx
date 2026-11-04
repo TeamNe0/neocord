@@ -1,4 +1,4 @@
-import { ActionRow, Container, Heading, RoleSelect, Subtext } from "@neocord/react";
+import { ActionRow, Container, Heading, RoleSelect, Subtext } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({

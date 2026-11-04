@@ -1092,7 +1092,7 @@ describe("neocord info", () => {
       const project = fixture({ files: { ...STANDARD_FILES, ".env": "DISCORD_TOKEN=super-secret-token\nOTHER_SECRET=hidden-value\n" } });
       const result = await cli(project, ["info"], { npm_config_user_agent: undefined });
       expect(result.code).toBe(0);
-      expect(result.stdout).toMatch(/@neocord\/cli\s+0\./);
+      expect(result.stdout).toMatch(/@teamneo\/neocord-cli\s+0\./);
       expect(result.stdout).toMatch(/neocord\s+9\.9\.9/);
       expect(result.stdout).toMatch(/react\s+19\.9\.9/);
       expect(result.stdout).toMatch(/discord\.js\s+not installed/);

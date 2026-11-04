@@ -1,5 +1,5 @@
-import { buildCustomId, type ModalRenderResult, type RenderResult } from "@neocord/react";
-import type { RouteKind, RouteParamInput } from "@neocord/routing";
+import { buildCustomId, type ModalRenderResult, type RenderResult } from "@teamneo/neocord-react";
+import type { RouteKind, RouteParamInput } from "@teamneo/neocord-routing";
 import {
   ComponentType,
   type ClientEvents,

@@ -259,7 +259,7 @@ export const notes = mysqlTable("notes", {
 This is the template's `/remember` command for SQLite and PostgreSQL. `ctx.app.db` is typed through the [generated types](/docs/type-safety#registeredapp), so run `neocord typegen` after creating `src/context.ts`.
 
 ```tsx title="src/features/general/commands/remember/command.tsx"
-import { Container, Heading, Subtext, TextDisplay } from "@neocord/react";
+import { Container, Heading, Subtext, TextDisplay } from "@teamneo/neocord-react";
 import { eq } from "drizzle-orm";
 import { defineCommand, option } from "neocord";
 import { notes } from "~/db/schema";

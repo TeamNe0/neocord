@@ -1,4 +1,4 @@
-import { buildCustomId } from "@neocord/routing";
+import { buildCustomId } from "@teamneo/neocord-routing";
 import {
   ButtonStyle,
   ComponentType,
@@ -1075,7 +1075,7 @@ function serializeBlock(node: HostElement, ctx: SerializeContext): RenderedCompo
     case HOST.mediaItem:
       throw new Error("MediaItem must be inside MediaGallery.");
     default:
-      throw new Error(`Unsupported element ${displayName(node.type)}. Use components exported by @neocord/react.`);
+      throw new Error(`Unsupported element ${displayName(node.type)}. Use components exported by @teamneo/neocord-react.`);
   }
 }
 

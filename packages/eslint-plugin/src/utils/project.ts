@@ -1,6 +1,6 @@
 import { readdirSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { classifyFile, normalizePath, type FileClassification } from "@neocord/routing";
+import { classifyFile, normalizePath, type FileClassification } from "@teamneo/neocord-routing";
 
 export interface NeocordSettings {
   sourceDir?: string;

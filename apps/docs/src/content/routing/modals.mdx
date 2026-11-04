@@ -3,7 +3,7 @@ A modal is a `modal.tsx` file that defines both the form and what happens when i
 ## A modal
 
 ```tsx title="src/features/moderation/modals/ban-reason/[userId]/modal.tsx"
-import { Label, TextDisplay, TextInput } from "@neocord/react";
+import { Label, TextDisplay, TextInput } from "@teamneo/neocord-react";
 import { defineModal } from "neocord";
 import { z } from "zod";
 
@@ -155,7 +155,7 @@ A modal cannot open another modal, which is why `showModal` is missing.
 When a button opens a modal, `respond: "update"` makes the submission change the message that button is on instead of sending a new one. This suits a confirmation flow, where the buttons should disappear once the form is sent.
 
 ```tsx title="src/features/moderation/modals/ban-reason/[userId]/modal.tsx"
-import { Label, TextDisplay, TextInput } from "@neocord/react";
+import { Label, TextDisplay, TextInput } from "@teamneo/neocord-react";
 import { defineModal } from "neocord";
 
 export default defineModal("moderation/ban-reason/[userId]", {
@@ -185,7 +185,7 @@ import {
   RadioGroup,
   TextDisplay,
   TextInput,
-} from "@neocord/react";
+} from "@teamneo/neocord-react";
 import { defineModal } from "neocord";
 import { z } from "zod";
 

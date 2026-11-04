@@ -1,5 +1,5 @@
-import type { ModalRoute, RouteParamsRecord } from "@neocord/react";
-import type { HasParams, RouteKind, RouteParamInput, RouteParams } from "@neocord/routing";
+import type { ModalRoute, RouteParamsRecord } from "@teamneo/neocord-react";
+import type { HasParams, RouteKind, RouteParamInput, RouteParams } from "@teamneo/neocord-routing";
 import type {
   AutocompleteInteraction,
   ButtonInteraction,

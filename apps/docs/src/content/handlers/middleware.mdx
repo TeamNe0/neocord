@@ -1,7 +1,7 @@
 Middleware runs before a handler and can stop it. Put a `middleware.ts` next to the routes it should cover, and default-export `defineMiddleware`.
 
 ```tsx title="src/features/moderation/middleware.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineMiddleware } from "neocord";
 
 export default defineMiddleware(async (ctx, next) => {
@@ -48,7 +48,7 @@ On a modal, middleware runs before the [schema](/docs/routing/modals#schemas), s
 A returned node uses `ctx.reply` on every route kind. On a button, it sends a new message and does not update the one the button is on.
 
 ```tsx title="src/features/moderation/buttons/middleware.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineMiddleware } from "neocord";
 
 export default defineMiddleware(async (ctx, next) => {

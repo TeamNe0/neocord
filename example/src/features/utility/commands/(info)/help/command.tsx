@@ -1,4 +1,4 @@
-import { Bold, Code, Container, Heading, List, ListItem, Subtext, TextDisplay } from "@neocord/react";
+import { Bold, Code, Container, Heading, List, ListItem, Subtext, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, type CommandInfo } from "neocord";
 
 function label(command: CommandInfo): string {

@@ -3,19 +3,19 @@ Upgrade the neocord packages together, then run the same checks you use before a
 ## Update the packages
 
 ```pm
-add neocord@latest @neocord/react@latest
-add -d @neocord/cli@latest @neocord/eslint-plugin@latest
+add neocord@latest @teamneo/neocord-react@latest
+add -d @teamneo/neocord-cli@latest @teamneo/neocord-eslint-plugin@latest
 ```
 
-Leave out `@neocord/eslint-plugin` if the project does not use ESLint. `@neocord/routing` comes in as a dependency, so you do not need to list it.
+Leave out `@teamneo/neocord-eslint-plugin` if the project does not use ESLint. `@teamneo/neocord-routing` comes in as a dependency, so you do not need to list it.
 
 Check the peer dependencies at the same time:
 
 | Package | Peer dependency |
 | --- | --- |
-| `neocord`, `@neocord/react` | `discord.js` `^14.28.0`, `react` `^19.3.0` |
-| `@neocord/cli` | `neocord` |
-| `@neocord/eslint-plugin` | `eslint` `^9.0.0 \|\| ^10.0.0` |
+| `neocord`, `@teamneo/neocord-react` | `discord.js` `^14.28.0`, `react` `^19.3.0` |
+| `@teamneo/neocord-cli` | `neocord` |
+| `@teamneo/neocord-eslint-plugin` | `eslint` `^9.0.0 \|\| ^10.0.0` |
 
 Print the versions you ended up with:
 
@@ -66,4 +66,4 @@ See [Manual setup](/docs/manual-setup) and the [TypeScript 7 and ESLint](/docs/t
 
 ## Node
 
-`@neocord/cli` requires Node 22.22 or later, and the runtime packages require Node 22.12 or later. If you run on Node, check your version and any Docker base image when you upgrade. On Bun, keep Bun current.
+`@teamneo/neocord-cli` requires Node 22.22 or later, and the runtime packages require Node 22.12 or later. If you run on Node, check your version and any Docker base image when you upgrade. On Bun, keep Bun current.

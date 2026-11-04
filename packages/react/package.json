@@ -1,5 +1,5 @@
 {
-  "name": "@neocord/react",
+  "name": "@teamneo/neocord-react",
   "version": "0.1.0",
   "description": "Compose Discord messages, replies and modals with React.",
   "type": "module",
@@ -28,7 +28,7 @@
     "check:package": "publint && attw --pack . --profile esm-only"
   },
   "dependencies": {
-    "@neocord/routing": "workspace:^",
+    "@teamneo/neocord-routing": "workspace:^",
     "react-reconciler": "catalog:"
   },
   "peerDependencies": {
@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "catalog:",
-    "@neocord/tsconfig": "workspace:*",
+    "@teamneo/neocord-tsconfig": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

@@ -1,4 +1,4 @@
-import { ActionRow, Bold, Button, Container, Subtext, TextDisplay, useLiveInteraction } from "@neocord/react";
+import { ActionRow, Bold, Button, Container, Subtext, TextDisplay, useLiveInteraction } from "@teamneo/neocord-react";
 import { useState } from "react";
 
 export function Counter() {

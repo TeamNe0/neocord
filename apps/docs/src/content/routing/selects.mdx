@@ -3,7 +3,7 @@ Selects work like [buttons](/docs/routing/buttons). You send a select component 
 ## A string select
 
 ```tsx title="src/features/settings/commands/theme/command.tsx"
-import { ActionRow, Option, StringSelect, TextDisplay } from "@neocord/react";
+import { ActionRow, Option, StringSelect, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({
@@ -26,7 +26,7 @@ export default defineCommand({
 ```
 
 ```tsx title="src/features/settings/selects/theme/select.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineSelect } from "neocord";
 
 export default defineSelect("settings/theme", {
@@ -89,7 +89,7 @@ If the two do not match, the interaction does not reach your handler. neocord lo
 ## A role select
 
 ```tsx title="src/features/moderation/selects/pick-role/select.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineSelect } from "neocord";
 
 export default defineSelect("moderation/pick-role", {
@@ -115,7 +115,7 @@ A select must be alone in its `ActionRow`.
 Select routes can have params, like every interaction route:
 
 ```tsx title="src/features/settings/selects/role/[guildId]/select.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineSelect } from "neocord";
 
 export default defineSelect("settings/role/[guildId]", {

@@ -399,11 +399,11 @@ export const ESLINT_RULES: EslintRule[] = [
     name: "no-embed-builders",
     category: "ui",
     recommended: "warn",
-    description: "Disallow discord.js component builders and raw payloads in favour of @neocord/react.",
-    why: "`@neocord/react` validates against Discord's limits and goes through neocord's layouts and reply state, and builders and raw payloads skip all of that. The rule reports builder imports from `discord.js` and `@discordjs/builders`, and literal `embeds` or `components` in send calls. `AttachmentBuilder` and `SlashCommandBuilder` are not on the list, and neither are type-only imports.",
+    description: "Disallow discord.js component builders and raw payloads in favour of @teamneo/neocord-react.",
+    why: "`@teamneo/neocord-react` validates against Discord's limits and goes through neocord's layouts and reply state, and builders and raw payloads skip all of that. The rule reports builder imports from `discord.js` and `@discordjs/builders`, and literal `embeds` or `components` in send calls. `AttachmentBuilder` and `SlashCommandBuilder` are not on the list, and neither are type-only imports.",
     messages: {
-      builder: "Do not use {{name}}. Render JSX with @neocord/react instead.",
-      rawPayload: `Do not pass raw "{{property}}". Return JSX from the handler or pass it to ctx.reply, using @neocord/react.`,
+      builder: "Do not use {{name}}. Render JSX with @teamneo/neocord-react instead.",
+      rawPayload: `Do not pass raw "{{property}}". Return JSX from the handler or pass it to ctx.reply, using @teamneo/neocord-react.`,
     },
     incorrect: [
       { filename: UI, code: `import { EmbedBuilder, ActionRowBuilder as Row } from "discord.js";` },
@@ -416,7 +416,7 @@ export const ESLINT_RULES: EslintRule[] = [
       { filename: UI, code: `interaction.followUp({ embeds: [a], components: [b] });` },
     ],
     correct: [
-      { filename: UI, code: `import { Message } from "@neocord/react";` },
+      { filename: UI, code: `import { Message } from "@teamneo/neocord-react";` },
       { filename: UI, code: `import { Client, AttachmentBuilder, SlashCommandBuilder } from "discord.js";` },
       { filename: UI, code: `import type { EmbedBuilder } from "discord.js";` },
       { filename: UI, code: `import { EmbedBuilder } from "./my-embed";\n\nnew EmbedBuilder();` },
@@ -429,8 +429,8 @@ export const ESLINT_RULES: EslintRule[] = [
     name: "valid-component-nesting",
     category: "ui",
     recommended: "error",
-    description: "Check the static JSX structure of @neocord/react components.",
-    why: "The renderer throws when a component is in the wrong place, but only when that code path runs. This rule reports the same structure errors in your editor. It follows aliased imports from `@neocord/react`, and skips custom components and expressions because it cannot see what they render.",
+    description: "Check the static JSX structure of @teamneo/neocord-react components.",
+    why: "The renderer throws when a component is in the wrong place, but only when that code path runs. This rule reports the same structure errors in your editor. It follows aliased imports from `@teamneo/neocord-react`, and skips custom components and expressions because it cannot see what they render.",
     messages: {
       misplaced: "<{{component}}> cannot be inside <{{parent}}>. It belongs in {{allowed}}.",
       messageNotRoot: "<Message> must be the root of the tree, not inside <{{parent}}>.",
@@ -444,7 +444,7 @@ export const ESLINT_RULES: EslintRule[] = [
       labelManyControls: "<Label> must contain exactly one form control, but this one has {{count}}.",
     },
     incorrect: [
-      { filename: UI, note: "These examples assume the components are imported from `@neocord/react`.", code: `const node = <Message><Button /></Message>;` },
+      { filename: UI, note: "These examples assume the components are imported from `@teamneo/neocord-react`.", code: `const node = <Message><Button /></Message>;` },
       { filename: UI, code: `const node = <Container><StringSelect /></Container>;` },
       { filename: UI, code: `const node = <Section accessory={<Button />}><Thumbnail /></Section>;` },
       { filename: UI, code: `const node = <Section accessory={<TextDisplay />}>Hi</Section>;` },
@@ -467,7 +467,7 @@ export const ESLINT_RULES: EslintRule[] = [
       { filename: UI, code: `const node = <MediaGallery><MediaItem /><MediaItem /></MediaGallery>;` },
       { filename: UI, note: "A custom component could render anything, so it is skipped.", code: `const node = <Custom><Button /></Custom>;` },
       { filename: UI, note: "Expressions are skipped too.", code: `const node = <Message>{cond && <Button />}</Message>;` },
-      { filename: UI, code: `import { Button as B, ActionRow as Row } from "@neocord/react";\n\nconst node = <Row><B /></Row>;` },
+      { filename: UI, code: `import { Button as B, ActionRow as Row } from "@teamneo/neocord-react";\n\nconst node = <Row><B /></Row>;` },
     ],
   },
   {
@@ -484,7 +484,7 @@ export const ESLINT_RULES: EslintRule[] = [
       { filename: UI, code: `const node = <Button customId={"moderation/ban"} />;` },
       { filename: UI, code: `const node = <StringSelect customId="pick" />;` },
       { filename: UI, code: `const node = <ActionRow><RoleSelect customId="pick" /></ActionRow>;` },
-      { filename: UI, code: `import { Button as B } from "@neocord/react";\n\nconst node = <B customId="x" />;` },
+      { filename: UI, code: `import { Button as B } from "@teamneo/neocord-react";\n\nconst node = <B customId="x" />;` },
     ],
     correct: [
       { filename: UI, code: `const node = <Button route="a/b" />;` },
@@ -751,7 +751,7 @@ export const ESLINT_RULES: EslintRule[] = [
     category: "best-practices",
     recommended: "warn",
     description: "Disallow enabling @everyone in allowedMentions and writing mass mentions in JSX text.",
-    why: "neocord sets `allowedMentions` to `{ parse: [] }` on the client so user input can never ping anyone. Adding `everyone` undoes that for the whole server. Literal `@everyone` in JSX text is either dead text or a mass ping, so the rule points to `RoleMention` instead, and ignores `Code` and `CodeBlock` from `@neocord/react`.",
+    why: "neocord sets `allowedMentions` to `{ parse: [] }` on the client so user input can never ping anyone. Adding `everyone` undoes that for the whole server. Literal `@everyone` in JSX text is either dead text or a mass ping, so the rule points to `RoleMention` instead, and ignores `Code` and `CodeBlock` from `@teamneo/neocord-react`.",
     messages: {
       parseEveryone: `Do not put "everyone" in allowedMentions.parse. It lets a message ping the whole server, including through user input.`,
       text: "Avoid literal @{{mention}} in JSX text. Mention a role with <RoleMention> instead.",
@@ -770,7 +770,7 @@ export const ESLINT_RULES: EslintRule[] = [
       { code: `const node = <Message allowedMentions={shared}>Hi</Message>;` },
       { code: `const node = <Message>Mail me@everyone.com</Message>;` },
       { code: `const node = <Message>Hello everyone</Message>;` },
-      { code: `import { Code } from "@neocord/react";\n\nconst node = <Code>@everyone</Code>;` },
+      { code: `import { Code } from "@teamneo/neocord-react";\n\nconst node = <Code>@everyone</Code>;` },
     ],
   },
 ];

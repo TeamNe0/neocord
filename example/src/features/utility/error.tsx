@@ -1,4 +1,4 @@
-import { Container, Subtext, TextDisplay } from "@neocord/react";
+import { Container, Subtext, TextDisplay } from "@teamneo/neocord-react";
 import type { ErrorProps } from "neocord";
 
 export default function UtilityError({ ctx }: ErrorProps) {

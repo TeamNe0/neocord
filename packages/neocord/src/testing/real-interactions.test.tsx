@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ActionRow, Button, Message, TextDisplay } from "@neocord/react";
+import { ActionRow, Button, Message, TextDisplay } from "@teamneo/neocord-react";
 import {
   ApplicationCommandOptionType,
   ButtonInteraction,

@@ -1,10 +1,10 @@
-`@neocord/cli` provides the `neocord` binary. It scans your file routes, generates code and types, bundles the bot and runs it. Scaffolded projects install it as a dev dependency and call it from `package.json` scripts.
+`@teamneo/neocord-cli` provides the `neocord` binary. It scans your file routes, generates code and types, bundles the bot and runs it. Scaffolded projects install it as a dev dependency and call it from `package.json` scripts.
 
 ```pm
-add -d @neocord/cli
+add -d @teamneo/neocord-cli
 ```
 
-`@neocord/cli` has `neocord` as a peer dependency, and its own `package.json` requires Node 22.22 or later.
+`@teamneo/neocord-cli` has `neocord` as a peer dependency, and its own `package.json` requires Node 22.22 or later.
 
 ## Commands
 
@@ -128,7 +128,7 @@ Runs ESLint on the project root using the `eslint` installed in the project. It 
 
 ### `neocord info`
 
-Prints versions and environment for bug reports: the versions of `@neocord/cli`, `neocord`, `@neocord/react`, `@neocord/routing`, `discord.js` and `react`, the resolved runtime, the Node and Bun versions, the operating system and the project root. It prints only whether `DISCORD_TOKEN` is set, never its value.
+Prints versions and environment for bug reports: the versions of `@teamneo/neocord-cli`, `neocord`, `@teamneo/neocord-react`, `@teamneo/neocord-routing`, `discord.js` and `react`, the resolved runtime, the Node and Bun versions, the operating system and the project root. It prints only whether `DISCORD_TOKEN` is set, never its value.
 
 ## Environment files
 
@@ -207,10 +207,10 @@ Every command exits with 0 on success. A failed command prints the error with it
 
 ## Programmatic API
 
-`@neocord/cli` also exports its project functions:
+`@teamneo/neocord-cli` also exports its project functions:
 
 ```ts
-import { generate, loadConfig, loadEnvFiles, scanProject } from "@neocord/cli";
+import { generate, loadConfig, loadEnvFiles, scanProject } from "@teamneo/neocord-cli";
 
 const root = process.cwd();
 const { config, file } = await loadConfig({ root });

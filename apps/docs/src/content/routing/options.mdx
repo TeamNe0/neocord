@@ -1,7 +1,7 @@
 Options are declared in the `options` object of `defineCommand`. Each key is the option's name, each value comes from an `option.*` helper, and `ctx.options` is typed from them with no code generation.
 
 ```tsx title="src/features/fun/commands/roll/command.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 export default defineCommand({
@@ -79,7 +79,7 @@ const size = option.string({
 For strings, integers and numbers, `autocomplete` is a function that returns choices as the user types:
 
 ```tsx title="src/features/fun/commands/search/command.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand, option } from "neocord";
 
 const FRUIT = ["apple", "banana", "cherry"];

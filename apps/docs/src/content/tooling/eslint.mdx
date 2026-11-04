@@ -1,17 +1,17 @@
-`@neocord/eslint-plugin` checks what each routed file has to export, catches Discord limits before you deploy, and gives best practice advice. All rules read the AST only, so they need no type information and work with any parser. The plugin supports flat config only, on ESLint 9 and 10.
+`@teamneo/neocord-eslint-plugin` checks what each routed file has to export, catches Discord limits before you deploy, and gives best practice advice. All rules read the AST only, so they need no type information and work with any parser. The plugin supports flat config only, on ESLint 9 and 10.
 
 ## Setup
 
 A project scaffolded with `--eslint` already has this. To add it by hand, install the packages:
 
 ```pm
-add -d eslint @neocord/eslint-plugin @typescript-eslint/parser
+add -d eslint @teamneo/neocord-eslint-plugin @typescript-eslint/parser
 ```
 
 Then create the config. The plugin's configs do not set a parser, so add `@typescript-eslint/parser` yourself:
 
 ```js title="eslint.config.js"
-import neocord from "@neocord/eslint-plugin";
+import neocord from "@teamneo/neocord-eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 
 export default [
@@ -40,12 +40,12 @@ If you use TypeScript 7, `typescript` must be aliased to TypeScript 6 because `@
 | `neocord.configs.recommended` | File contracts and correctness rules are errors, advice rules are warnings, and `require-error-boundary` is off. |
 | `neocord.configs.strict` | Every rule is an error, including `require-error-boundary`. |
 
-Both configs register the plugin under the `@neocord` namespace, so rule ids look like `@neocord/no-process-env`. To change one rule, add it after the config:
+Both configs register the plugin under the `neocord` namespace, so rule ids look like `neocord/no-process-env`. To change one rule, add it after the config:
 
 ```js title="eslint.config.js"
 export default [
   neocord.configs.recommended,
-  { rules: { "@neocord/no-process-env": "off" } },
+  { rules: { "neocord/no-process-env": "off" } },
 ];
 ```
 
@@ -95,8 +95,8 @@ The severity column shows `recommended` and then `strict`. "Fix" means `eslint -
 
 | Rule | Severity | Fixes | Description |
 | --- | --- | --- | --- |
-| [`no-embed-builders`](/docs/eslint/no-embed-builders) | warn / error | | Forbids discord.js builders and raw `embeds` or `components` in send calls. Use `@neocord/react`. |
-| [`valid-component-nesting`](/docs/eslint/valid-component-nesting) | error / error | | Checks the static JSX structure of `@neocord/react` components, including aliased imports. Custom components and expressions are skipped. |
+| [`no-embed-builders`](/docs/eslint/no-embed-builders) | warn / error | | Forbids discord.js builders and raw `embeds` or `components` in send calls. Use `@teamneo/neocord-react`. |
+| [`valid-component-nesting`](/docs/eslint/valid-component-nesting) | error / error | | Checks the static JSX structure of `@teamneo/neocord-react` components, including aliased imports. Custom components and expressions are skipped. |
 | [`prefer-route-prop`](/docs/eslint/prefer-route-prop) | warn / error | | Recommends `route` over a literal `customId` on buttons and selects. Modal fields are exempt. |
 | [`no-text-in-action-row`](/docs/eslint/no-text-in-action-row) | error / error | | Forbids text directly inside `ActionRow`, `MediaGallery` and selects. |
 

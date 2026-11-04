@@ -1,4 +1,4 @@
-import { ActionRow, Bold, Button, Container, TextDisplay, escapeMarkdown } from "@neocord/react";
+import { ActionRow, Bold, Button, Container, TextDisplay, escapeMarkdown } from "@teamneo/neocord-react";
 import { pickAnswer, toRouteWords } from "../_lib/eight-ball";
 
 export function EightBallAnswer({ question }: { question: string }) {

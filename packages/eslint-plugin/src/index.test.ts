@@ -52,19 +52,19 @@ describe("plugin surface", () => {
   test("configs reference the plugin and every rule", () => {
     const configs: NeocordPlugin["configs"] = plugin.configs;
     for (const config of [configs.recommended, configs.strict]) {
-      expect(config.plugins?.["@neocord"]).toBe(plugin);
+      expect(config.plugins?.["neocord"]).toBe(plugin);
       expect(config.languageOptions).toBeUndefined();
-      expect(Object.keys(config.rules ?? {}).toSorted()).toEqual(ruleNames.map((name) => `@neocord/${name}`).toSorted());
+      expect(Object.keys(config.rules ?? {}).toSorted()).toEqual(ruleNames.map((name) => `neocord/${name}`).toSorted());
     }
   });
 
   test("recommended uses errors, warnings and one off rule", () => {
     const severities = plugin.configs.recommended.rules ?? {};
-    expect(severities["@neocord/require-default-export"]).toBe("error");
-    expect(severities["@neocord/route-matches-path"]).toBe("error");
-    expect(severities["@neocord/prefer-route-prop"]).toBe("warn");
-    expect(severities["@neocord/no-process-env"]).toBe("warn");
-    expect(severities["@neocord/require-error-boundary"]).toBe("off");
+    expect(severities["neocord/require-default-export"]).toBe("error");
+    expect(severities["neocord/route-matches-path"]).toBe("error");
+    expect(severities["neocord/prefer-route-prop"]).toBe("warn");
+    expect(severities["neocord/no-process-env"]).toBe("warn");
+    expect(severities["neocord/require-error-boundary"]).toBe("off");
   });
 
   test("strict makes every rule an error", () => {
@@ -95,10 +95,10 @@ describe("Linter with configs.recommended", () => {
     );
     const severities = Object.fromEntries(messages.map((message) => [message.ruleId, message.severity]));
     expect(severities).toEqual({
-      "@neocord/no-embed-builders": 1,
-      "@neocord/no-extra-exports": 2,
-      "@neocord/require-define-helper": 2,
-      "@neocord/valid-command-definition": 2,
+      "neocord/no-embed-builders": 1,
+      "neocord/no-extra-exports": 2,
+      "neocord/require-define-helper": 2,
+      "neocord/valid-command-definition": 2,
     });
   });
 });
@@ -122,12 +122,12 @@ describe("documented project layout", () => {
       });
     `,
     "src/layout.tsx": `
-      import { Container } from "@neocord/react";
+      import { Container } from "@teamneo/neocord-react";
       import type { LayoutProps } from "neocord";
       export default function Layout({ children }: LayoutProps) { return <Container>{children}</Container>; }
     `,
     "src/error.tsx": `
-      import { Message } from "@neocord/react";
+      import { Message } from "@teamneo/neocord-react";
       export default function ErrorView({ error }: ErrorProps) { return <Message ephemeral>{error.message}</Message>; }
     `,
     "src/features/moderation/feature.ts": `
@@ -182,7 +182,7 @@ describe("documented project layout", () => {
       export default defineSelect("moderation/pick-role", { type: "role", execute(ctx) { ctx.values; } });
     `,
     "src/features/moderation/modals/ban-reason/[userId]/modal.tsx": `
-      import { Label, TextInput } from "@neocord/react";
+      import { Label, TextInput } from "@teamneo/neocord-react";
       import { defineModal } from "neocord";
       export default defineModal("moderation/ban-reason/[userId]", {
         title: "Ban reason",
@@ -226,7 +226,7 @@ describe("documented project layout", () => {
         return `${result.filePath.slice(root.length + 1).replaceAll("\\", "/")}: ${message.ruleId}`;
       });
     });
-    expect(problems).toEqual(["src/features/moderation/components/ui.tsx: @neocord/no-unknown-route-file"]);
+    expect(problems).toEqual(["src/features/moderation/components/ui.tsx: neocord/no-unknown-route-file"]);
   });
 });
 
@@ -265,24 +265,24 @@ describe("ESLint on a project", () => {
       "neocord.config.ts": [],
       "src/env.ts": [],
       "src/features/fun/_lib/ok.ts": [],
-      "src/features/fun/commands/roll/command.tsx": ["@neocord/no-command-with-subcommands:2"],
+      "src/features/fun/commands/roll/command.tsx": ["neocord/no-command-with-subcommands:2"],
       "src/features/fun/commands/roll/sub/command.tsx": [
-        "@neocord/no-command-with-subcommands:2",
-        "@neocord/require-group-file:1",
+        "neocord/no-command-with-subcommands:2",
+        "neocord/require-group-file:1",
       ],
-      "src/features/fun/helpers.ts": ["@neocord/no-process-env:1", "@neocord/no-unknown-route-file:2"],
+      "src/features/fun/helpers.ts": ["neocord/no-process-env:1", "neocord/no-unknown-route-file:2"],
     });
   });
 
   test("strict enables require-error-boundary and raises warnings", async () => {
     const linted = await lintedRules(plugin.configs.strict);
     expect(linted["src/features/fun/commands/roll/command.tsx"]).toEqual([
-      "@neocord/no-command-with-subcommands:2",
-      "@neocord/require-error-boundary:2",
+      "neocord/no-command-with-subcommands:2",
+      "neocord/require-error-boundary:2",
     ]);
     expect(linted["src/features/fun/helpers.ts"]).toEqual([
-      "@neocord/no-process-env:2",
-      "@neocord/no-unknown-route-file:2",
+      "neocord/no-process-env:2",
+      "neocord/no-unknown-route-file:2",
     ]);
   });
 

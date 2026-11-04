@@ -1,7 +1,7 @@
 A layout is a plain React component that wraps the output of the handlers beneath it. Put a `layout.tsx` in a folder and default-export the component. It receives `children` and returns host components.
 
 ```tsx title="src/features/moderation/layout.tsx"
-import { Subtext } from "@neocord/react";
+import { Subtext } from "@teamneo/neocord-react";
 import type { LayoutProps } from "neocord";
 
 export default function ModerationLayout({ children }: LayoutProps) {
@@ -95,7 +95,7 @@ The error is "Container is not allowed inside Container." Fragments avoid this, 
 Layouts are rendered with the context available, so `useContext()` from `neocord` works:
 
 ```tsx title="src/layout.tsx"
-import { Subtext } from "@neocord/react";
+import { Subtext } from "@teamneo/neocord-react";
 import { useContext, type LayoutProps } from "neocord";
 
 export default function RootLayout({ children }: LayoutProps) {

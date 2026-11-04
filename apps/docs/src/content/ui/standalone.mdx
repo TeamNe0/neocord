@@ -1,9 +1,9 @@
-`@neocord/react` does not depend on the `neocord` runtime, so you can use it in any discord.js bot. You keep your own client and event handling, and use JSX for messages.
+`@teamneo/neocord-react` does not depend on the `neocord` runtime, so you can use it in any discord.js bot. You keep your own client and event handling, and use JSX for messages.
 
 ## Install
 
 ```pm
-add @neocord/react react discord.js
+add @teamneo/neocord-react react discord.js
 ```
 
 It requires React 19.3 or later, discord.js 14.28 or later, and Bun or Node 22.12 or later. Enable JSX in `tsconfig.json`:
@@ -21,7 +21,7 @@ It requires React 19.3 or later, discord.js 14.28 or later, and Bun or Node 22.1
 `render` returns a `RenderResult`, which `interaction.reply` accepts directly.
 
 ```tsx title="src/index.tsx"
-import { ActionRow, Bold, Button, Container, Heading, Message, render } from "@neocord/react";
+import { ActionRow, Bold, Button, Container, Heading, Message, render } from "@teamneo/neocord-react";
 import { Client, GatewayIntentBits } from "discord.js";
 
 function Welcome({ name }: { name: string }) {
@@ -80,7 +80,7 @@ const result = await renderAsync(<Profile user={fetchUser(id)} />);
 
 ```ts
 import { MessageFlags } from "discord.js";
-import type { RenderResult } from "@neocord/react";
+import type { RenderResult } from "@teamneo/neocord-react";
 
 function forEdit({ flags, ...rest }: RenderResult) {
   return { ...rest, flags: MessageFlags.IsComponentsV2 as const };
@@ -93,7 +93,7 @@ await channel.send(forEdit(render(node)));
 ## Modals
 
 ```tsx
-import { Label, Modal, renderModal, TextInput } from "@neocord/react";
+import { Label, Modal, renderModal, TextInput } from "@teamneo/neocord-react";
 
 await interaction.showModal(
   renderModal(
@@ -111,11 +111,11 @@ await interaction.showModal(
 
 ## Custom ids and routes
 
-With no CLI, `route` is a plain `string` and `params` is an optional record. Use `buildCustomId` for the same id format. For matching, add `@neocord/routing` to your own dependencies and use its router:
+With no CLI, `route` is a plain `string` and `params` is an optional record. Use `buildCustomId` for the same id format. For matching, add `@teamneo/neocord-routing` to your own dependencies and use its router:
 
 ```ts
-import { buildCustomId } from "@neocord/react";
-import { createRouter } from "@neocord/routing";
+import { buildCustomId } from "@teamneo/neocord-react";
+import { createRouter } from "@teamneo/neocord-routing";
 
 buildCustomId("tickets/close/[id]", { id: 42 });
 
@@ -124,12 +124,12 @@ router.add("tickets/close/[id]", "closeTicket");
 router.match("tickets/close/42");
 ```
 
-`router.match` returns `{ route: "closeTicket", params: { id: "42" } }`. See [`@neocord/routing`](/docs/api/routing).
+`router.match` returns `{ route: "closeTicket", params: { id: "42" } }`. See [`@teamneo/neocord-routing`](/docs/api/routing).
 
 For typed routes, write the same augmentation that the CLI generates:
 
 ```ts title="src/routes.d.ts"
-declare module "@neocord/react" {
+declare module "@teamneo/neocord-react" {
   interface RegisteredRoutes {
     buttons: "tickets/close/[id]";
     selects: never;
@@ -144,7 +144,7 @@ export {};
 `onClick` and `onSelect` need a root that stays mounted, because a handler can only run while its tree exists. One-shot `render` throws if it meets one. In a neocord bot this is handled for you, and standalone you drive it yourself.
 
 ```tsx
-import { ActionRow, Button, createLiveRoot, TextDisplay } from "@neocord/react";
+import { ActionRow, Button, createLiveRoot, TextDisplay } from "@teamneo/neocord-react";
 import { useState } from "react";
 
 function Counter() {
@@ -205,4 +205,4 @@ Without `onError`, background errors are rethrown by the next `flush` or `dispat
 
 ## Exports
 
-The full list is on the [`@neocord/react` API page](/docs/api/react).
+The full list is on the [`@teamneo/neocord-react` API page](/docs/api/react).

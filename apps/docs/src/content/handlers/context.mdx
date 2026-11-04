@@ -1,7 +1,7 @@
 Every handler receives a `ctx` object as its first argument. Its type depends on the route kind, so `ctx.options` only exists on slash commands and `ctx.update` only exists on buttons, selects and modals.
 
 ```tsx title="src/features/general/commands/whoami/command.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({
@@ -57,7 +57,7 @@ Events, tasks and every interaction handler share these fields.
 | `permissions` | `readonly PermissionsString[]` | The required permissions. |
 
 ```tsx title="src/features/utility/commands/help/command.tsx"
-import { Container, Heading, TextDisplay } from "@neocord/react";
+import { Container, Heading, TextDisplay } from "@teamneo/neocord-react";
 import { defineCommand } from "neocord";
 
 export default defineCommand({
@@ -167,7 +167,7 @@ An `autocomplete` handler receives the base context plus these fields. It cannot
 `useContext()` from `neocord` returns the current interaction context from any component rendered by neocord. It throws when used elsewhere. The default return type is `AnyContext`, and you can name a narrower one.
 
 ```tsx title="src/features/general/_components/Greeting.tsx"
-import { TextDisplay } from "@neocord/react";
+import { TextDisplay } from "@teamneo/neocord-react";
 import { useContext } from "neocord";
 
 export function Greeting() {

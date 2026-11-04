@@ -1,4 +1,4 @@
-import { Label, TextInput } from "@neocord/react";
+import { Label, TextInput } from "@teamneo/neocord-react";
 import { defineModal } from "neocord";
 import { z } from "zod";
 import { Poll } from "../../_components/Poll";

@@ -1,4 +1,4 @@
-import { Message, renderAsync, renderModal, type ModalRenderResult, type RenderResult } from "@neocord/react";
+import { Message, renderAsync, renderModal, type ModalRenderResult, type RenderResult } from "@teamneo/neocord-react";
 import { isValidElement, type ComponentType, type ReactElement, type ReactNode } from "react";
 import { NeocordContext } from "../context-hook.tsx";
 import type { AnyContext, LayoutProps, ModalDefinition, ModalRenderContext } from "../types.ts";
