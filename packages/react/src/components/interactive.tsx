@@ -4,7 +4,6 @@ import type {
   ButtonProps,
   ChannelSelectProps,
   MentionableSelectProps,
-  ModalOptionProps,
   OptionProps,
   RoleSelectProps,
   StringSelectProps,
@@ -19,7 +18,7 @@ export function StringSelect(props: StringSelectProps): ReactElement {
   return hostElement(HOST.stringSelect, props);
 }
 
-export function Option(props: OptionProps | ModalOptionProps): ReactElement {
+export function Option(props: OptionProps): ReactElement {
   return hostElement(HOST.option, props);
 }
 

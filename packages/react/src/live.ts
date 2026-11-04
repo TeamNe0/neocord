@@ -1,4 +1,4 @@
-import { ComponentType } from "discord.js";
+import { ComponentType, MessageFlags } from "discord.js";
 import { createContext, createElement, useContext, type ReactNode } from "react";
 import { createHostContainer } from "./host.ts";
 import {
@@ -55,7 +55,7 @@ export function createLiveRoot(options: LiveRootOptions): LiveRoot {
   const slots = new Map<string, number>();
 
   let handlers = new Map<string, LiveHandler>();
-  let payload: RenderResult = { flags: serializeMessage([], { allowEmpty: true }).flags, components: [] };
+  let payload: RenderResult = { flags: MessageFlags.IsComponentsV2, components: [] };
   let dirty = false;
   let dispatching = 0;
   let silent = 0;
