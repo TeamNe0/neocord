@@ -18,14 +18,21 @@ describe("loadEnvFiles", () => {
   test("loads files in the documented order, later files overriding earlier ones", () => {
     const { root } = fixture({
       ".env": "A=env\nB=env\nC=env\nD=env\n",
-      ".env.local": "B=local\nC=local\nD=local\n",
-      ".env.development": "C=mode\nD=mode\n",
+      ".env.development": "B=mode\nC=mode\nD=mode\n",
+      ".env.local": "C=local\nD=local\n",
       ".env.development.local": "D=mode-local\n",
       ".env.production": "A=wrong-mode\n",
     });
     const loaded = loadEnvFiles({ root, mode: "development", env: {}, bunAutoload: false });
-    expect(loaded.files).toEqual([".env", ".env.local", ".env.development", ".env.development.local"]);
-    expect(loaded.env).toMatchObject({ A: "env", B: "local", C: "mode", D: "mode-local" });
+    expect(loaded.files).toEqual([".env", ".env.development", ".env.local", ".env.development.local"]);
+    expect(loaded.env).toMatchObject({ A: "env", B: "mode", C: "local", D: "mode-local" });
+  });
+
+  test("ignores .env.local in test mode so tests stay reproducible", () => {
+    const { root } = fixture({ ".env": "A=env\n", ".env.local": "A=local\n", ".env.test": "B=test\n" });
+    const loaded = loadEnvFiles({ root, mode: "test", env: {}, bunAutoload: false });
+    expect(loaded.files).toEqual([".env", ".env.test"]);
+    expect(loaded.env).toMatchObject({ A: "env", B: "test" });
   });
 
   test("a real environment variable always wins", () => {
@@ -83,7 +90,8 @@ describe("loadEnvFiles", () => {
   });
 
   test("lists the file names for a mode", () => {
-    expect(envFileNames("test")).toEqual([".env", ".env.local", ".env.test", ".env.test.local"]);
+    expect(envFileNames("test")).toEqual([".env", ".env.test", ".env.test.local"]);
+    expect(envFileNames("production")).toEqual([".env", ".env.production", ".env.local", ".env.production.local"]);
   });
 });
 

@@ -27,8 +27,8 @@ Every command accepts `--cwd <dir>`. The project root is that directory or the n
 Env files load in this order, with later files overriding earlier ones and the real environment always winning:
 
 1. `.env`
-2. `.env.local`
-3. `.env.<mode>`
+2. `.env.<mode>`
+3. `.env.local`, skipped in test mode so tests stay reproducible
 4. `.env.<mode>.local`
 
 The mode is `development` for `dev`, `production` for `build`, `start` and `deploy`, and `test` for `test`. `NODE_ENV` is set to match.

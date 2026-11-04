@@ -24,7 +24,8 @@ export interface LoadedEnv {
 }
 
 export function envFileNames(mode: EnvMode): string[] {
-  return [".env", ".env.local", `.env.${mode}`, `.env.${mode}.local`];
+  const shared = mode === "test" ? [] : [".env.local"];
+  return [".env", `.env.${mode}`, ...shared, `.env.${mode}.local`];
 }
 
 function readEnvFile(root: string, name: string): Record<string, string> | null {

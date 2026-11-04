@@ -393,7 +393,7 @@ interface ManifestRoute {
 | `neocord lint [--fix]` | Runs ESLint. |
 | `neocord info` | Prints versions and environment for bug reports. |
 
-Env files load in Next.js order into the child process: `.env`, `.env.local`, `.env.<mode>`, `.env.<mode>.local`, with the real environment winning. Bundling uses esbuild with `packages: "external"`, `platform: "node"`, `format: "esm"`. The config is bundled the same way and imported. The runtime is `bun` if `runtime` says so, or if `auto` and the CLI was invoked through bun, otherwise `node`.
+Env files load in Next.js order into the child process: `.env`, `.env.<mode>`, `.env.local`, `.env.<mode>.local`, later files overriding earlier ones and the real environment always winning. `.env.local` is skipped in test mode. `neocord start` performs the deploy for `deploy.mode: "auto"` before launching the manager. Bundling uses esbuild with `packages: "external"`, `platform: "node"`, `format: "esm"`. The config is bundled the same way and imported. The runtime is `bun` if `runtime` says so, or if `auto` and the CLI was invoked through bun, otherwise `node`.
 
 ## `@neocord/eslint-plugin`
 
