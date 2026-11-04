@@ -549,6 +549,55 @@ describe("modal dispatch", () => {
     expect(fromMessage.methods).toEqual(["deferUpdate"]);
   });
 
+  test("respond update replaces the message the modal came from", async () => {
+    const definition = defineModal("core/done", {
+      title: "t",
+      respond: "update",
+      render: () => null,
+      submit: () => <TextDisplay>done</TextDisplay>,
+    });
+    const fromMessage = await run([route("modal", "core/done", definition)], {
+      kind: "modal",
+      customId: "core/done",
+      message: mockMessage(),
+    });
+    expect(fromMessage.methods).toEqual(["update"]);
+    expect(text(fromMessage.recording.updates[0])).toBe("done");
+
+    const fromCommand = await run([route("modal", "core/done", definition)], { kind: "modal", customId: "core/done" });
+    expect(fromCommand.methods).toEqual(["reply"]);
+  });
+
+  test("ctx.update and ctx.deferUpdate work inside submit", async () => {
+    const updating = defineModal("core/manual", {
+      title: "t",
+      render: () => null,
+      async submit(ctx) {
+        await ctx.update(<TextDisplay>manual</TextDisplay>);
+      },
+    });
+    const updated = await run([route("modal", "core/manual", updating)], {
+      kind: "modal",
+      customId: "core/manual",
+      message: mockMessage(),
+    });
+    expect(updated.methods).toEqual(["update"]);
+
+    const deferring = defineModal("core/later", {
+      title: "t",
+      render: () => null,
+      async submit(ctx) {
+        await ctx.deferUpdate();
+      },
+    });
+    const deferred = await run([route("modal", "core/later", deferring)], {
+      kind: "modal",
+      customId: "core/later",
+      message: mockMessage(),
+    });
+    expect(deferred.methods).toEqual(["deferUpdate"]);
+  });
+
   test("unknown modal routes are reported", async () => {
     const result = await run([], { kind: "modal", customId: "core/ghost" });
     expect(text(result.recording.replies[0])).toContain("no longer available");

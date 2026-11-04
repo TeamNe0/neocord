@@ -354,9 +354,12 @@ export interface ModalContext<
   params: RouteParams<R>;
   values: ModalValues<S>;
   fields: ModalSubmitFields<CacheOf<G>>;
+  update(node: ReactNode, options?: ReplyOptions): Promise<void>;
+  deferUpdate(): Promise<void>;
 }
 
 export interface ModalInput<R extends string, S extends ModalSchema, G extends boolean> extends RouteOptions<G> {
+  respond?: "update" | "reply";
   title: string | ((ctx: ModalRenderContext<R, S>) => string);
   schema?: S;
   render(ctx: ModalRenderContext<R, S>): ReactNode;

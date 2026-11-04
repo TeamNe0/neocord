@@ -625,7 +625,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     await run<ModalContext>(
       route,
       interaction,
-      "reply",
+      route.definition.respond === "update" ? "update" : "reply",
       async (tools) => {
         const raw = collectModalValues(interaction);
         let values: unknown = raw;
@@ -659,13 +659,19 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
           params,
           values,
           fields: interaction.fields,
+          update: tools.update,
+          deferUpdate: () => tools.responder.deferUpdate(),
         } as ModalContext;
       },
       async (ctx, tools) => {
         if (!(await applyCooldown(route, ctx.user, tools))) return;
         const result = await route.definition.submit(ctx);
         if (isRenderable(result)) {
-          await ctx.reply(result);
+          if (route.definition.respond === "update") {
+            await tools.update(result);
+          } else {
+            await ctx.reply(result);
+          }
           return;
         }
         await tools.responder.settled();

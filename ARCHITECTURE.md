@@ -281,9 +281,9 @@ interface InteractionContext<I> {
 }
 ```
 
-Component contexts add `update(node)`, `deferUpdate()` and `message`. `ReplyOptions` is `{ ephemeral?: boolean; layout?: boolean }`.
+Component contexts add `update(node)`, `deferUpdate()` and `message`. Modal contexts add `update(node)` and `deferUpdate()`, which act on the message a modal was opened from. `ReplyOptions` is `{ ephemeral?: boolean; layout?: boolean }`.
 
-`reply` is state-aware: first call replies, after a defer it edits the deferred reply, after a reply it follows up. Handlers may return a node instead of calling `reply`, which is the idiomatic form. Returning a node from a button or select uses `update` unless `respond: "reply"`. If a component handler returns nothing and has not acknowledged, the runtime calls `deferUpdate`. If a command returns nothing and has not acknowledged, the runtime logs a warning.
+`reply` is state-aware: first call replies, after a defer it edits the deferred reply, after a reply it follows up. Handlers may return a node instead of calling `reply`, which is the idiomatic form. Returning a node from a button or select uses `update` unless `respond: "reply"`. Returning a node from a modal replies unless `respond: "update"`. If a component handler returns nothing and has not acknowledged, the runtime calls `deferUpdate`. If a command returns nothing and has not acknowledged, the runtime logs a warning.
 
 `autoDefer` defers once `after` ms pass without an acknowledgement so slow handlers never hit Discord's three second limit.
 
