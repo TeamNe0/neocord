@@ -6,7 +6,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".neocord/build/**"],
-      "env": ["VITE_SITE_URL"]
+      "env": ["VITE_SITE_URL", "VITE_TRAILING_SLASH"]
     },
     "typecheck": {
       "dependsOn": ["^build"]

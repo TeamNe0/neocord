@@ -7,5 +7,6 @@ declare module "mdx/types.js" {
 declare global {
   interface ImportMetaEnv {
     readonly VITE_SITE_URL?: string;
+    readonly VITE_TRAILING_SLASH?: string;
   }
 }
