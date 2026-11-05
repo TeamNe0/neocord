@@ -1,0 +1,19 @@
+{
+  "name": "neocord",
+  "short_name": "neocord",
+  "description": "A file-routed framework for Discord bots, built on discord.js and React. Write commands as files and return JSX from handlers.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#16152d",
+  "theme_color": "#16152d",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
