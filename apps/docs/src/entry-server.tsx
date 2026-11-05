@@ -2,9 +2,33 @@ import { renderToString } from "react-dom/server";
 import { createStaticHandler, createStaticRouter, StaticRouterProvider } from "react-router";
 import { ALL_PAGES, HOME_META, NOT_FOUND_META, groupOf, type PageDef } from "./data/nav.ts";
 import { createRoutes, resolveLazyMatches } from "./routes.tsx";
-import { pageMeta, SITE_NAME, SITE_URL } from "./site.ts";
+import {
+  OG_IMAGE_ALT,
+  pageMeta,
+  SITE_DESCRIPTION,
+  SITE_LANGUAGE,
+  SITE_LOCALE,
+  SITE_NAME,
+  SITE_URL,
+  THEME_COLORS,
+  urlFor,
+} from "./site.ts";
 
-export { ALL_PAGES, groupOf, HOME_META, NOT_FOUND_META, pageMeta, SITE_NAME, SITE_URL };
+export {
+  ALL_PAGES,
+  groupOf,
+  HOME_META,
+  NOT_FOUND_META,
+  OG_IMAGE_ALT,
+  pageMeta,
+  SITE_DESCRIPTION,
+  SITE_LANGUAGE,
+  SITE_LOCALE,
+  SITE_NAME,
+  SITE_URL,
+  THEME_COLORS,
+  urlFor,
+};
 export type { PageDef };
 
 export async function renderPath(pathname: string): Promise<string> {

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -38,8 +39,14 @@ const server = (await import(pathToFileURL(join(root, ".ssr/entry-server.js")).h
   ALL_PAGES: PageDef[];
   HOME_META: { path: string; title: string; description: string };
   NOT_FOUND_META: { path: string; title: string; description: string };
+  OG_IMAGE_ALT: string;
+  SITE_DESCRIPTION: string;
+  SITE_LANGUAGE: string;
+  SITE_LOCALE: string;
   SITE_NAME: string;
   SITE_URL: string;
+  THEME_COLORS: { light: string; dark: string };
+  urlFor(path: string): string;
   groupOf(path: string): string | undefined;
   pageMeta(meta: { path: string; title: string; description: string }): {
     title: string;
@@ -83,25 +90,114 @@ const fontPreloads = Object.values(manifest)
   .filter((asset) => /atkinson-hyperlegible-next-latin-wght-normal|anybody-latin-standard-normal/.test(asset))
   .map((asset) => `<link rel="preload" href="/${asset}" as="font" type="font/woff2" crossorigin />`);
 
-function headFor(meta: { path: string; title: string; description: string }, source: string | null, noindex: boolean): string {
+const buildTime = new Date().toISOString();
+
+function lastModified(paths: string[]): string {
+  try {
+    const output = execFileSync("git", ["log", "-1", "--format=%cI", "--", ...paths], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return output === "" ? buildTime : output;
+  } catch {
+    return buildTime;
+  }
+}
+
+function sourcesFor(page: PageDef): string[] {
+  const sources = [`src/content/${page.file}.mdx`];
+  if (page.file.startsWith("eslint/rules/")) sources.push("src/data/eslint-rules.ts", "scripts/generate-eslint-pages.ts");
+  return sources;
+}
+
+function jsonLd(data: unknown): string {
+  const json = JSON.stringify(data).replaceAll("<", "\\u003c").replaceAll(">", "\\u003e").replaceAll("&", "\\u0026");
+  return `<script type="application/ld+json">${json}</script>`;
+}
+
+const websiteNode = {
+  "@type": "WebSite",
+  "@id": `${server.urlFor("/")}#website`,
+  url: server.urlFor("/"),
+  name: server.SITE_NAME,
+  description: server.SITE_DESCRIPTION,
+  inLanguage: server.SITE_LANGUAGE,
+};
+
+function structuredData(meta: { path: string; title: string; description: string }, modified: string | null): string {
   const data = server.pageMeta(meta);
+  if (meta.path === "/") {
+    return jsonLd({ "@context": "https://schema.org", "@graph": [websiteNode] });
+  }
+  const crumbs = [
+    { name: server.SITE_NAME, path: "/" },
+    ...(meta.path !== "/docs" ? [{ name: "Docs", path: "/docs" }] : []),
+    { name: meta.title, path: meta.path },
+  ];
+  return jsonLd({
+    "@context": "https://schema.org",
+    "@graph": [
+      websiteNode,
+      {
+        "@type": "TechArticle",
+        "@id": `${data.canonical}#article`,
+        url: data.canonical,
+        headline: meta.title,
+        description: meta.description,
+        image: data.image,
+        inLanguage: server.SITE_LANGUAGE,
+        isPartOf: { "@id": websiteNode["@id"] },
+        ...(modified !== null ? { dateModified: modified } : {}),
+        ...(server.groupOf(meta.path) !== undefined ? { articleSection: server.groupOf(meta.path) } : {}),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: crumbs.map((crumb, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name: crumb.name,
+          item: server.urlFor(crumb.path),
+        })),
+      },
+    ],
+  });
+}
+
+function headFor(
+  meta: { path: string; title: string; description: string },
+  source: string | null,
+  noindex: boolean,
+  modified: string | null,
+): string {
+  const data = server.pageMeta(meta);
+  const isArticle = meta.path !== "/" && !noindex;
+  const imageAlt = escapeHtml(server.OG_IMAGE_ALT);
   const tags = [
     `<title>${escapeHtml(data.title)}</title>`,
     `<meta name="description" content="${escapeHtml(data.description)}" />`,
     `<link rel="canonical" href="${escapeHtml(data.canonical)}" />`,
-    `<meta property="og:type" content="website" />`,
+    `<meta name="theme-color" media="(prefers-color-scheme: light)" content="${server.THEME_COLORS.light}" />`,
+    `<meta name="theme-color" media="(prefers-color-scheme: dark)" content="${server.THEME_COLORS.dark}" />`,
+    `<link rel="manifest" href="/site.webmanifest" />`,
+    `<meta property="og:type" content="${isArticle ? "article" : "website"}" />`,
     `<meta property="og:site_name" content="${server.SITE_NAME}" />`,
+    `<meta property="og:locale" content="${server.SITE_LOCALE}" />`,
     `<meta property="og:title" content="${escapeHtml(data.title)}" />`,
     `<meta property="og:description" content="${escapeHtml(data.description)}" />`,
     `<meta property="og:url" content="${escapeHtml(data.canonical)}" />`,
     `<meta property="og:image" content="${escapeHtml(data.image)}" />`,
+    `<meta property="og:image:type" content="image/png" />`,
     `<meta property="og:image:width" content="1200" />`,
     `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:image:alt" content="${imageAlt}" />`,
+    ...(isArticle && modified !== null ? [`<meta property="article:modified_time" content="${modified}" />`] : []),
     `<meta name="twitter:card" content="summary_large_image" />`,
     `<meta name="twitter:title" content="${escapeHtml(data.title)}" />`,
     `<meta name="twitter:description" content="${escapeHtml(data.description)}" />`,
     `<meta name="twitter:image" content="${escapeHtml(data.image)}" />`,
-    ...(noindex ? [`<meta name="robots" content="noindex" />`] : []),
+    `<meta name="twitter:image:alt" content="${imageAlt}" />`,
+    ...(noindex ? [`<meta name="robots" content="noindex" />`] : [structuredData(meta, modified)]),
     ...fontPreloads,
     ...preloadsFor(source),
   ];
@@ -159,36 +255,55 @@ function searchEntries(page: PageDef, html: string): SearchEntry[] {
   return entries;
 }
 
-const urls: string[] = [server.HOME_META.path];
+const urls: { path: string; modified: string }[] = [];
 const searchIndex: SearchEntry[] = [];
 
+const homeModified = lastModified(["src/components/landing", "src/data/nav.ts"]);
 const landingKey = Object.keys(manifest).find((key) => key.endsWith("components/landing/Landing.tsx")) ?? null;
-writeRoute("/", documentFor(await server.renderPath("/"), headFor(server.HOME_META, landingKey, false)));
+writeRoute("/", documentFor(await server.renderPath("/"), headFor(server.HOME_META, landingKey, false, homeModified)));
+urls.push({ path: server.HOME_META.path, modified: homeModified });
 
 for (const page of server.ALL_PAGES) {
   const html = await server.renderPath(page.path);
   const sourceKey = `src/content/${page.file}.mdx`;
-  writeRoute(page.path, documentFor(html, headFor(page, manifest[sourceKey] ? sourceKey : null, false)));
-  urls.push(page.path);
+  const modified = lastModified(sourcesFor(page));
+  writeRoute(page.path, documentFor(html, headFor(page, manifest[sourceKey] ? sourceKey : null, false, modified)));
+  urls.push({ path: page.path, modified });
   searchIndex.push(...searchEntries(page, html));
 }
 
 const notFoundHtml = await server.renderPath("/404");
-const notFoundDocument = documentFor(notFoundHtml, headFor(server.NOT_FOUND_META, null, true));
+const notFoundDocument = documentFor(notFoundHtml, headFor(server.NOT_FOUND_META, null, true, null));
 writeFileSync(join(dist, "404.html"), notFoundDocument);
 
 writeFileSync(join(dist, "search-index.json"), JSON.stringify(searchIndex));
 
-const today = new Date().toISOString().slice(0, 10);
 const sitemap = [
   '<?xml version="1.0" encoding="UTF-8"?>',
   '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-  ...urls.map((path) => `  <url><loc>${escapeHtml(`${server.SITE_URL}${path === "/" ? "" : path}`)}</loc><lastmod>${today}</lastmod></url>`),
+  ...urls.map(
+    ({ path, modified }) =>
+      `  <url><loc>${escapeHtml(server.urlFor(path))}</loc><lastmod>${modified}</lastmod></url>`,
+  ),
   "</urlset>",
   "",
 ].join("\n");
 writeFileSync(join(dist, "sitemap.xml"), sitemap);
 writeFileSync(join(dist, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${server.SITE_URL}/sitemap.xml\n`);
+
+const manifestFile = {
+  name: server.SITE_NAME,
+  short_name: server.SITE_NAME,
+  description: server.SITE_DESCRIPTION,
+  lang: server.SITE_LANGUAGE,
+  start_url: "/",
+  scope: "/",
+  display: "standalone",
+  background_color: server.THEME_COLORS.dark,
+  theme_color: server.THEME_COLORS.dark,
+  icons: [{ src: "/favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" }],
+};
+writeFileSync(join(dist, "site.webmanifest"), `${JSON.stringify(manifestFile, null, 2)}\n`);
 
 rmSync(join(dist, ".vite"), { recursive: true, force: true });
 

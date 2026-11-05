@@ -240,6 +240,8 @@ function checkOutput(): void {
     check(html.includes('<link rel="canonical"'), `${page.path} has no canonical link.`);
     check(html.includes('<meta property="og:title"'), `${page.path} has no Open Graph tags.`);
     check(html.includes('<meta name="twitter:card"'), `${page.path} has no Twitter tags.`);
+    check(html.includes('<script type="application/ld+json">'), `${page.path} has no structured data.`);
+    check(html.includes('<link rel="manifest"'), `${page.path} does not link the web manifest.`);
     check(!html.includes("<!--app-"), `${page.path} still has a template placeholder.`);
     check(!html.includes("This page does not exist"), `${page.path} rendered the not found page.`);
     check(plainBody(html).length >= page.minimum, `${page.path} has too little body content.`);
@@ -252,10 +254,16 @@ function checkOutput(): void {
   check(existsSync(sitemapFile), "sitemap.xml is missing.");
   if (existsSync(sitemapFile)) {
     const sitemap = readFileSync(sitemapFile, "utf8");
-    for (const page of ALL_PAGES) check(sitemap.includes(`${page.path}</loc>`), `sitemap.xml does not list ${page.path}.`);
+    for (const page of ALL_PAGES) {
+      check(sitemap.includes(`${page.path}</loc>`) || sitemap.includes(`${page.path}/</loc>`), `sitemap.xml does not list ${page.path}.`);
+    }
+    check(!sitemap.includes("<lastmod></lastmod>"), "sitemap.xml has an empty lastmod.");
   }
 
-  for (const file of ["robots.txt", "favicon.svg", "og.png", "search-index.json", "_headers", "theme.js"]) {
+  const robotsFile = join(dist, "robots.txt");
+  if (existsSync(robotsFile)) check(readFileSync(robotsFile, "utf8").includes("Sitemap: "), "robots.txt does not point to the sitemap.");
+
+  for (const file of ["robots.txt", "favicon.svg", "og.png", "search-index.json", "_headers", "theme.js", "site.webmanifest"]) {
     check(existsSync(join(dist, file)), `dist/${file} is missing.`);
   }
 
