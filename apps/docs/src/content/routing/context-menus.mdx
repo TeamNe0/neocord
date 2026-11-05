@@ -16,6 +16,10 @@ export default defineUserCommand({
 });
 ```
 
+<DiscordPreview command="Report user" ephemeral label="The report reply in Discord">
+  <DiscordText>Reported ada.</DiscordText>
+</DiscordPreview>
+
 | Context field | Type | Meaning |
 | --- | --- | --- |
 | `target` | `User` | The user who was clicked. |
@@ -38,6 +42,12 @@ export default defineMessageCommand({
   },
 });
 ```
+
+<DiscordPreview command="Quote message" label="The quoted message in Discord">
+  <DiscordQuote>
+    <DiscordText>Ship it on Friday.</DiscordText>
+  </DiscordQuote>
+</DiscordPreview>
 
 | Context field | Type | Meaning |
 | --- | --- | --- |

@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { slugify } from "../plugins/rehype-headings.ts";
+import { buildSearchIndex } from "../plugins/search-index-source.ts";
 import { ESLINT_RULE_INDEX } from "../src/data/eslint-rule-index.ts";
 import { ESLINT_RULES } from "../src/data/eslint-rules.ts";
 import { ALL_PAGES, HOME_META, NAV } from "../src/data/nav.ts";
@@ -260,6 +261,15 @@ function checkOutput(): void {
 
   const sample = readFileSync(join(dist, "docs/quick-start/index.html"), "utf8");
   check(sample.includes("--shiki-light"), "Code in the prerendered HTML is not highlighted.");
+  check(/<pre [^>]*class="[^"]*\bshiki\b/.test(sample), "Code blocks lost the shiki class, so their tokens have no color.");
+
+  const searchFile = join(dist, "search-index.json");
+  if (existsSync(searchFile)) {
+    const built = new Set((JSON.parse(readFileSync(searchFile, "utf8")) as { url: string }[]).map((entry) => entry.url));
+    const source = new Set(buildSearchIndex(contentRoot).map((entry) => entry.url));
+    for (const url of source) check(built.has(url), `The dev search index has ${url}, which the built index does not.`);
+    for (const url of built) check(source.has(url), `The built search index has ${url}, which the dev index does not.`);
+  }
   for (const manager of ["bun", "npm", "pnpm", "yarn"]) {
     check(sample.includes(`data-pm-panel="${manager}"`), `Package manager tabs have no ${manager} panel in the prerendered HTML.`);
   }

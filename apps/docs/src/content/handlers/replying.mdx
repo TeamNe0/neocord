@@ -15,6 +15,18 @@ export default defineCommand({
 });
 ```
 
+While `countThings` runs, the user sees the thinking state:
+
+<DiscordPreview command="/stats" ephemeral label="The deferred stats reply in Discord">
+  <DiscordThinking />
+</DiscordPreview>
+
+`ctx.followUp` then fills in that deferred reply:
+
+<DiscordPreview command="/stats" ephemeral label="The filled in stats reply in Discord">
+  <DiscordText>Counted 12 things.</DiscordText>
+</DiscordPreview>
+
 ## What a return value does
 
 | Handler | Returns a node | Returns nothing, not acknowledged |

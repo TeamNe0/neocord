@@ -21,6 +21,18 @@ export default defineCommand({
 });
 ```
 
+The placeholder appears straight away:
+
+<DiscordPreview command="/report" label="The loading placeholder in Discord">
+  <DiscordSubtext>Working on it.</DiscordSubtext>
+</DiscordPreview>
+
+The handler's result then replaces it in the same message:
+
+<DiscordPreview command="/report" label="The finished report in Discord">
+  <DiscordText>12 new members joined this week.</DiscordText>
+</DiscordPreview>
+
 ## What it applies to
 
 `loading` applies to slash commands and context menu commands. Buttons, selects and modals ignore it.

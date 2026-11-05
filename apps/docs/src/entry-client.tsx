@@ -2,12 +2,14 @@ import { StrictMode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { createBrowserRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
+import { installHistoryMotion } from "./lib/navigation.ts";
 import { createRoutes, resolveLazyMatches } from "./routes.tsx";
 import "./styles/index.css";
 
 async function start(): Promise<void> {
   const routes = createRoutes();
   await resolveLazyMatches(routes, window.location.pathname);
+  installHistoryMotion();
   const router = createBrowserRouter(routes);
   const app = (
     <StrictMode>

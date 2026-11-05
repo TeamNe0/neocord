@@ -80,7 +80,7 @@ function preloadsFor(source: string | null): string[] {
 const fontPreloads = Object.values(manifest)
   .flatMap((entry) => entry.assets ?? [])
   .filter((asset, index, all) => all.indexOf(asset) === index)
-  .filter((asset) => /atkinson-hyperlegible-next-latin-wght-normal/.test(asset))
+  .filter((asset) => /atkinson-hyperlegible-next-latin-wght-normal|anybody-latin-standard-normal/.test(asset))
   .map((asset) => `<link rel="preload" href="/${asset}" as="font" type="font/woff2" crossorigin />`);
 
 function headFor(meta: { path: string; title: string; description: string }, source: string | null, noindex: boolean): string {
@@ -130,8 +130,8 @@ function decodeEntities(text: string): string {
 
 function plainText(html: string): string {
   const withoutCode = html
-    .replace(/<figure class="code-block"[\s\S]*?<\/figure>/g, " ")
-    .replace(/<div class="pm-tabs"[\s\S]*?<\/div><\/div><\/div>/g, " ");
+    .replace(/<figure class="code-block[^"]*"[\s\S]*?<\/figure>/g, " ")
+    .replace(/<div class="pm-tabs[^"]*"[\s\S]*?<\/div><\/div><\/div>/g, " ");
   return decodeEntities(withoutCode.replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();

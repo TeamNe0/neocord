@@ -12,6 +12,12 @@ export default defineMiddleware(async (ctx, next) => {
 });
 ```
 
+Outside a server, this replies and the command's handler never runs:
+
+<DiscordPreview command="/ban" label="The middleware reply in Discord">
+  <DiscordText>Use this in a server.</DiscordText>
+</DiscordPreview>
+
 ## Where it applies
 
 A `middleware` file applies to everything beneath the folder it is in. Chains compose from root to leaf, so for `src/features/moderation/commands/ban/command.tsx` the order can be:
