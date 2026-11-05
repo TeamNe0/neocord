@@ -41,6 +41,21 @@ export default defineCommand({
 });
 ```
 
+<DiscordPreview command="/about" label="The about message in Discord">
+  <DiscordContainer accent="blurple">
+    <DiscordHeading>About my-bot</DiscordHeading>
+    <DiscordText>
+      <strong>Servers:</strong> 3
+    </DiscordText>
+    <DiscordText>
+      <strong>Latency:</strong> 42 ms
+    </DiscordText>
+    <DiscordRow>
+      <DiscordButton>Refresh</DiscordButton>
+    </DiscordRow>
+  </DiscordContainer>
+</DiscordPreview>
+
 Files in folders that start with `_` are never treated as routes. A helper component anywhere else in a feature folder is reported by [`no-unknown-route-file`](/docs/eslint/no-unknown-route-file). Files in `src` outside `features` are also free to hold anything.
 
 ## Lists and conditions

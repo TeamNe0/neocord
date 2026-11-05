@@ -13,6 +13,13 @@ export default function ErrorView() {
 }
 ```
 
+<DiscordPreview command="/ping" ephemeral label="The root error view in Discord">
+  <DiscordContainer accent="red">
+    <DiscordHeading>Something went wrong</DiscordHeading>
+    <DiscordSubtext>The error was logged. Please try again in a moment.</DiscordSubtext>
+  </DiscordContainer>
+</DiscordPreview>
+
 ## Props
 
 The component receives `ErrorProps`.
@@ -38,6 +45,15 @@ export default function ModerationError({ error, ctx }: ErrorProps) {
   );
 }
 ```
+
+<DiscordPreview command="/ban" ephemeral label="The moderation error view in Discord">
+  <DiscordContainer accent="red">
+    <DiscordHeading level={2}>That did not work</DiscordHeading>
+    <DiscordText>
+      <code>ban</code> failed: Missing Permissions
+    </DiscordText>
+  </DiscordContainer>
+</DiscordPreview>
 
 Error messages can hold details you do not want to show to users. Show them only in views meant for staff, or show generic text and read the logs.
 

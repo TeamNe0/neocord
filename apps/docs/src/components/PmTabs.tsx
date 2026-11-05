@@ -1,4 +1,5 @@
-import { Children, Fragment, isValidElement, useId, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useSyncExternalStore, type ReactNode } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const MANAGERS = ["bun", "npm", "pnpm", "yarn"] as const;
 type Manager = (typeof MANAGERS)[number];
@@ -17,7 +18,9 @@ function readManager(): Manager {
   return MANAGERS.find((manager) => manager === value) ?? "bun";
 }
 
-function chooseManager(manager: Manager): void {
+function chooseManager(value: string): void {
+  const manager = MANAGERS.find((candidate) => candidate === value);
+  if (manager === undefined) return;
   document.documentElement.dataset.pm = manager;
   window.dispatchEvent(new Event("neocord-pm"));
   localStorage.setItem("neocord-pm", manager);
@@ -31,60 +34,39 @@ function managerOf(child: ReactNode): Manager | null {
 }
 
 export function PmTabs({ children }: { children?: ReactNode }) {
-  const id = useId();
   const current = useSyncExternalStore<Manager>(subscribe, readManager, () => "bun");
-  const list = useRef<HTMLDivElement>(null);
   const panels = Children.toArray(children).filter((child) => managerOf(child) !== null);
 
-  const move = (delta: number): void => {
-    const index = MANAGERS.indexOf(current);
-    const next = MANAGERS[(index + delta + MANAGERS.length) % MANAGERS.length] ?? "bun";
-    chooseManager(next);
-    list.current?.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)?.focus();
-  };
-
   return (
-    <div className="pm-tabs">
-      <div ref={list} role="tablist" aria-label="Package manager" className="pm-tablist">
-        {MANAGERS.map((manager) => (
-          <button
-            key={manager}
-            type="button"
-            role="tab"
-            id={`${id}-tab-${manager}`}
-            data-tab={manager}
-            aria-selected={current === manager}
-            aria-controls={`${id}-panel-${manager}`}
-            tabIndex={current === manager ? 0 : -1}
-            onClick={() => chooseManager(manager)}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowRight") {
-                event.preventDefault();
-                move(1);
-              } else if (event.key === "ArrowLeft") {
-                event.preventDefault();
-                move(-1);
-              }
-            }}
-          >
-            {manager}
-          </button>
-        ))}
-      </div>
-      {panels.map((panel) => {
-        const manager = managerOf(panel);
-        return (
-          <div
-            key={manager}
-            role="tabpanel"
-            id={`${id}-panel-${manager}`}
-            aria-labelledby={`${id}-tab-${manager}`}
-            data-pm-panel={manager}
-          >
-            {panel}
-          </div>
-        );
-      })}
+    <div className="pm-tabs overflow-hidden rounded-xl border bg-code">
+      <Tabs value={current} onValueChange={chooseManager} className="gap-0">
+        <TabsList
+          variant="line"
+          aria-label="Package manager"
+          data-pm-list=""
+          className="h-auto! w-full justify-start gap-0.5 rounded-none border-b bg-muted/50 px-1.5 pt-1 pb-0"
+        >
+          {MANAGERS.map((manager) => (
+            <TabsTrigger
+              key={manager}
+              value={manager}
+              data-tab={manager}
+              className="h-auto flex-none rounded-none rounded-t-md px-2.5 py-1 font-mono text-[0.8rem] font-normal transition-colors after:hidden hover:bg-accent/60 focus-visible:ring-0 focus-visible:outline-2"
+            >
+              {manager}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {panels.map((panel) => {
+          const manager = managerOf(panel);
+          if (manager === null) return null;
+          return (
+            <TabsContent key={manager} value={manager} forceMount data-pm-panel={manager} className="tab-fade text-base">
+              {panel}
+            </TabsContent>
+          );
+        })}
+      </Tabs>
     </div>
   );
 }

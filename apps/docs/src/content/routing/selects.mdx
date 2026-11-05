@@ -43,6 +43,12 @@ export default defineSelect("settings/theme", {
   </DiscordRow>
 </DiscordPreview>
 
+Picking an option runs `select.tsx`, and what it returns updates the same message:
+
+<DiscordPreview command="/theme" ephemeral label="The updated theme message in Discord">
+  <DiscordText>Theme set to dark.</DiscordText>
+</DiscordPreview>
+
 ## defineSelect
 
 ```ts

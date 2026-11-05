@@ -27,6 +27,10 @@ export default defineCommand({
 });
 ```
 
+<DiscordPreview command="/ban" ephemeral label="The ban reply in Discord">
+  <DiscordText>Banned ada</DiscordText>
+</DiscordPreview>
+
 This is `/ban`. Because `guildOnly` is `true`, `ctx.guild` and `ctx.member` are not nullable. `ctx.options.user` is a `User`, `ctx.options.reason` is `string | undefined`, and `ctx.options.days` is `1 | undefined`.
 
 ## defineCommand
@@ -62,6 +66,10 @@ Both deploy to Discord, so the client hides the command, and both are also enfor
 | Missing permissions | "You need these permissions to do that: Ban Members." |
 
 All of these are ephemeral, and the handler does not run.
+
+<DiscordPreview command="/ban" ephemeral label="The missing permissions notice in Discord">
+  <DiscordText>You need these permissions to do that: Ban Members.</DiscordText>
+</DiscordPreview>
 
 ### cooldown
 

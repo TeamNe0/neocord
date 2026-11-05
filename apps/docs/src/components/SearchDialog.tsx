@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
+import { Command, CommandDialog, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { isSamePage, prepareNavigation } from "@/lib/navigation.ts";
 
 interface SearchEntry {
   url: string;
@@ -48,22 +50,19 @@ function excerpt(text: string, terms: readonly string[]): string {
   return `${start > 0 ? "…" : ""}${text.slice(start, start + 130).trim()}…`;
 }
 
-export default function SearchDialog({ onClose }: { onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
+export default function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const [index, setIndex] = useState<SearchEntry[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState(0);
 
   useEffect(() => {
-    const element = dialog.current;
-    if (element !== null && !element.open) element.showModal();
-    return () => element?.close();
-  }, []);
-
-  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return;
+    }
     let active = true;
+    setFailed(false);
     loadIndex().then(
       (entries) => {
         if (active) setIndex(entries);
@@ -75,7 +74,7 @@ export default function SearchDialog({ onClose }: { onClose: () => void }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [open]);
 
   const terms = useMemo(
     () => query.toLowerCase().split(/\s+/).filter((term) => term !== ""),
@@ -92,80 +91,50 @@ export default function SearchDialog({ onClose }: { onClose: () => void }) {
       .map((result) => result.entry);
   }, [index, terms]);
 
-  useEffect(() => {
-    setSelected(0);
-  }, [query]);
-
-  useEffect(() => {
-    dialog.current
-      ?.querySelector(`[data-index="${selected}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [selected]);
-
-  const open = (entry: SearchEntry | undefined): void => {
-    if (entry === undefined) return;
+  const openEntry = (entry: SearchEntry): void => {
     onClose();
-    void navigate(entry.url);
+    const path = entry.url.split("#")[0] ?? entry.url;
+    prepareNavigation(window.location.pathname, path);
+    void navigate(entry.url, { viewTransition: !isSamePage(window.location.pathname, path) });
   };
 
   return (
-    <dialog
-      ref={dialog}
-      className="search-dialog"
-      aria-label="Search the documentation"
-      onClose={onClose}
-      onClick={(event) => {
-        if (event.target === dialog.current) onClose();
+    <CommandDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
       }}
+      title="Search the documentation"
+      description="Type to search. Use the arrow keys to move and Enter to open a result."
+      className="top-[12dvh] w-[min(40rem,calc(100vw-2rem))] max-w-none shadow-2xl sm:max-w-none"
     >
-      <div className="search-panel">
-        <input
-          autoFocus
-          type="search"
-          role="combobox"
-          aria-expanded={results.length > 0}
-          aria-controls="search-results"
-          aria-autocomplete="list"
-          aria-activedescendant={results.length > 0 ? `search-option-${selected}` : undefined}
+      <Command shouldFilter={false} className="bg-popover">
+        <CommandInput
           aria-label="Search the documentation"
           placeholder="Search the docs"
-          className="search-input"
+          className="py-1 text-base"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setSelected((value) => Math.min(value + 1, Math.max(results.length - 1, 0)));
-            } else if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setSelected((value) => Math.max(value - 1, 0));
-            } else if (event.key === "Enter") {
-              event.preventDefault();
-              open(results[selected]);
-            }
-          }}
+          onValueChange={setQuery}
         />
-        <ul id="search-results" role="listbox" aria-label="Search results" className="search-results">
-          {results.map((entry, position) => (
-            <li
+        <CommandList className="max-h-[56dvh] pt-1">
+          {results.map((entry) => (
+            <CommandItem
               key={entry.url}
-              id={`search-option-${position}`}
-              data-index={position}
-              role="option"
-              aria-selected={position === selected}
-              className="search-result"
-              onClick={() => open(entry)}
-              onMouseEnter={() => setSelected(position)}
+              value={entry.url}
+              onSelect={() => openEntry(entry)}
+              className="block cursor-pointer rounded-lg px-3 py-2 transition-colors data-selected:bg-accent data-selected:shadow-[inset_3px_0_0_var(--slash)] [&>svg]:hidden"
             >
-              <span className="search-result-title">
+              <span className="block text-[0.95rem] font-bold">
                 {entry.page}
                 {entry.heading === "" ? "" : `: ${entry.heading}`}
               </span>
-              <span className="search-result-text">{excerpt(entry.text, terms)}</span>
-            </li>
+              <span className="block text-[0.84rem] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+                {excerpt(entry.text, terms)}
+              </span>
+            </CommandItem>
           ))}
-        </ul>
-        <p className="search-status" role="status">
+        </CommandList>
+        <p className="px-3 py-2 text-[0.82rem] text-muted-foreground" role="status">
           {failed
             ? "The search index could not be loaded. Check your connection and try again."
             : index === null
@@ -176,7 +145,7 @@ export default function SearchDialog({ onClose }: { onClose: () => void }) {
                   ? `No results for "${query}". Try a shorter or different term.`
                   : `${results.length} result${results.length === 1 ? "" : "s"}`}
         </p>
-      </div>
-    </dialog>
+      </Command>
+    </CommandDialog>
   );
 }

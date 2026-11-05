@@ -1,5 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import { MenuIcon, SearchIcon } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { Link, useLocation } from "react-router";
+import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 import { Logo } from "./Logo.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { ThemeToggle } from "./ThemeToggle.tsx";
@@ -23,48 +28,25 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
-function MobileNav({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
+const NAV_LINK =
+  "rounded-md px-2.5 py-1 text-[0.95rem] font-semibold no-underline transition-colors text-muted-foreground hover:bg-accent hover:text-foreground aria-[current=page]:text-foreground in-data-[surface=hero]:text-white/80 in-data-[surface=hero]:hover:bg-white/15 in-data-[surface=hero]:hover:text-white in-data-[surface=hero]:aria-[current=page]:text-white";
 
-  useEffect(() => {
-    const element = dialog.current;
-    if (element === null) return;
-    if (open && !element.open) element.showModal();
-    if (!open && element.open) element.close();
-  }, [open]);
-
-  return (
-    <dialog
-      ref={dialog}
-      className="nav-drawer"
-      aria-label="Documentation navigation"
-      onClose={onClose}
-      onClick={(event) => {
-        if (event.target === dialog.current) onClose();
-      }}
-    >
-      {open ? (
-        <div className="nav-drawer-body">
-          <button type="button" className="icon-button nav-drawer-close" onClick={onClose} aria-label="Close navigation">
-            <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
-              <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
-          <Sidebar />
-        </div>
-      ) : null}
-    </dialog>
-  );
-}
+const ON_HERO = "in-data-[surface=hero]:text-white in-data-[surface=hero]:hover:bg-white/15 in-data-[surface=hero]:hover:text-white dark:in-data-[surface=hero]:hover:bg-white/15";
 
 export function Header() {
   const { pathname } = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoaded, setSearchLoaded] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const isApple = useIsApple();
   const inDocs = pathname.startsWith("/docs");
+  const inApi = pathname.startsWith("/docs/api");
+  const onHero = pathname === "/";
   const closeSearch = useCallback(() => setSearchOpen(false), []);
-  const closeNav = useCallback(() => setNavOpen(false), []);
+  const openSearch = useCallback(() => {
+    setSearchLoaded(true);
+    setSearchOpen(true);
+  }, []);
 
   useEffect(() => {
     setNavOpen(false);
@@ -76,56 +58,81 @@ export function Header() {
       const isSlash = event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !isTypingTarget(event.target);
       if (isShortcut || isSlash) {
         event.preventDefault();
-        setSearchOpen(true);
+        openSearch();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [openSearch]);
 
   return (
-    <header className="site-header">
-      <div className="site-header-inner">
+    <header
+      data-surface={onHero ? "hero" : "page"}
+      className={cn(
+        "vt-header sticky top-0 z-40 border-b",
+        onHero ? "border-transparent bg-hero text-hero-foreground [--ring:#ffffff]" : "bg-background/85 backdrop-blur-xl",
+      )}
+    >
+      <div className="mx-auto flex h-(--header-height) max-w-[92rem] items-center gap-2 px-4">
         {inDocs ? (
-          <button
+          <Button
             type="button"
-            className="icon-button nav-toggle"
+            variant="ghost"
+            size="icon-lg"
+            className="js-only -ml-1.5 lg:hidden"
             aria-label="Open navigation"
             aria-expanded={navOpen}
             onClick={() => setNavOpen(true)}
           >
-            <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
-              <path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
+            <MenuIcon className="size-5" />
+          </Button>
         ) : null}
-        <Link to="/" className="site-logo" aria-label="neocord home">
+        <Link to="/" viewTransition className="group/logo rounded-sm text-inherit no-underline" aria-label="neocord home">
           <Logo />
         </Link>
-        <nav aria-label="Main" className="site-nav">
-          <NavLink to="/docs" className="site-nav-link">
+        <nav aria-label="Main" className="ml-3 hidden gap-0.5 sm:flex">
+          <Link to="/docs" viewTransition className={NAV_LINK} aria-current={inDocs && !inApi ? "page" : undefined}>
             Docs
-          </NavLink>
-          <NavLink to="/docs/api/neocord" className="site-nav-link">
+          </Link>
+          <Link to="/docs/api/neocord" viewTransition className={NAV_LINK} aria-current={inApi ? "page" : undefined}>
             API
-          </NavLink>
+          </Link>
         </nav>
-        <div className="site-header-actions">
-          <button type="button" className="search-button" onClick={() => setSearchOpen(true)} aria-haspopup="dialog">
-            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-              <circle cx="9" cy="9" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M13.2 13.2L17 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-            <span className="search-button-label">Search</span>
-            <kbd>{isApple ? "⌘K" : "Ctrl K"}</kbd>
-          </button>
-          <ThemeToggle />
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            className={cn(
+              "js-only h-9 gap-2 px-2.5 font-normal text-muted-foreground",
+              "in-data-[surface=hero]:border-white/30 in-data-[surface=hero]:bg-white/10 in-data-[surface=hero]:text-white in-data-[surface=hero]:hover:bg-white/20 in-data-[surface=hero]:hover:text-white dark:in-data-[surface=hero]:border-white/30 dark:in-data-[surface=hero]:bg-white/10 dark:in-data-[surface=hero]:hover:bg-white/20",
+            )}
+            onClick={openSearch}
+            aria-haspopup="dialog"
+          >
+            <SearchIcon className="size-4" />
+            <span className="hidden sm:inline">Search</span>
+            <Kbd className="in-data-[surface=hero]:bg-white/20 in-data-[surface=hero]:text-white">{isApple ? "⌘K" : "Ctrl K"}</Kbd>
+          </Button>
+          <ThemeToggle className={ON_HERO} />
         </div>
       </div>
-      {inDocs ? <MobileNav open={navOpen} onClose={closeNav} /> : null}
-      {searchOpen ? (
+      {inDocs ? (
+        <span
+          aria-hidden="true"
+          className="reading-progress pointer-events-none absolute inset-x-0 -bottom-px h-0.5 bg-slash"
+        />
+      ) : null}
+      {inDocs ? (
+        <Sheet open={navOpen} onOpenChange={setNavOpen}>
+          <SheetContent side="left" className="w-[min(21rem,88vw)] gap-0 overflow-y-auto bg-background p-3 pt-12 data-[side=left]:sm:max-w-none">
+            <SheetTitle className="sr-only">Documentation navigation</SheetTitle>
+            <Sidebar />
+          </SheetContent>
+        </Sheet>
+      ) : null}
+      {searchLoaded ? (
         <Suspense fallback={null}>
-          <SearchDialog onClose={closeSearch} />
+          <SearchDialog open={searchOpen} onClose={closeSearch} />
         </Suspense>
       ) : null}
     </header>
